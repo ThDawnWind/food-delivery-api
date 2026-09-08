@@ -2,6 +2,7 @@ package category
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -69,4 +70,30 @@ func (r *Repository) List(ctx context.Context) ([]Category, error) {
 	}
 
 	return categories, nil
+}
+
+func (r *Repository) Create(ctx context.Context, name, slug string) (*Category, error) {
+
+	category := &Category{
+		Name: name,
+		Slug: slug,
+	}
+
+	err := r.db.QueryRow(
+		ctx,
+		`INSERT INTO categories(name, slug) 
+		VALUES($1, $2)
+		RETURNING id, created_at, updated_at`,
+		name,
+		slug,
+	).Scan(
+		&category.ID,
+		&category.CreatedAt,
+		&category.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create category: %w", err)
+	}
+
+	return category, nil
 }

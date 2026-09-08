@@ -15,9 +15,9 @@ import (
 func TestRepository_GetByID(t *testing.T) {
 	ctx := context.Background()
 
-	dbURL := os.Getenv("DATABASE_URL")
+	dbURL := os.Getenv("TEST_DATABASE_URL")
 	if dbURL == "" {
-		t.Skip("DATABASE_URL environment variable is not set")
+		t.Skip("TEST_DATABASE_URL environment variable is not set")
 	}
 
 	dbPool, err := database.New(ctx, dbURL)
@@ -63,9 +63,9 @@ func TestRepository_GetByID(t *testing.T) {
 func TestRepository_GetByID_NotFound(t *testing.T) {
 	ctx := context.Background()
 
-	dbURL := os.Getenv("DATABASE_URL")
+	dbURL := os.Getenv("TEST_DATABASE_URL")
 	if dbURL == "" {
-		t.Skip("DATABASE_URL environment variable is not set")
+		t.Skip("TEST_DATABASE_URL environment variable is not set")
 	}
 
 	dbPool, err := database.New(ctx, dbURL)
@@ -90,9 +90,9 @@ func TestRepository_GetByID_NotFound(t *testing.T) {
 func TestRepository_List(t *testing.T) {
 	ctx := context.Background()
 
-	dbURL := os.Getenv("DATABASE_URL")
+	dbURL := os.Getenv("TEST_DATABASE_URL")
 	if dbURL == "" {
-		t.Skip("DATABASE_URL environment variable is not set")
+		t.Skip("TEST_DATABASE_URL environment variable is not set")
 	}
 
 	dbPool, err := database.New(ctx, dbURL)
@@ -176,4 +176,66 @@ func TestRepository_List(t *testing.T) {
 		t.Errorf("category with id %d not found", id2)
 	}
 
+}
+
+func TestRepository_Create(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("TEST_DATABASE_URL environment variable is not set")
+	}
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+	t.Cleanup(dbPool.Close)
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	name := fmt.Sprintf("Create Category %d", suffix)
+	slug := fmt.Sprintf("create-category-%d", suffix)
+
+	category, err := repo.Create(
+		ctx,
+		name,
+		slug,
+	)
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_, err := dbPool.Exec(
+			context.Background(),
+			`DELETE FROM categories WHERE id = $1`,
+			category.ID,
+		)
+		if err != nil {
+			t.Errorf("failed to clean up test category: %v", err)
+		}
+	})
+
+	if category.ID <= 0 {
+		t.Errorf("expected positive ID, got %d", category.ID)
+	}
+
+	if category.Name != name {
+		t.Errorf("expected name %q, got %q", name, category.Name)
+	}
+
+	if category.Slug != slug {
+		t.Errorf("expected slug %q, got %q", slug, category.Slug)
+	}
+
+	if category.CreatedAt.IsZero() {
+		t.Error("expected CreatedAt to be set")
+	}
+
+	if category.UpdatedAt.IsZero() {
+		t.Error("expected UpdatedAt to be set")
+	}
 }
