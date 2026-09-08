@@ -36,3 +36,37 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (*Category, error) {
 
 	return &category, nil
 }
+
+func (r *Repository) List(ctx context.Context) ([]Category, error) {
+	rows, err := r.db.Query(
+		ctx,
+		`SELECT id, name, slug, created_at, updated_at FROM categories ORDER BY id`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var categories []Category
+
+	for rows.Next() {
+		var category Category
+		err := rows.Scan(
+			&category.ID,
+			&category.Name,
+			&category.Slug,
+			&category.CreatedAt,
+			&category.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		categories = append(categories, category)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return categories, nil
+}
