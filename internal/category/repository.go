@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -114,6 +115,21 @@ func (r *Repository) Update(ctx context.Context, category *Category) error {
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update category: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) Delete(ctx context.Context, id int64) error {
+	query := `DELETE FROM categories WHERE id = $1`
+
+	result, err := r.db.Exec(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete category: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return pgx.ErrNoRows
 	}
 
 	return nil

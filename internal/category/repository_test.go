@@ -317,7 +317,7 @@ func TestRepository_Update(t *testing.T) {
 }
 
 func TestRepository_Update_NotFound(t *testing.T) {
-    ctx := context.Background()
+	ctx := context.Background()
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 	if dbURL == "" {
@@ -339,6 +339,69 @@ func TestRepository_Update_NotFound(t *testing.T) {
 	}
 
 	err = repo.Update(ctx, missingCategory)
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("expected pgx.ErrNoRows, got %v", err)
+	}
+}
+
+func TestRepository_Delete(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("TEST_DATABASE_URL environment variable is not set")
+	}
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+	t.Cleanup(dbPool.Close)
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	name := fmt.Sprintf("Create Category %d", suffix)
+	slug := fmt.Sprintf("create-category-%d", suffix)
+
+	category, err := repo.Create(
+		ctx,
+		name,
+		slug,
+	)
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	err = repo.Delete(ctx, category.ID)
+	if err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	_, err = repo.GetByID(ctx, category.ID)
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("expected pgx.ErrNoRows after delete, got %v", err)
+	}
+}
+
+func TestRepository_Delete_NotFound(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("TEST_DATABASE_URL environment variable is not set")
+	}
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+	t.Cleanup(dbPool.Close)
+
+	repo := NewRepository(dbPool)
+
+	err = repo.Delete(ctx, 9_999_999_999)
 	if !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("expected pgx.ErrNoRows, got %v", err)
 	}
