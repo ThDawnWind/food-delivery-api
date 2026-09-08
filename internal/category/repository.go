@@ -97,3 +97,24 @@ func (r *Repository) Create(ctx context.Context, name, slug string) (*Category, 
 
 	return category, nil
 }
+
+func (r *Repository) Update(ctx context.Context, category *Category) error {
+
+	err := r.db.QueryRow(
+		ctx,
+		`UPDATE categories
+		SET name = $1, slug = $2, updated_at = NOW()
+		WHERE id = $3
+		RETURNING updated_at`,
+		category.Name,
+		category.Slug,
+		category.ID,
+	).Scan(
+		&category.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update category: %w", err)
+	}
+
+	return nil
+}

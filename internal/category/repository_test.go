@@ -239,3 +239,107 @@ func TestRepository_Create(t *testing.T) {
 		t.Error("expected UpdatedAt to be set")
 	}
 }
+
+func TestRepository_Update(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("TEST_DATABASE_URL environment variable is not set")
+	}
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+	t.Cleanup(dbPool.Close)
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	name := fmt.Sprintf("Create Category %d", suffix)
+	slug := fmt.Sprintf("create-category-%d", suffix)
+
+	category, err := repo.Create(
+		ctx,
+		name,
+		slug,
+	)
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	oldUpdatedAt := category.UpdatedAt
+
+	updatedName := fmt.Sprintf("Updated Category %d", suffix)
+	updatedSlug := fmt.Sprintf("updated-category-%d", suffix)
+
+	category.Name = updatedName
+	category.Slug = updatedSlug
+
+	t.Cleanup(func() {
+		_, err := dbPool.Exec(
+			context.Background(),
+			`DELETE FROM categories WHERE id = $1`,
+			category.ID,
+		)
+		if err != nil {
+			t.Errorf("failed to clean up test category: %v", err)
+		}
+	})
+
+	err = repo.Update(ctx, category)
+	if err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+
+	updated, err := repo.GetByID(ctx, category.ID)
+	if err != nil {
+		t.Fatalf("GetByID after update failed: %v", err)
+	}
+
+	if updated.Name != updatedName {
+		t.Errorf("expected name %q, got %q", updatedName, updated.Name)
+	}
+
+	if updated.Slug != updatedSlug {
+		t.Errorf("expected slug %q, got %q", updatedSlug, updated.Slug)
+	}
+
+	if updated.UpdatedAt.Before(oldUpdatedAt) {
+		t.Errorf(
+			"updated_at moved backwards: before=%v after=%v",
+			oldUpdatedAt,
+			updated.UpdatedAt,
+		)
+	}
+}
+
+func TestRepository_Update_NotFound(t *testing.T) {
+    ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("TEST_DATABASE_URL environment variable is not set")
+	}
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+	t.Cleanup(dbPool.Close)
+
+	repo := NewRepository(dbPool)
+
+	missingCategory := &Category{
+		ID:   9_999_999_999,
+		Name: "Missing Category",
+		Slug: "missing-category",
+	}
+
+	err = repo.Update(ctx, missingCategory)
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("expected pgx.ErrNoRows, got %v", err)
+	}
+}
