@@ -4,16 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
 
-var ErrCategoryNotFound = errors.New("category not found")
+var (
+	ErrCategoryNotFound   = errors.New("category not found")
+	ErrCategoryValidation = errors.New("category validation error ")
+)
 
 type RepositoryInterface interface {
 	GetByID(ctx context.Context, id int64) (*Category, error)
 	List(ctx context.Context) ([]Category, error)
-	// Create(ctx context.Context, name, slug string) (*Category, error)
+	Create(ctx context.Context, name, slug string) (*Category, error)
 	// Update(ctx context.Context, category *Category) error
 	// Delete(ctx context.Context, id int64) error
 }
@@ -47,4 +51,21 @@ func (s *Service) List(ctx context.Context) ([]Category, error) {
 	}
 
 	return categories, nil
+}
+
+func (s *Service) Create(ctx context.Context, name, slug string) (*Category, error) {
+	if strings.TrimSpace(name) == "" {
+		return nil, fmt.Errorf("%w: name is required", ErrCategoryValidation)
+	}
+
+	if strings.TrimSpace(slug) == "" {
+		return nil, fmt.Errorf("%w: slug is required", ErrCategoryValidation)
+	}
+
+	category, err := s.repository.Create(ctx, name, slug)
+	if err != nil {
+		return nil, fmt.Errorf("create category: %w", err)
+	}
+
+	return category, nil
 }
