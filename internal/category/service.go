@@ -18,7 +18,7 @@ type RepositoryInterface interface {
 	GetByID(ctx context.Context, id int64) (*Category, error)
 	List(ctx context.Context) ([]Category, error)
 	Create(ctx context.Context, name, slug string) (*Category, error)
-	// Update(ctx context.Context, category *Category) error
+	Update(ctx context.Context, category *Category) error
 	// Delete(ctx context.Context, id int64) error
 }
 
@@ -68,4 +68,32 @@ func (s *Service) Create(ctx context.Context, name, slug string) (*Category, err
 	}
 
 	return category, nil
+}
+
+func (s *Service) Update(ctx context.Context, category *Category) error {
+	if category == nil {
+		return fmt.Errorf("%w: category is required", ErrCategoryValidation)
+	}
+
+	category.Name = strings.TrimSpace(category.Name)
+	category.Slug = strings.TrimSpace(category.Slug)
+
+	if category.Name == "" {
+		return fmt.Errorf("%w: name is required", ErrCategoryValidation)
+	}
+
+	if category.Slug == "" {
+		return fmt.Errorf("%w: slug is required", ErrCategoryValidation)
+	}
+
+	err := s.repository.Update(ctx, category)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrCategoryNotFound
+		}
+
+		return fmt.Errorf("update category: %w", err)
+	}
+
+	return nil
 }

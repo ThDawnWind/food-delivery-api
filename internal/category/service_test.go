@@ -9,9 +9,10 @@ import (
 )
 
 type fakeRepository struct {
-	category   *Category
-	categories []Category
-	err        error
+	category        *Category
+	categories      []Category
+	updatedCategory *Category
+	err             error
 }
 
 func (f *fakeRepository) GetByID(ctx context.Context, id int64) (*Category, error) {
@@ -24,6 +25,11 @@ func (f *fakeRepository) List(ctx context.Context) ([]Category, error) {
 
 func (f *fakeRepository) Create(ctx context.Context, name, slug string) (*Category, error) {
 	return f.category, f.err
+}
+
+func (f *fakeRepository) Update(ctx context.Context, category *Category) error {
+	f.updatedCategory = category
+	return f.err
 }
 
 func TestService_GetByID(t *testing.T) {
@@ -248,5 +254,166 @@ func TestService_Create_RepositoryError(t *testing.T) {
 
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected repository error, got %v", err)
+	}
+}
+
+func TestService_Update(t *testing.T) {
+	category := &Category{
+		ID:   1,
+		Name: "  Pizza  ",
+		Slug: "  pizza  ",
+	}
+
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	err := service.Update(context.Background(), category)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if repo.updatedCategory == nil {
+		t.Fatal("expected repository Update to be called")
+	}
+
+	if repo.updatedCategory.Name != "Pizza" {
+		t.Errorf(
+			"expected name %q, got %q",
+			"Pizza",
+			repo.category.Name,
+		)
+	}
+
+	if repo.updatedCategory.Slug != "pizza" {
+		t.Errorf(
+			"expected name %q, got %q",
+			"pizza",
+			repo.category.Slug,
+		)
+	}
+}
+
+func TestService_Update_NilCategory(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	err := service.Update(
+		context.Background(),
+		nil,
+	)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !errors.Is(err, ErrCategoryValidation) {
+		t.Fatalf(
+			"expected ErrCategoryValidation, got %v",
+			err,
+		)
+	}
+}
+
+func TestService_Update_EmptyName(t *testing.T) {
+	category := &Category{
+		ID:   1,
+		Name: "   ",
+		Slug: "pizza",
+	}
+
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	err := service.Update(context.Background(), category)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !errors.Is(err, ErrCategoryValidation) {
+		t.Fatalf(
+			"expected ErrCategoryValidation, got %v",
+			err,
+		)
+	}
+}
+
+func TestService_Update_EmptySlug(t *testing.T) {
+	category := &Category{
+		ID:   1,
+		Name: "Pizza",
+		Slug: "   ",
+	}
+
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	err := service.Update(context.Background(), category)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !errors.Is(err, ErrCategoryValidation) {
+		t.Fatalf(
+			"expected ErrCategoryValidation, got %v",
+			err,
+		)
+	}
+}
+
+func TestService_Update_NotFound(t *testing.T) {
+	category := &Category{
+		ID:   999,
+		Name: "Pizza",
+		Slug: "pizza",
+	}
+
+	repo := &fakeRepository{
+		err: pgx.ErrNoRows,
+	}
+
+	service := NewService(repo)
+
+	err := service.Update(context.Background(), category)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !errors.Is(err, ErrCategoryNotFound) {
+		t.Fatalf(
+			"expected ErrCategoryNotFound, got %v",
+			err,
+		)
+	}
+}
+
+func TestService_Update_RepositoryError(t *testing.T) {
+	expectedErr := errors.New("repository failure")
+
+	category := &Category{
+		ID:   1,
+		Name: "Pizza",
+		Slug: "pizza",
+	}
+
+	repo := &fakeRepository{
+		err: expectedErr,
+	}
+
+	service := NewService(repo)
+
+	err := service.Update(context.Background(), category)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf(
+			"expected repository error, got %v",
+			err,
+		)
 	}
 }
