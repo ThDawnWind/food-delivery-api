@@ -19,7 +19,7 @@ type RepositoryInterface interface {
 	List(ctx context.Context) ([]Category, error)
 	Create(ctx context.Context, name, slug string) (*Category, error)
 	Update(ctx context.Context, category *Category) error
-	// Delete(ctx context.Context, id int64) error
+	Delete(ctx context.Context, id int64) error
 }
 
 type Service struct {
@@ -93,6 +93,20 @@ func (s *Service) Update(ctx context.Context, category *Category) error {
 		}
 
 		return fmt.Errorf("update category: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) Delete(ctx context.Context, id int64) error {
+
+	err := s.repository.Delete(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return  ErrCategoryNotFound
+		}
+
+		return fmt.Errorf("delete category: %w", err)
 	}
 
 	return nil

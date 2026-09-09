@@ -32,6 +32,11 @@ func (f *fakeRepository) Update(ctx context.Context, category *Category) error {
 	return f.err
 }
 
+func (f *fakeRepository) Delete(ctx context.Context, id int64)  error {
+	return f.err
+}
+
+
 func TestService_GetByID(t *testing.T) {
 	expected := &Category{
 		ID:   1,
@@ -405,6 +410,70 @@ func TestService_Update_RepositoryError(t *testing.T) {
 	service := NewService(repo)
 
 	err := service.Update(context.Background(), category)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf(
+			"expected repository error, got %v",
+			err,
+		)
+	}
+}
+
+func TestService_Delete(t *testing.T) {
+	repo := &fakeRepository{}
+	service := NewService(repo)
+
+	err := service.Delete(
+		context.Background(),
+		1,
+	)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestService_Delete_NotFound(t *testing.T) {
+	repo := &fakeRepository{
+		err: pgx.ErrNoRows,
+	}
+
+	service := NewService(repo)
+
+	err := service.Delete(
+		context.Background(),
+		999,
+	)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !errors.Is(err, ErrCategoryNotFound) {
+		t.Fatalf(
+			"expected ErrCategoryNotFound, got %v",
+			err,
+		)
+	}
+}
+
+func TestService_Delete_RepositoryError(t *testing.T) {
+	expectedErr := errors.New("repository failure")
+
+	repo := &fakeRepository{
+		err: expectedErr,
+	}
+
+	service := NewService(repo)
+
+	err := service.Delete(
+		context.Background(),
+		1,
+	)
 
 	if err == nil {
 		t.Fatal("expected error, got nil")
