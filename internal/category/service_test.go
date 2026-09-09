@@ -32,10 +32,9 @@ func (f *fakeRepository) Update(ctx context.Context, category *Category) error {
 	return f.err
 }
 
-func (f *fakeRepository) Delete(ctx context.Context, id int64)  error {
+func (f *fakeRepository) Delete(ctx context.Context, id int64) error {
 	return f.err
 }
-
 
 func TestService_GetByID(t *testing.T) {
 	expected := &Category{
@@ -253,7 +252,7 @@ func TestService_Create_RepositoryError(t *testing.T) {
 		t.Fatalf("expected nil category, got %+v", category)
 	}
 
-	if err != nil {
+	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
 

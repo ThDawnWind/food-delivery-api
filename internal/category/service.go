@@ -103,7 +103,7 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	err := s.repository.Delete(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return  ErrCategoryNotFound
+			return ErrCategoryNotFound
 		}
 
 		return fmt.Errorf("delete category: %w", err)
