@@ -205,3 +205,41 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (h *Handler) Delete(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	idParam := chi.URLParam(r, "id")
+
+	id, err := strconv.ParseInt(idParam, 10, 64)
+	if err != nil || id <= 0 {
+		http.Error(
+			w,
+			"invalid category id",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	err = h.service.Delete(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrCategoryNotFound) {
+			http.Error(
+				w,
+				"category not found",
+				http.StatusNotFound,
+			)
+			return
+		}
+
+		http.Error(
+			w,
+			"internal server error",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

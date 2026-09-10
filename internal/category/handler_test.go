@@ -45,7 +45,7 @@ func (f *fakeService) Update(ctx context.Context, category *Category) error {
 }
 
 func (f *fakeService) Delete(ctx context.Context, id int64) error {
-	return nil
+	return f.err
 }
 
 func TestHandler_List(t *testing.T) {
@@ -750,6 +750,126 @@ func TestHandler_Update_ServiceError(t *testing.T) {
 		http.MethodPut,
 		"/api/v1/categories/1",
 		strings.NewReader(body),
+	)
+
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusInternalServerError,
+			rec.Code,
+		)
+	}
+}
+
+func TestHandler_Delete(t *testing.T) {
+	service := &fakeService{}
+	handler := NewHandler(service)
+
+	router := chi.NewRouter()
+	router.Delete("/api/v1/categories/{id}", handler.Delete)
+
+	req := httptest.NewRequest(
+		http.MethodDelete,
+		"/api/v1/categories/1",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusNoContent,
+			rec.Code,
+		)
+	}
+}
+
+func TestHandler_Delete_InvalidID(t *testing.T) {
+	service := &fakeService{}
+	handler := NewHandler(service)
+
+	router := chi.NewRouter()
+	router.Delete("/api/v1/categories/{id}", handler.Delete)
+
+	req := httptest.NewRequest(
+		http.MethodDelete,
+		"/api/v1/categories/abc",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			rec.Code,
+		)
+	}
+
+	expectedBody := "invalid category id\n"
+
+	if rec.Body.String() != expectedBody {
+		t.Errorf(
+			"expected body %q, got %q",
+			expectedBody,
+			rec.Body.String(),
+		)
+	}
+}
+
+func TestHandler_Delete_NotFound(t *testing.T) {
+	service := &fakeService{
+		err: ErrCategoryNotFound,
+	}
+
+	handler := NewHandler(service)
+
+	router := chi.NewRouter()
+	router.Delete("/api/v1/categories/{id}", handler.Delete)
+
+	req := httptest.NewRequest(
+		http.MethodDelete,
+		"/api/v1/categories/999",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusNotFound,
+			rec.Code,
+		)
+	}
+}
+
+func TestHandler_Delete_ServiceError(t *testing.T) {
+	service := &fakeService{
+		err: errors.New("service failure"),
+	}
+
+	handler := NewHandler(service)
+
+	router := chi.NewRouter()
+	router.Delete("/api/v1/categories/{id}", handler.Delete)
+
+	req := httptest.NewRequest(
+		http.MethodDelete,
+		"/api/v1/categories/1",
+		nil,
 	)
 
 	rec := httptest.NewRecorder()
