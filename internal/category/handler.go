@@ -33,6 +33,11 @@ type createCategoryRequest struct {
 	Slug string `json:"slug"`
 }
 
+type updateCategoryRequest struct {
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	categories, err := h.service.List(r.Context())
 	if err != nil {
@@ -137,4 +142,66 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
+}
+
+func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
+	idParam := chi.URLParam(r, "id")
+
+	id, err := strconv.ParseInt(idParam, 10, 64)
+	if err != nil || id <= 0 {
+		http.Error(
+			w,
+			"invalid category id",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	var req updateCategoryRequest
+
+	err = json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(
+			w,
+			"invalid request body",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	category := &Category{
+		ID:   id,
+		Name: req.Name,
+		Slug: req.Slug,
+	}
+
+	err = h.service.Update(r.Context(), category)
+	if err != nil {
+		if errors.Is(err, ErrCategoryValidation) {
+			http.Error(
+				w,
+				"invalid category data",
+				http.StatusBadRequest,
+			)
+			return
+		}
+
+		if errors.Is(err, ErrCategoryNotFound) {
+			http.Error(
+				w,
+				"category not found",
+				http.StatusNotFound,
+			)
+			return
+		}
+
+		http.Error(
+			w,
+			"Internal server error",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -18,7 +18,10 @@ type fakeService struct {
 
 	createdName string
 	createdSlug string
-	err         error
+
+	updatedCategory *Category
+
+	err error
 }
 
 func (f *fakeService) GetByID(ctx context.Context, id int64) (*Category, error) {
@@ -37,7 +40,8 @@ func (f *fakeService) Create(ctx context.Context, name, slug string) (*Category,
 }
 
 func (f *fakeService) Update(ctx context.Context, category *Category) error {
-	return nil
+	f.updatedCategory = category
+	return f.err
 }
 
 func (f *fakeService) Delete(ctx context.Context, id int64) error {
@@ -548,6 +552,215 @@ func TestHandler_Create_ServiceError(t *testing.T) {
 			"expected body %q, got %q",
 			expectedBody,
 			rec.Body.String(),
+		)
+	}
+}
+
+func TestHandler_Update(t *testing.T) {
+	service := &fakeService{}
+	handler := NewHandler(service)
+
+	router := chi.NewRouter()
+	router.Put("/api/v1/categories/{id}", handler.Update)
+
+	body := `{
+		"name": "Italian Pizza",
+		"slug": "italian-pizza"
+	}`
+
+	req := httptest.NewRequest(
+		http.MethodPut,
+		"/api/v1/categories/1",
+		strings.NewReader(body),
+	)
+
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusNoContent,
+			rec.Code,
+		)
+	}
+
+	if service.updatedCategory == nil {
+		t.Fatal("expected Service.Update to be called")
+	}
+
+	if service.updatedCategory.ID != 1 {
+		t.Errorf(
+			"expected ID %d, got %d",
+			1,
+			service.updatedCategory.ID,
+		)
+	}
+
+	if service.updatedCategory.Name != "Italian Pizza" {
+		t.Errorf(
+			"expected name %q, got %q",
+			"Italian Pizza",
+			service.updatedCategory.Name,
+		)
+	}
+
+	if service.updatedCategory.Slug != "italian-pizza" {
+		t.Errorf(
+			"expected slug %q, got %q",
+			"italian-pizza",
+			service.updatedCategory.Slug,
+		)
+	}
+}
+
+func TestHandler_Update_InvalidID(t *testing.T) {
+	service := &fakeService{}
+	handler := NewHandler(service)
+
+	router := chi.NewRouter()
+	router.Put("/api/v1/categories/{id}", handler.Update)
+
+	body := `{
+		"name": "Italian Pizza",
+		"slug": "italian-pizza"
+	}`
+
+	req := httptest.NewRequest(
+		http.MethodPut,
+		"/api/v1/categories/abc",
+		strings.NewReader(body),
+	)
+
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			rec.Code,
+		)
+	}
+
+	expectedBody := "invalid category id\n"
+
+	if rec.Body.String() != expectedBody {
+		t.Errorf(
+			"expected body %q, got %q",
+			expectedBody,
+			rec.Body.String(),
+		)
+	}
+}
+
+func TestHandler_Update_InvalidJSON(t *testing.T) {
+	service := &fakeService{}
+	handler := NewHandler(service)
+
+	router := chi.NewRouter()
+	router.Put("/api/v1/categories/{id}", handler.Update)
+
+	body := `{
+		"name": "Italian Pizza",
+		"slug":
+	}`
+
+	req := httptest.NewRequest(
+		http.MethodPut,
+		"/api/v1/categories/1",
+		strings.NewReader(body),
+	)
+
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			rec.Code,
+		)
+	}
+
+	expectedBody := "invalid request body\n"
+
+	if rec.Body.String() != expectedBody {
+		t.Errorf(
+			"expected body %q, got %q",
+			expectedBody,
+			rec.Body.String(),
+		)
+	}
+}
+
+func TestHandler_Update_NotFound(t *testing.T) {
+	service := &fakeService{
+		err: ErrCategoryNotFound,
+	}
+
+	handler := NewHandler(service)
+
+	router := chi.NewRouter()
+	router.Put("/api/v1/categories/{id}", handler.Update)
+
+	body := `{
+		"name": "Italian Pizza",
+		"slug": "italian-pizza"
+	}`
+
+	req := httptest.NewRequest(
+		http.MethodPut,
+		"/api/v1/categories/999",
+		strings.NewReader(body),
+	)
+
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusNotFound,
+			rec.Code,
+		)
+	}
+}
+
+func TestHandler_Update_ServiceError(t *testing.T) {
+	service := &fakeService{
+		err: errors.New("service failure"),
+	}
+
+	handler := NewHandler(service)
+
+	router := chi.NewRouter()
+	router.Put("/api/v1/categories/{id}", handler.Update)
+
+	body := `{
+		"name": "Italian Pizza",
+		"slug": "italian-pizza"
+	}`
+
+	req := httptest.NewRequest(
+		http.MethodPut,
+		"/api/v1/categories/1",
+		strings.NewReader(body),
+	)
+
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusInternalServerError,
+			rec.Code,
 		)
 	}
 }
