@@ -28,6 +28,11 @@ func NewHandler(service ServiceInterface) *Handler {
 	}
 }
 
+type createCategoryRequest struct {
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	categories, err := h.service.List(r.Context())
 	if err != nil {
@@ -81,6 +86,52 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+
+	err = json.NewEncoder(w).Encode(category)
+	if err != nil {
+		return
+	}
+}
+
+func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
+	var req createCategoryRequest
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(
+			w,
+			"invalid request body",
+			http.StatusBadRequest,
+		)
+
+		return
+	}
+
+	category, err := h.service.Create(
+		r.Context(),
+		req.Name,
+		req.Slug,
+	)
+	if err != nil {
+		if errors.Is(err, ErrCategoryValidation) {
+			http.Error(
+				w,
+				"invalid category data",
+				http.StatusBadRequest,
+			)
+			return
+		}
+
+		http.Error(
+			w,
+			"internal server error",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 
 	err = json.NewEncoder(w).Encode(category)
 	if err != nil {

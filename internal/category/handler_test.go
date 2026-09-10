@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -14,7 +15,10 @@ import (
 type fakeService struct {
 	category   *Category
 	categories []Category
-	err        error
+
+	createdName string
+	createdSlug string
+	err         error
 }
 
 func (f *fakeService) GetByID(ctx context.Context, id int64) (*Category, error) {
@@ -26,7 +30,10 @@ func (f *fakeService) List(ctx context.Context) ([]Category, error) {
 }
 
 func (f *fakeService) Create(ctx context.Context, name, slug string) (*Category, error) {
-	return nil, nil
+	f.createdName = name
+	f.createdSlug = slug
+
+	return f.category, f.err
 }
 
 func (f *fakeService) Update(ctx context.Context, category *Category) error {
@@ -313,6 +320,218 @@ func TestHandler_GetByID_ServiceError(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusInternalServerError,
+			rec.Code,
+		)
+	}
+
+	expectedBody := "internal server error\n"
+
+	if rec.Body.String() != expectedBody {
+		t.Errorf(
+			"expected body %q, got %q",
+			expectedBody,
+			rec.Body.String(),
+		)
+	}
+}
+
+func TestHandler_Create(t *testing.T) {
+	service := &fakeService{
+		category: &Category{
+			ID:   1,
+			Name: "Pizza",
+			Slug: "pizza",
+		},
+	}
+
+	handler := NewHandler(service)
+
+	body := `{
+		"name": "Pizza",
+		"slug": "pizza"
+	}`
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/categories",
+		strings.NewReader(body),
+	)
+
+	rec := httptest.NewRecorder()
+
+	handler.Create(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusCreated,
+			rec.Code,
+		)
+	}
+
+	if service.createdName != "Pizza" {
+		t.Errorf(
+			"expected name %q, got %q",
+			"Pizza",
+			service.createdName,
+		)
+	}
+
+	if service.createdSlug != "pizza" {
+		t.Errorf(
+			"expected slug %q, got %q",
+			"pizza",
+			service.createdSlug,
+		)
+	}
+
+	contentType := rec.Header().Get("Content-Type")
+
+	if contentType != "application/json" {
+		t.Fatalf(
+			"expected Content-Type %q, got %q",
+			"application/json",
+			contentType,
+		)
+	}
+
+	var got Category
+
+	err := json.NewDecoder(rec.Body).Decode(&got)
+	if err != nil {
+		t.Fatalf("failed to decode response body: %v", err)
+	}
+
+	if got.ID != service.category.ID {
+		t.Errorf(
+			"expected ID %d, got %d",
+			service.category.ID,
+			got.ID,
+		)
+	}
+
+	if got.Name != service.category.Name {
+		t.Errorf(
+			"expected name %q, got %q",
+			service.category.Name,
+			got.Name,
+		)
+	}
+
+	if got.Slug != service.category.Slug {
+		t.Errorf(
+			"expected slug %q, got %q",
+			service.category.Slug,
+			got.Slug,
+		)
+	}
+}
+
+func TestHandler_Create_InvalidJSON(t *testing.T) {
+	service := &fakeService{}
+	handler := NewHandler(service)
+
+	body := `{
+		"name": "Pizza",
+		"slug":
+	}`
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/categories",
+		strings.NewReader(body),
+	)
+
+	rec := httptest.NewRecorder()
+
+	handler.Create(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			rec.Code,
+		)
+	}
+
+	expectedBody := "invalid request body\n"
+
+	if rec.Body.String() != expectedBody {
+		t.Errorf(
+			"expected body %q, got %q",
+			expectedBody,
+			rec.Body.String(),
+		)
+	}
+}
+
+func TestHandler_Create_ValidationError(t *testing.T) {
+	service := &fakeService{
+		err: ErrCategoryValidation,
+	}
+
+	handler := NewHandler(service)
+
+	body := `{
+		"name": "",
+		"slug": "pizza"
+	}`
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/categories",
+		strings.NewReader(body),
+	)
+
+	rec := httptest.NewRecorder()
+
+	handler.Create(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			rec.Code,
+		)
+	}
+
+	expectedBody := "invalid category data\n"
+
+	if rec.Body.String() != expectedBody {
+		t.Errorf(
+			"expected body %q, got %q",
+			expectedBody,
+			rec.Body.String(),
+		)
+	}
+}
+
+func TestHandler_Create_ServiceError(t *testing.T) {
+	service := &fakeService{
+		err: errors.New("service failure"),
+	}
+
+	handler := NewHandler(service)
+
+	body := `{
+		"name": "Pizza",
+		"slug": "pizza"
+	}`
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/categories",
+		strings.NewReader(body),
+	)
+
+	rec := httptest.NewRecorder()
+
+	handler.Create(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf(
