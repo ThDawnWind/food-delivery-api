@@ -7,15 +7,18 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type fakeService struct {
+	category   *Category
 	categories []Category
 	err        error
 }
 
 func (f *fakeService) GetByID(ctx context.Context, id int64) (*Category, error) {
-	return nil, nil
+	return f.category, f.err
 }
 
 func (f *fakeService) List(ctx context.Context) ([]Category, error) {
@@ -142,6 +145,184 @@ func TestHandler_List_ServiceError(t *testing.T) {
 			rec.Code,
 		)
 	}
+
+	if rec.Body.String() != expectedBody {
+		t.Errorf(
+			"expected body %q, got %q",
+			expectedBody,
+			rec.Body.String(),
+		)
+	}
+}
+
+func TestHandler_GetByID(t *testing.T) {
+	service := &fakeService{
+		category: &Category{
+			ID:   1,
+			Name: "Pizza",
+			Slug: "pizza",
+		},
+	}
+
+	handler := NewHandler(service)
+
+	router := chi.NewRouter()
+	router.Get("/api/v1/categories/{id}", handler.GetByID)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/categories/1",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusOK,
+			rec.Code,
+		)
+	}
+
+	var got Category
+
+	err := json.NewDecoder(rec.Body).Decode(&got)
+	if err != nil {
+		t.Fatalf("failed to decode response body: %v", err)
+	}
+
+	if got.ID != service.category.ID {
+		t.Errorf(
+			"expected ID %d, got %d",
+			service.category.ID,
+			got.ID,
+		)
+	}
+
+	if got.Name != service.category.Name {
+		t.Errorf(
+			"expected name %q, got %q",
+			service.category.Name,
+			got.Name,
+		)
+	}
+
+	if got.Slug != service.category.Slug {
+		t.Errorf(
+			"expected slug %q, got %q",
+			service.category.Slug,
+			got.Slug,
+		)
+	}
+}
+
+func TestHandler_GetByID_InvalidID(t *testing.T) {
+	service := &fakeService{}
+	handler := NewHandler(service)
+
+	router := chi.NewRouter()
+	router.Get("/api/v1/categories/{id}", handler.GetByID)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/categories/abc",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			rec.Code,
+		)
+	}
+
+	expectedBody := "invalid category id\n"
+
+	if rec.Body.String() != expectedBody {
+		t.Errorf(
+			"expected body %q, got %q",
+			expectedBody,
+			rec.Body.String(),
+		)
+	}
+}
+
+func TestHandler_GetByID_NotFound(t *testing.T) {
+	service := &fakeService{
+		err: ErrCategoryNotFound,
+	}
+
+	handler := NewHandler(service)
+
+	router := chi.NewRouter()
+	router.Get("/api/v1/categories/{id}", handler.GetByID)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/categories/999",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusNotFound,
+			rec.Code,
+		)
+	}
+
+	expectedBody := "category not found\n"
+
+	if rec.Body.String() != expectedBody {
+		t.Errorf(
+			"expected body %q, got %q",
+			expectedBody,
+			rec.Body.String(),
+		)
+	}
+}
+
+func TestHandler_GetByID_ServiceError(t *testing.T) {
+	service := &fakeService{
+		err: errors.New("service failure"),
+	}
+
+	handler := NewHandler(service)
+
+	router := chi.NewRouter()
+	router.Get("/api/v1/categories/{id}", handler.GetByID)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/categories/1",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusInternalServerError,
+			rec.Code,
+		)
+	}
+
+	expectedBody := "internal server error\n"
 
 	if rec.Body.String() != expectedBody {
 		t.Errorf(
