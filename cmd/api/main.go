@@ -10,8 +10,11 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/ThDawnWind/food-delivery-api/internal/category"
 	"github.com/ThDawnWind/food-delivery-api/internal/config"
 	"github.com/ThDawnWind/food-delivery-api/internal/database"
+	"github.com/go-chi/chi/v5"
+	"github.com/joho/godotenv"
 )
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -35,15 +38,22 @@ func slowHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println(".env file not found, using environment variables")
+	}
+
 	serverErr := make(chan error, 1)
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Error loading configuration: %v", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	dbCtx, dbCancel := context.WithTimeout(
+		context.Background(),
+		5*time.Second,
+	)
+	defer dbCancel()
 
-	dbPool, err := database.New(ctx, cfg.Database.URL)
+	dbPool, err := database.New(dbCtx, cfg.Database.URL)
 	if err != nil {
 		log.Fatalf("Error connecting to database: %v", err)
 	} else {
@@ -51,16 +61,25 @@ func main() {
 	}
 	defer dbPool.Close()
 
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
+	categoryRepository := category.NewRepository(dbPool)
+	categoryService := category.NewService(categoryRepository)
+	categoryHandler := category.NewHandler(categoryService)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", healthHandler)
-	mux.HandleFunc("GET /slow", slowHandler)
+	router := chi.NewRouter()
+	router.Get("/health", healthHandler)
+	router.Get("/slow", slowHandler)
+
+	router.Mount(
+		"/api/v1/categories",
+		categoryHandler.Routes(),
+	)
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.HTTP.Port),
-		Handler:           mux,
+		Handler:           router,
 		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
 		WriteTimeout:      cfg.HTTP.WriteTimeout,
 		IdleTimeout:       cfg.HTTP.IdleTimeout,
