@@ -463,3 +463,270 @@ func TestRepository_List(t *testing.T) {
 	}
 
 }
+
+func TestRepository_Create(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	var categoryID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO categories (name, slug)
+		VALUES ($1, $2)
+		RETURNING id
+		`,
+		fmt.Sprintf("Create Category %d", suffix),
+		fmt.Sprintf("create-category-%d", suffix),
+	).Scan(&categoryID)
+
+	if err != nil {
+		t.Fatalf("failed to create category: %v", err)
+	}
+
+	description := "Test pizza"
+
+	product := &Product{
+		Name:        fmt.Sprintf("Create Pizza %d", suffix),
+		Description: &description,
+		Price:       59900,
+		Weight:      450,
+		CategoryID:  categoryID,
+		IsActive:    true,
+		Images: []ProductImage{
+			{
+				URL:       "/images/create-pizza-1.webp",
+				SortOrder: 0,
+				IsPrimary: true,
+			},
+			{
+				URL:       "/images/create-pizza-2.webp",
+				SortOrder: 1,
+				IsPrimary: false,
+			},
+		},
+	}
+
+	createdProduct, err := repo.Create(ctx, product)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if createdProduct == nil {
+		t.Fatal("expected created product, got nil")
+	}
+
+	t.Cleanup(func() {
+		ctx := context.Background()
+
+		_, err := dbPool.Exec(
+			ctx,
+			`DELETE FROM products WHERE id = $1`,
+			createdProduct.ID,
+		)
+		if err != nil {
+			t.Errorf("failed to clean up product: %v", err)
+		}
+
+		_, err = dbPool.Exec(
+			ctx,
+			`DELETE FROM categories WHERE id = $1`,
+			categoryID,
+		)
+		if err != nil {
+			t.Errorf("failed to clean up category: %v", err)
+		}
+	})
+
+	if createdProduct.ID == 0 {
+		t.Error("expected product ID to be set")
+	}
+
+	if createdProduct.Name != product.Name {
+		t.Errorf(
+			"expected name %q, got %q",
+			product.Name,
+			createdProduct.Name,
+		)
+	}
+
+	if createdProduct.CreatedAt.IsZero() {
+		t.Error("expected created_at to be set")
+	}
+
+	if createdProduct.UpdatedAt.IsZero() {
+		t.Error("expected updated_at to be set")
+	}
+
+	if len(createdProduct.Images) != 2 {
+		t.Fatalf(
+			"expected %d images, got %d",
+			2,
+			len(createdProduct.Images),
+		)
+	}
+
+	for i, image := range createdProduct.Images {
+		if image.ID == 0 {
+			t.Errorf("expected image %d ID to be set", i)
+		}
+
+		if image.ProductID != createdProduct.ID {
+			t.Errorf(
+				"expected image %d product ID %d, got %d",
+				i,
+				createdProduct.ID,
+				image.ProductID,
+			)
+		}
+
+		if image.CreatedAt.IsZero() {
+			t.Errorf("expected image %d created_at to be set", i)
+		}
+	}
+	savedProduct, err := repo.GetByID(ctx, createdProduct.ID)
+	if err != nil {
+		t.Fatalf("failed to get created product: %v", err)
+	}
+
+	if savedProduct.Name != product.Name {
+		t.Errorf(
+			"expected saved name %q, got %q",
+			product.Name,
+			savedProduct.Name,
+		)
+	}
+
+	if len(savedProduct.Images) != 2 {
+		t.Fatalf(
+			"expected saved product to have %d images, got %d",
+			2,
+			len(savedProduct.Images),
+		)
+	}
+}
+
+func TestRepository_Create_RollbackOnImageError(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	var categoryID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO categories (name, slug)
+		VALUES ($1, $2)
+		RETURNING id
+		`,
+		fmt.Sprintf("Rollback Category %d", suffix),
+		fmt.Sprintf("rollback-category-%d", suffix),
+	).Scan(&categoryID)
+
+	if err != nil {
+		t.Fatalf("failed to create category: %v", err)
+	}
+
+	t.Cleanup(func() {
+		ctx := context.Background()
+
+		_, err := dbPool.Exec(
+			ctx,
+			`DELETE FROM categories WHERE id = $1`,
+			categoryID,
+		)
+		if err != nil {
+			t.Errorf("failed to clean up category: %v", err)
+		}
+	})
+
+	description := "Rollback pizza"
+	productName := fmt.Sprintf("Rollback Pizza %d", suffix)
+
+	product := &Product{
+		Name:        productName,
+		Description: &description,
+		Price:       59900,
+		Weight:      450,
+		CategoryID:  categoryID,
+		IsActive:    true,
+		Images: []ProductImage{
+			{
+				URL:       "/images/rollback-1.webp",
+				SortOrder: 0,
+				IsPrimary: true,
+			},
+			{
+				URL:       "/images/rollback-2.webp",
+				SortOrder: 1,
+
+				IsPrimary: true,
+			},
+		},
+	}
+
+	createdProduct, err := repo.Create(ctx, product)
+
+	if err == nil {
+		t.Fatal("expected create error, got nil")
+	}
+
+	if createdProduct != nil {
+		t.Fatalf(
+			"expected nil product on error, got %+v",
+			createdProduct,
+		)
+	}
+
+	var productCount int
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+	SELECT COUNT(*)
+	FROM products
+	WHERE name = $1
+	`,
+		productName,
+	).Scan(&productCount)
+
+	if err != nil {
+		t.Fatalf("failed to count products: %v", err)
+	}
+
+	if productCount != 0 {
+		t.Fatalf(
+			"expected product to be rolled back, found %d",
+			productCount,
+		)
+	}
+}

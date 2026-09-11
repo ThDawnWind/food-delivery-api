@@ -244,3 +244,79 @@ func (r *Repository) loadImages(
 
 	return nil
 }
+
+func (r *Repository) Create(ctx context.Context, product *Product) (*Product, error) {
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	err = tx.QueryRow(
+		ctx,
+		`INSERT INTO products (
+		name,
+		description,
+		price,
+		weight,
+		category_id,
+		is_active
+		)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, created_at, updated_at
+		`,
+		product.Name,
+		product.Description,
+		product.Price,
+		product.Weight,
+		product.CategoryID,
+		product.IsActive,
+	).Scan(
+		&product.ID,
+		&product.CreatedAt,
+		&product.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create product: %w", err)
+	}
+
+	for i := range product.Images {
+		product.Images[i].ProductID = product.ID
+
+		err = tx.QueryRow(
+			ctx,
+			`
+			INSERT INTO product_images (
+				product_id,
+				url,
+				sort_order,
+				is_primary
+			)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id, created_at
+			`,
+			product.ID,
+			product.Images[i].URL,
+			product.Images[i].SortOrder,
+			product.Images[i].IsPrimary,
+		).Scan(
+			&product.Images[i].ID,
+			&product.Images[i].CreatedAt,
+		)
+
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to create product image: %w",
+				err,
+			)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return product, nil
+}
