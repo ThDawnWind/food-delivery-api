@@ -234,3 +234,232 @@ func TestRepository_GetByID_NotFound(t *testing.T) {
 		)
 	}
 }
+
+func TestRepository_List(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	var categoryID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO categories (name, slug)
+		VALUES ($1, $2)
+		RETURNING id
+		`,
+		fmt.Sprintf("Test Category %d", suffix),
+		fmt.Sprintf("test-category-%d", suffix),
+	).Scan(&categoryID)
+
+	if err != nil {
+		t.Fatalf("failed to create category: %v", err)
+	}
+
+	var product1ID int64
+	var product2ID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO products (
+			name,
+			description,
+			price,
+			weight,
+			category_id
+		)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id
+		`,
+		fmt.Sprintf("Pizza %d", suffix),
+		"Pizza description",
+		int64(49900),
+		400,
+		categoryID,
+	).Scan(&product1ID)
+
+	if err != nil {
+		t.Fatalf("failed to create first product: %v", err)
+	}
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO products (
+			name,
+			description,
+			price,
+			weight,
+			category_id
+		)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id
+		`,
+		fmt.Sprintf("Burger %d", suffix),
+		"Burger description",
+		int64(39900),
+		300,
+		categoryID,
+	).Scan(&product2ID)
+
+	if err != nil {
+		t.Fatalf("failed to create second product: %v", err)
+	}
+
+	t.Cleanup(func() {
+		ctx := context.Background()
+
+		_, err := dbPool.Exec(
+			ctx,
+			`DELETE FROM products WHERE id = ANY($1::bigint[])`,
+			[]int64{product1ID, product2ID},
+		)
+		if err != nil {
+			t.Errorf("failed to clean up products: %v", err)
+		}
+
+		_, err = dbPool.Exec(
+			ctx,
+			`DELETE FROM categories WHERE id = $1`,
+			categoryID,
+		)
+		if err != nil {
+			t.Errorf("failed to clean up category: %v", err)
+		}
+	})
+
+	_, err = dbPool.Exec(
+		ctx,
+		`
+		INSERT INTO product_images (
+			product_id,
+			url,
+			sort_order,
+			is_primary
+		)
+		VALUES
+			($1, '/images/pizza-1.webp', 0, TRUE),
+			($1, '/images/pizza-2.webp', 1, FALSE),
+			($2, '/images/burger-1.webp', 0, TRUE)
+		`,
+		product1ID,
+		product2ID,
+	)
+
+	if err != nil {
+		t.Fatalf("failed to create product images: %v", err)
+	}
+
+	products, err := repo.List(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(products) < 2 {
+		t.Fatalf("expected at least 2 products, got %d", len(products))
+	}
+
+	var product1 *Product
+	var product2 *Product
+
+	for i := range products {
+		switch products[i].ID {
+		case product1ID:
+			product1 = &products[i]
+		case product2ID:
+			product2 = &products[i]
+		}
+	}
+
+	if product1 == nil {
+		t.Fatal("expected first product in list")
+	}
+
+	if product2 == nil {
+		t.Fatal("expected second product in list")
+	}
+
+	if len(product1.Images) != 2 {
+		t.Fatalf(
+			"expected first product to have %d images, got %d",
+			2,
+			len(product1.Images),
+		)
+	}
+
+	if len(product2.Images) != 1 {
+		t.Fatalf(
+			"expected second product to have %d image, got %d",
+			1,
+			len(product2.Images),
+		)
+	}
+
+	if product1.Images[0].URL != "/images/pizza-1.webp" {
+		t.Errorf(
+			"expected first image URL %q, got %q",
+			"/images/pizza-1.webp",
+			product1.Images[0].URL,
+		)
+	}
+
+	if product1.Images[0].SortOrder != 0 {
+		t.Errorf(
+			"expected first image sort order %d, got %d",
+			0,
+			product1.Images[0].SortOrder,
+		)
+	}
+
+	if !product1.Images[0].IsPrimary {
+		t.Error("expected first image to be primary")
+	}
+
+	if product1.Images[1].URL != "/images/pizza-2.webp" {
+		t.Errorf(
+			"expected second image URL %q, got %q",
+			"/images/pizza-2.webp",
+			product1.Images[1].URL,
+		)
+	}
+
+	if product1.Images[1].SortOrder != 1 {
+		t.Errorf(
+			"expected second image sort order %d, got %d",
+			1,
+			product1.Images[1].SortOrder,
+		)
+	}
+
+	if product1.Images[1].IsPrimary {
+		t.Error("expected second image not to be primary")
+	}
+
+	if product2.Images[0].URL != "/images/burger-1.webp" {
+		t.Errorf(
+			"expected burger image URL %q, got %q",
+			"/images/burger-1.webp",
+			product2.Images[0].URL,
+		)
+	}
+
+	if !product2.Images[0].IsPrimary {
+		t.Error("expected burger image to be primary")
+	}
+
+}
