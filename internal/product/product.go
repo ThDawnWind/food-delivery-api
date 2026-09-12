@@ -1,6 +1,9 @@
 package product
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
 type Product struct {
 	ID          int64          `json:"id"`
@@ -23,3 +26,8 @@ type ProductImage struct {
 	IsPrimary bool      `json:"is_primary"`
 	CreatedAt time.Time `json:"created_at"`
 }
+
+var (
+	ErrProductNotFound   = errors.New("product not found")
+	ErrProductValidation = errors.New("product validation error")
+)
