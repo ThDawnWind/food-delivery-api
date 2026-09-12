@@ -2,8 +2,14 @@ package product
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
+	"testing"
+	"time"
 
+	"github.com/ThDawnWind/food-delivery-api/internal/database"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -319,4 +325,309 @@ func (r *Repository) Create(ctx context.Context, product *Product) (*Product, er
 	}
 
 	return product, nil
+}
+
+func (r *Repository) Update(ctx context.Context, product *Product) (*Product, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	err = tx.QueryRow(
+		ctx,
+		`
+	UPDATE products
+	SET
+		name = $1,
+		description = $2,
+		price = $3,
+		weight = $4,
+		category_id = $5,
+		is_active = $6,
+		updated_at = NOW()
+	WHERE id = $7
+	RETURNING updated_at
+	`,
+		product.Name,
+		product.Description,
+		product.Price,
+		product.Weight,
+		product.CategoryID,
+		product.IsActive,
+		product.ID,
+	).Scan(
+		&product.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to update product: %w",
+			err,
+		)
+	}
+
+	_, err = tx.Exec(
+		ctx,
+		`
+			DELETE FROM product_images
+			WHERE product_id = $1
+			`,
+		product.ID,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to delete product images: %w",
+			err,
+		)
+	}
+
+	for i := range product.Images {
+		product.Images[i].ProductID = product.ID
+
+		err = tx.QueryRow(
+			ctx,
+			`
+				INSERT INTO product_images (
+					product_id,
+					url,
+					sort_order,
+					is_primary
+				)
+				VALUES ($1, $2, $3, $4)
+				RETURNING id, created_at
+				`,
+			product.ID,
+			product.Images[i].URL,
+			product.Images[i].SortOrder,
+			product.Images[i].IsPrimary,
+		).Scan(
+			&product.Images[i].ID,
+			&product.Images[i].CreatedAt,
+		)
+
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to create product image: %w",
+				err,
+			)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf(
+			"failed to commit transaction: %w",
+			err,
+		)
+	}
+
+	return product, nil
+}
+
+func TestRepository_Update_NotFound(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	product := &Product{
+		ID:         9_999_999_999,
+		Name:       "Missing Product",
+		Price:      10000,
+		Weight:     100,
+		CategoryID: 1,
+		IsActive:   true,
+	}
+
+	updatedProduct, err := repo.Update(ctx, product)
+
+	if updatedProduct != nil {
+		t.Fatalf(
+			"expected nil product, got %+v",
+			updatedProduct,
+		)
+	}
+
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf(
+			"expected pgx.ErrNoRows, got %v",
+			err,
+		)
+	}
+}
+
+func TestRepository_Update_RollbackOnImageError(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	var categoryID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO categories (name, slug)
+		VALUES ($1, $2)
+		RETURNING id
+		`,
+		fmt.Sprintf("Rollback Update Category %d", suffix),
+		fmt.Sprintf("rollback-update-category-%d", suffix),
+	).Scan(&categoryID)
+
+	if err != nil {
+		t.Fatalf("failed to create category: %v", err)
+	}
+
+	oldDescription := "Old description"
+
+	product := &Product{
+		Name:        fmt.Sprintf("Old Rollback Pizza %d", suffix),
+		Description: &oldDescription,
+		Price:       49900,
+		Weight:      400,
+		CategoryID:  categoryID,
+		IsActive:    true,
+		Images: []ProductImage{
+			{
+				URL:       "/images/original.webp",
+				SortOrder: 0,
+				IsPrimary: true,
+			},
+		},
+	}
+
+	createdProduct, err := repo.Create(ctx, product)
+	if err != nil {
+		t.Fatalf("failed to create product: %v", err)
+	}
+
+	t.Cleanup(func() {
+		ctx := context.Background()
+
+		_, err := dbPool.Exec(
+			ctx,
+			`DELETE FROM products WHERE id = $1`,
+			createdProduct.ID,
+		)
+		if err != nil {
+			t.Errorf("failed to clean up product: %v", err)
+		}
+
+		_, err = dbPool.Exec(
+			ctx,
+			`DELETE FROM categories WHERE id = $1`,
+			categoryID,
+		)
+		if err != nil {
+			t.Errorf("failed to clean up category: %v", err)
+		}
+	})
+
+	newDescription := "New description"
+
+	createdProduct.Name = "This update must rollback"
+	createdProduct.Description = &newDescription
+	createdProduct.Price = 99900
+	createdProduct.Weight = 999
+
+	createdProduct.Images = []ProductImage{
+		{
+			URL:       "/images/new-1.webp",
+			SortOrder: 0,
+			IsPrimary: true,
+		},
+		{
+			URL:       "/images/new-2.webp",
+			SortOrder: 1,
+			IsPrimary: true,
+		},
+	}
+
+	updatedProduct, err := repo.Update(ctx, createdProduct)
+
+	if err == nil {
+		t.Fatal("expected update error, got nil")
+	}
+
+	if updatedProduct != nil {
+		t.Fatalf(
+			"expected nil product, got %+v",
+			updatedProduct,
+		)
+	}
+
+	savedProduct, err := repo.GetByID(ctx, createdProduct.ID)
+	if err != nil {
+		t.Fatalf("failed to get product after rollback: %v", err)
+	}
+
+	expectedName := fmt.Sprintf("Old Rollback Pizza %d", suffix)
+
+	if savedProduct.Name != expectedName {
+		t.Errorf(
+			"expected name %q after rollback, got %q",
+			expectedName,
+			savedProduct.Name,
+		)
+	}
+
+	if savedProduct.Price != 49900 {
+		t.Errorf(
+			"expected price %d after rollback, got %d",
+			49900,
+			savedProduct.Price,
+		)
+	}
+
+	if savedProduct.Weight != 400 {
+		t.Errorf(
+			"expected weight %d after rollback, got %d",
+			400,
+			savedProduct.Weight,
+		)
+	}
+
+	if len(savedProduct.Images) != 1 {
+		t.Fatalf(
+			"expected %d image after rollback, got %d",
+			1,
+			len(savedProduct.Images),
+		)
+	}
+
+	if savedProduct.Images[0].URL != "/images/original.webp" {
+		t.Errorf(
+			"expected original image after rollback, got %q",
+			savedProduct.Images[0].URL,
+		)
+	}
+
+	if !savedProduct.Images[0].IsPrimary {
+		t.Error("expected original image to remain primary")
+	}
 }

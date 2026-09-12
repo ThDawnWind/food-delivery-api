@@ -730,3 +730,177 @@ func TestRepository_Create_RollbackOnImageError(t *testing.T) {
 		)
 	}
 }
+
+func TestRepository_Update(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	var categoryID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO categories (name, slug)
+		VALUES ($1, $2)
+		RETURNING id
+		`,
+		fmt.Sprintf("Update Category %d", suffix),
+		fmt.Sprintf("update-category-%d", suffix),
+	).Scan(&categoryID)
+
+	if err != nil {
+		t.Fatalf("failed to create category: %v", err)
+	}
+
+	oldDescription := "Old description"
+
+	product := &Product{
+		Name:        fmt.Sprintf("Old Pizza %d", suffix),
+		Description: &oldDescription,
+		Price:       49900,
+		Weight:      400,
+		CategoryID:  categoryID,
+		IsActive:    true,
+		Images: []ProductImage{
+			{
+				URL:       "/images/old-1.webp",
+				SortOrder: 0,
+				IsPrimary: true,
+			},
+			{
+				URL:       "/images/old-2.webp",
+				SortOrder: 1,
+				IsPrimary: false,
+			},
+		},
+	}
+
+	createdProduct, err := repo.Create(ctx, product)
+	if err != nil {
+		t.Fatalf("failed to create product: %v", err)
+	}
+
+	t.Cleanup(func() {
+		ctx := context.Background()
+
+		_, err := dbPool.Exec(
+			ctx,
+			`DELETE FROM products WHERE id = $1`,
+			createdProduct.ID,
+		)
+		if err != nil {
+			t.Errorf("failed to clean up product: %v", err)
+		}
+
+		_, err = dbPool.Exec(
+			ctx,
+			`DELETE FROM categories WHERE id = $1`,
+			categoryID,
+		)
+		if err != nil {
+			t.Errorf("failed to clean up category: %v", err)
+		}
+	})
+
+	newDescription := "New description"
+
+	createdProduct.Name = fmt.Sprintf("Updated Pizza %d", suffix)
+	createdProduct.Description = &newDescription
+	createdProduct.Price = 69900
+	createdProduct.Weight = 500
+	createdProduct.IsActive = false
+
+	createdProduct.Images = []ProductImage{
+		{
+			URL:       "/images/new-1.webp",
+			SortOrder: 0,
+			IsPrimary: true,
+		},
+		{
+			URL:       "/images/new-2.webp",
+			SortOrder: 1,
+			IsPrimary: false,
+		},
+	}
+
+	updatedProduct, err := repo.Update(ctx, createdProduct)
+	if err != nil {
+		t.Fatalf("unexpected update error: %v", err)
+	}
+
+	if updatedProduct == nil {
+		t.Fatal("expected updated product, got nil")
+	}
+
+	savedProduct, err := repo.GetByID(ctx, createdProduct.ID)
+	if err != nil {
+		t.Fatalf("failed to get updated product: %v", err)
+	}
+
+	if savedProduct.Name != createdProduct.Name {
+		t.Errorf(
+			"expected name %q, got %q",
+			createdProduct.Name,
+			savedProduct.Name,
+		)
+	}
+
+	if savedProduct.Price != 69900 {
+		t.Errorf(
+			"expected price %d, got %d",
+			69900,
+			savedProduct.Price,
+		)
+	}
+
+	if savedProduct.Weight != 500 {
+		t.Errorf(
+			"expected weight %d, got %d",
+			500,
+			savedProduct.Weight,
+		)
+	}
+
+	if savedProduct.IsActive {
+		t.Error("expected product to be inactive")
+	}
+
+	if len(savedProduct.Images) != 2 {
+		t.Fatalf(
+			"expected %d images, got %d",
+			2,
+			len(savedProduct.Images),
+		)
+	}
+
+	if savedProduct.Images[0].URL != "/images/new-1.webp" {
+		t.Errorf(
+			"expected first image URL %q, got %q",
+			"/images/new-1.webp",
+			savedProduct.Images[0].URL,
+		)
+	}
+
+	if savedProduct.Images[1].URL != "/images/new-2.webp" {
+		t.Errorf(
+			"expected second image URL %q, got %q",
+			"/images/new-2.webp",
+			savedProduct.Images[1].URL,
+		)
+	}
+
+}
