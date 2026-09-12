@@ -9,9 +9,10 @@ import (
 )
 
 type fakeRepository struct {
-	product  *Product
-	products []Product
-	err      error
+	product       *Product
+	products      []Product
+	err           error
+	deactivatedID int64
 }
 
 func (f *fakeRepository) GetByID(ctx context.Context, id int64) (*Product, error) {
@@ -24,17 +25,28 @@ func (f *fakeRepository) List(ctx context.Context) ([]Product, error) {
 
 func (f *fakeRepository) Create(ctx context.Context, product *Product) (*Product, error) {
 	if f.err != nil {
-		return  nil, f.err
+		return nil, f.err
 	}
-	
+
 	f.product = product
 	return product, nil
 }
 func (f *fakeRepository) Update(ctx context.Context, product *Product) (*Product, error) {
-	return nil, nil
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	f.product = product
+	return product, nil
 }
 
 func (f *fakeRepository) Deactivate(ctx context.Context, id int64) error {
+	if f.err != nil {
+		return f.err
+	}
+
+	f.deactivatedID = id
+
 	return nil
 }
 
@@ -397,6 +409,308 @@ func TestService_Create_RepositoryError(t *testing.T) {
 		t.Fatalf(
 			"expected repository error, got %v",
 			err,
+		)
+	}
+}
+
+func TestService_Update(t *testing.T) {
+	repository := &fakeRepository{}
+	service := NewService(repository)
+
+	product := &Product{
+		ID:         1,
+		Name:       "  Updated Pepperoni  ",
+		Price:      69900,
+		Weight:     500,
+		CategoryID: 1,
+		IsActive:   true,
+	}
+
+	updatedProduct, err := service.Update(
+		context.Background(),
+		product,
+	)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if updatedProduct == nil {
+		t.Fatal("expected product, got nil")
+	}
+
+	if updatedProduct.Name != "Updated Pepperoni" {
+		t.Errorf(
+			"expected trimmed name %q, got %q",
+			"Updated Pepperoni",
+			updatedProduct.Name,
+		)
+	}
+
+	if repository.product != product {
+		t.Error("expected product to be passed to repository")
+	}
+}
+
+func TestService_Update_NotFound(t *testing.T) {
+	repository := &fakeRepository{
+		err: pgx.ErrNoRows,
+	}
+
+	service := NewService(repository)
+
+	product := &Product{
+		ID:         999,
+		Name:       "Pepperoni",
+		Price:      59900,
+		Weight:     450,
+		CategoryID: 1,
+	}
+
+	updatedProduct, err := service.Update(
+		context.Background(),
+		product,
+	)
+
+	if updatedProduct != nil {
+		t.Fatalf(
+			"expected nil product, got %+v",
+			updatedProduct,
+		)
+	}
+
+	if !errors.Is(err, ErrProductNotFound) {
+		t.Fatalf(
+			"expected ErrProductNotFound, got %v",
+			err,
+		)
+	}
+}
+
+func TestService_Update_Validation(t *testing.T) {
+	tests := []struct {
+		name    string
+		product *Product
+	}{
+		{
+			name:    "nil product",
+			product: nil,
+		},
+		{
+			name: "invalid id",
+			product: &Product{
+				ID:         0,
+				Name:       "Pepperoni",
+				Price:      59900,
+				Weight:     450,
+				CategoryID: 1,
+			},
+		},
+		{
+			name: "empty name",
+			product: &Product{
+				ID:         1,
+				Name:       "   ",
+				Price:      59900,
+				Weight:     450,
+				CategoryID: 1,
+			},
+		},
+		{
+			name: "invalid price",
+			product: &Product{
+				ID:         1,
+				Name:       "Pepperoni",
+				Price:      0,
+				Weight:     450,
+				CategoryID: 1,
+			},
+		},
+		{
+			name: "invalid weight",
+			product: &Product{
+				ID:         1,
+				Name:       "Pepperoni",
+				Price:      59900,
+				Weight:     0,
+				CategoryID: 1,
+			},
+		},
+		{
+			name: "invalid category id",
+			product: &Product{
+				ID:         1,
+				Name:       "Pepperoni",
+				Price:      59900,
+				Weight:     450,
+				CategoryID: 0,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repository := &fakeRepository{}
+			service := NewService(repository)
+
+			product, err := service.Update(
+				context.Background(),
+				tt.product,
+			)
+
+			if product != nil {
+				t.Fatalf(
+					"expected nil product, got %+v",
+					product,
+				)
+			}
+
+			if !errors.Is(err, ErrProductValidation) {
+				t.Fatalf(
+					"expected ErrProductValidation, got %v",
+					err,
+				)
+			}
+
+			if repository.product != nil {
+				t.Fatal(
+					"repository must not be called on validation error",
+				)
+			}
+		})
+	}
+}
+
+func TestService_Update_RepositoryError(t *testing.T) {
+	repositoryErr := errors.New("database unavailable")
+
+	repository := &fakeRepository{
+		err: repositoryErr,
+	}
+
+	service := NewService(repository)
+
+	product := &Product{
+		ID:         1,
+		Name:       "Pepperoni",
+		Price:      59900,
+		Weight:     450,
+		CategoryID: 1,
+	}
+
+	updatedProduct, err := service.Update(
+		context.Background(),
+		product,
+	)
+
+	if updatedProduct != nil {
+		t.Fatalf(
+			"expected nil product, got %+v",
+			updatedProduct,
+		)
+	}
+
+	if !errors.Is(err, repositoryErr) {
+		t.Fatalf(
+			"expected repository error, got %v",
+			err,
+		)
+	}
+
+	if errors.Is(err, ErrProductNotFound) {
+		t.Fatal(
+			"repository error must not become ErrProductNotFound",
+		)
+	}
+}
+
+func TestService_Deactivate(t *testing.T) {
+	repository := &fakeRepository{}
+	service := NewService(repository)
+
+	err := service.Deactivate(
+		context.Background(),
+		10,
+	)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if repository.deactivatedID != 10 {
+		t.Errorf(
+			"expected deactivated ID %d, got %d",
+			10,
+			repository.deactivatedID,
+		)
+	}
+}
+
+func TestService_Deactivate_InvalidID(t *testing.T) {
+	repository := &fakeRepository{}
+	service := NewService(repository)
+
+	err := service.Deactivate(
+		context.Background(),
+		0,
+	)
+
+	if !errors.Is(err, ErrProductValidation) {
+		t.Fatalf(
+			"expected ErrProductValidation, got %v",
+			err,
+		)
+	}
+
+	if repository.deactivatedID != 0 {
+		t.Fatal("repository must not be called on validation error")
+	}
+}
+
+func TestService_Deactivate_NotFound(t *testing.T) {
+	repository := &fakeRepository{
+		err: pgx.ErrNoRows,
+	}
+
+	service := NewService(repository)
+
+	err := service.Deactivate(
+		context.Background(),
+		999,
+	)
+
+	if !errors.Is(err, ErrProductNotFound) {
+		t.Fatalf(
+			"expected ErrProductNotFound, got %v",
+			err,
+		)
+	}
+}
+
+func TestService_Deactivate_RepositoryError(t *testing.T) {
+	repositoryErr := errors.New("database unavailable")
+
+	repository := &fakeRepository{
+		err: repositoryErr,
+	}
+
+	service := NewService(repository)
+
+	err := service.Deactivate(
+		context.Background(),
+		1,
+	)
+
+	if !errors.Is(err, repositoryErr) {
+		t.Fatalf(
+			"expected repository error, got %v",
+			err,
+		)
+	}
+
+	if errors.Is(err, ErrProductNotFound) {
+		t.Fatal(
+			"repository error must not become ErrProductNotFound",
 		)
 	}
 }
