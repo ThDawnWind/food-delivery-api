@@ -631,3 +631,29 @@ func TestRepository_Update_RollbackOnImageError(t *testing.T) {
 		t.Error("expected original image to remain primary")
 	}
 }
+
+func (r *Repository) Deactivate(ctx context.Context, id int64) error {
+	var productID int64
+
+	err := r.db.QueryRow(
+		ctx,
+		`
+		UPDATE products
+		SET
+			is_active = FALSE,
+			updated_at = NOW()
+		WHERE id = $1
+		RETURNING id
+		`,
+		id,
+	).Scan(&productID)
+
+	if err != nil {
+		return fmt.Errorf(
+			"failed to deactivate product: %w",
+			err,
+		)
+	}
+
+	return nil
+}

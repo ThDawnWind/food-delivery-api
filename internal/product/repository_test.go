@@ -904,3 +904,140 @@ func TestRepository_Update(t *testing.T) {
 	}
 
 }
+
+func TestRepository_Deactivate(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	var categoryID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO categories (name, slug)
+		VALUES ($1, $2)
+		RETURNING id
+		`,
+		fmt.Sprintf("Deactivate Category %d", suffix),
+		fmt.Sprintf("deactivate-category-%d", suffix),
+	).Scan(&categoryID)
+
+	if err != nil {
+		t.Fatalf("failed to create category: %v", err)
+	}
+
+	description := "Deactivate test product"
+
+	product := &Product{
+		Name:        fmt.Sprintf("Deactivate Pizza %d", suffix),
+		Description: &description,
+		Price:       59900,
+		Weight:      450,
+		CategoryID:  categoryID,
+		IsActive:    true,
+		Images: []ProductImage{
+			{
+				URL:       "/images/deactivate.webp",
+				SortOrder: 0,
+				IsPrimary: true,
+			},
+		},
+	}
+
+	createdProduct, err := repo.Create(ctx, product)
+	if err != nil {
+		t.Fatalf("failed to create product: %v", err)
+	}
+
+	t.Cleanup(func() {
+		ctx := context.Background()
+
+		_, err := dbPool.Exec(
+			ctx,
+			`DELETE FROM products WHERE id = $1`,
+			createdProduct.ID,
+		)
+		if err != nil {
+			t.Errorf("failed to clean up product: %v", err)
+		}
+
+		_, err = dbPool.Exec(
+			ctx,
+			`DELETE FROM categories WHERE id = $1`,
+			categoryID,
+		)
+		if err != nil {
+			t.Errorf("failed to clean up category: %v", err)
+		}
+	})
+
+	err = repo.Deactivate(ctx, createdProduct.ID)
+	if err != nil {
+		t.Fatalf("unexpected deactivate error: %v", err)
+	}
+
+	savedProduct, err := repo.GetByID(ctx, createdProduct.ID)
+	if err != nil {
+		t.Fatalf("failed to get deactivated product: %v", err)
+	}
+
+	if savedProduct.IsActive {
+		t.Error("expected product to be inactive")
+	}
+
+	if len(savedProduct.Images) != 1 {
+		t.Fatalf(
+			"expected %d image, got %d",
+			1,
+			len(savedProduct.Images),
+		)
+	}
+
+	if savedProduct.Images[0].URL != "/images/deactivate.webp" {
+		t.Errorf(
+			"expected image URL %q, got %q",
+			"/images/deactivate.webp",
+			savedProduct.Images[0].URL,
+		)
+	}
+}
+
+func TestRepository_Deactivate_NotFound(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	err = repo.Deactivate(ctx, 9_999_999_999)
+
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf(
+			"expected pgx.ErrNoRows, got %v",
+			err,
+		)
+	}
+}
