@@ -1041,3 +1041,123 @@ func TestRepository_Deactivate_NotFound(t *testing.T) {
 		)
 	}
 }
+
+func TestRepository_List_ExcludesInactiveProducts(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	var categoryID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO categories (name, slug)
+		VALUES ($1, $2)
+		RETURNING id
+		`,
+		fmt.Sprintf("Inactive Category %d", suffix),
+		fmt.Sprintf("inactive-category-%d", suffix),
+	).Scan(&categoryID)
+
+	if err != nil {
+		t.Fatalf("failed to create category: %v", err)
+	}
+
+	activeProduct := &Product{
+		Name:       fmt.Sprintf("Active Product %d", suffix),
+		Price:      59900,
+		Weight:     450,
+		CategoryID: categoryID,
+		IsActive:   true,
+		Images:     []ProductImage{},
+	}
+
+	activeProduct, err = repo.Create(ctx, activeProduct)
+	if err != nil {
+		t.Fatalf("failed to create active product: %v", err)
+	}
+
+	inactiveProduct := &Product{
+		Name:       fmt.Sprintf("Inactive Product %d", suffix),
+		Price:      39900,
+		Weight:     300,
+		CategoryID: categoryID,
+		IsActive:   true,
+		Images:     []ProductImage{},
+	}
+
+	inactiveProduct, err = repo.Create(ctx, inactiveProduct)
+	if err != nil {
+		t.Fatalf("failed to create inactive product: %v", err)
+	}
+
+	if err := repo.Deactivate(ctx, inactiveProduct.ID); err != nil {
+		t.Fatalf("failed to deactivate product: %v", err)
+	}
+
+	t.Cleanup(func() {
+		ctx := context.Background()
+
+		_, err := dbPool.Exec(
+			ctx,
+			`DELETE FROM products WHERE id = ANY($1::bigint[])`,
+			[]int64{
+				activeProduct.ID,
+				inactiveProduct.ID,
+			},
+		)
+		if err != nil {
+			t.Errorf("failed to clean up products: %v", err)
+		}
+
+		_, err = dbPool.Exec(
+			ctx,
+			`DELETE FROM categories WHERE id = $1`,
+			categoryID,
+		)
+		if err != nil {
+			t.Errorf("failed to clean up category: %v", err)
+		}
+	})
+
+	products, err := repo.List(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var activeFound bool
+	var inactiveFound bool
+
+	for _, product := range products {
+		switch product.ID {
+		case activeProduct.ID:
+			activeFound = true
+
+		case inactiveProduct.ID:
+			inactiveFound = true
+		}
+	}
+
+	if !activeFound {
+		t.Error("expected active product in list")
+	}
+
+	if inactiveFound {
+		t.Error("inactive product must not be returned by List")
+	}
+
+}

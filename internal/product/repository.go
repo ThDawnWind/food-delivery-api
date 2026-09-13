@@ -137,6 +137,7 @@ func (r *Repository) List(
 			created_at,
 			updated_at
 		FROM products
+		WHERE is_active = TRUE
 		ORDER BY id
 		`,
 	)
