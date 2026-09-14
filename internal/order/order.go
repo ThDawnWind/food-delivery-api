@@ -1,0 +1,65 @@
+package order
+
+import (
+	"errors"
+	"time"
+)
+
+type Status string
+
+const (
+	StatusNew        Status = "new"
+	StatusConfirmed  Status = "confirmed"
+	StatusCooking    Status = "cooking"
+	StatusReady      Status = "ready"
+	StatusDelivering Status = "delivering"
+	StatusCompleted  Status = "completed"
+	StatusCancelled  Status = "cancelled"
+)
+
+type Order struct {
+	ID              int64       `json:"id"`
+	UserID          int64       `json:"user_id"`
+	Status          Status      `json:"status"`
+	TotalPrice      int64       `json:"total_price"`
+	DeliveryAddress string      `json:"delivery_address"`
+	Items           []OrderItem `json:"items"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+}
+
+type OrderItem struct {
+	ID            int64     `json:"id"`
+	OrderID       int64     `json:"order_id"`
+	ProductID     int64     `json:"product_id"`
+	NameSnapshot  string    `json:"name_snapshot"`
+	PriceSnapshot int64     `json:"price_snapshot"`
+	Quantity      int       `json:"quantity"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+type OrderItems struct {
+	ID            int64     `json:"id"`
+	OrderID       int64     `json:"order_id"`
+	ProductID     int64     `json:"product_id"`
+	NameSnapshot  string    `json:"name_snapshot"`
+	PriceSnapshot int64     `json:"price_snapshot"`
+	Quantity      int       `json:"quantity"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+type CreateOrder struct {
+	UserID          int64        `json:"user_id"`
+	DeliveryAddress string       `json:"delivery_address"`
+	Items           []CreateItem `json:"items"`
+}
+
+type CreateItem struct {
+	ProductID int64 `json:"product_id"`
+	Quantity  int   `json:"quantity"`
+}
+
+var (
+	ErrOrderValidation = errors.New("order validation error")
+	ErrOrderNotFound   = errors.New("order not found")
+)
