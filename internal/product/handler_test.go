@@ -15,15 +15,17 @@ import (
 type fakeService struct {
 	product       *Product
 	products      []Product
-	deactivatedID int64
 	err           error
+	deactivatedID int64
+	listFilter    ListFilter
 }
 
 func (f *fakeService) GetByID(ctx context.Context, id int64) (*Product, error) {
 	return f.product, f.err
 }
 
-func (f *fakeService) List(ctx context.Context) ([]Product, error) {
+func (f *fakeService) List(ctx context.Context, filter ListFilter) ([]Product, error) {
+	f.listFilter = filter
 	return f.products, f.err
 }
 
@@ -809,6 +811,163 @@ func TestHandler_Delete_ServiceError(t *testing.T) {
 		t.Fatalf(
 			"expected status %d, got %d",
 			http.StatusInternalServerError,
+			rec.Code,
+		)
+	}
+}
+
+func TestHandler_List_WithFilters(t *testing.T) {
+	service := &fakeService{
+		products: []Product{},
+	}
+
+	handler := NewHandler(service)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/products?category_id=3&search=pizza&limit=10&offset=20",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	handler.List(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusOK,
+			rec.Code,
+		)
+	}
+
+	if service.listFilter.CategoryID == nil {
+		t.Fatal("expected category ID, got nil")
+	}
+
+	if *service.listFilter.CategoryID != 3 {
+		t.Errorf(
+			"expected category ID %d, got %d",
+			3,
+			*service.listFilter.CategoryID,
+		)
+	}
+
+	if service.listFilter.Search != "pizza" {
+		t.Errorf(
+			"expected search %q, got %q",
+			"pizza",
+			service.listFilter.Search,
+		)
+	}
+
+	if service.listFilter.Limit != 10 {
+		t.Errorf(
+			"expected limit %d, got %d",
+			10,
+			service.listFilter.Limit,
+		)
+	}
+
+	if service.listFilter.Offset != 20 {
+		t.Errorf(
+			"expected offset %d, got %d",
+			20,
+			service.listFilter.Offset,
+		)
+	}
+}
+
+func TestHandler_List_InvalidCategoryID(t *testing.T) {
+	service := &fakeService{}
+	handler := NewHandler(service)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/products?category_id=abc",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	handler.List(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			rec.Code,
+		)
+	}
+}
+
+func TestHandler_List_InvalidLimit(t *testing.T) {
+	service := &fakeService{}
+	handler := NewHandler(service)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/products?limit=abc",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	handler.List(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			rec.Code,
+		)
+	}
+}
+
+func TestHandler_List_InvalidOffset(t *testing.T) {
+	service := &fakeService{}
+	handler := NewHandler(service)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/products?offset=abc",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	handler.List(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			rec.Code,
+		)
+	}
+}
+
+func TestHandler_List_ValidationError(t *testing.T) {
+	service := &fakeService{
+		err: ErrProductValidation,
+	}
+
+	handler := NewHandler(service)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/products?offset=-1",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	handler.List(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
 			rec.Code,
 		)
 	}

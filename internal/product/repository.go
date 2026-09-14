@@ -120,9 +120,7 @@ func (r *Repository) listImagesByProductID(
 	return images, nil
 }
 
-func (r *Repository) List(
-	ctx context.Context,
-) ([]Product, error) {
+func (r *Repository) List(ctx context.Context, filter ListFilter) ([]Product, error) {
 	rows, err := r.db.Query(
 		ctx,
 		`
@@ -137,9 +135,24 @@ func (r *Repository) List(
 			created_at,
 			updated_at
 		FROM products
-		WHERE is_active = TRUE
+		WHERE 
+			is_active = TRUE
+			AND (
+				$1::bigint IS NULL
+				OR category_id = $1
+			)
+			AND (
+				$2 = ''
+				OR name ILIKE '%' || $2 || '%'
+			)
 		ORDER BY id
+		LIMIT $3
+		OFFSET $4
 		`,
+		filter.CategoryID,
+		filter.Search,
+		filter.Limit,
+		filter.Offset,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list products: %w", err)

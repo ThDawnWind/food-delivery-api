@@ -11,7 +11,7 @@ import (
 
 type RepositoryInterface interface {
 	GetByID(ctx context.Context, id int64) (*Product, error)
-	List(ctx context.Context) ([]Product, error)
+	List(ctx context.Context, filter ListFilter) ([]Product, error)
 	Create(ctx context.Context, product *Product) (*Product, error)
 	Update(ctx context.Context, product *Product) (*Product, error)
 	Deactivate(ctx context.Context, id int64) error
@@ -44,8 +44,32 @@ func (s *Service) GetByID(ctx context.Context, id int64) (*Product, error) {
 	return product, nil
 }
 
-func (s *Service) List(ctx context.Context) ([]Product, error) {
-	products, err := s.repository.List(ctx)
+func (s *Service) List(ctx context.Context, filter ListFilter) ([]Product, error) {
+	filter.Search = strings.TrimSpace(filter.Search)
+
+	if filter.CategoryID != nil && *filter.CategoryID <= 0 {
+		return nil, fmt.Errorf(
+			"%w: category id must be greater than zero",
+			ErrProductValidation,
+		)
+	}
+
+	if filter.Offset < 0 {
+		return nil, fmt.Errorf(
+			"%w: offset must not be negative",
+			ErrProductValidation,
+		)
+	}
+
+	if filter.Limit <= 0 {
+		filter.Limit = 20
+	}
+
+	if filter.Limit > 100 {
+		filter.Limit = 100
+	}
+
+	products, err := s.repository.List(ctx, filter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list products: %w", err)
 	}

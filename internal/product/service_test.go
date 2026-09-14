@@ -13,13 +13,17 @@ type fakeRepository struct {
 	products      []Product
 	err           error
 	deactivatedID int64
+	listFilter    ListFilter
+	listCalled    bool
 }
 
 func (f *fakeRepository) GetByID(ctx context.Context, id int64) (*Product, error) {
 	return f.product, f.err
 }
 
-func (f *fakeRepository) List(ctx context.Context) ([]Product, error) {
+func (f *fakeRepository) List(ctx context.Context, filter ListFilter) ([]Product, error) {
+	f.listCalled = true
+	f.listFilter = filter
 	return f.products, f.err
 }
 
@@ -202,7 +206,19 @@ func TestService_List(t *testing.T) {
 
 	service := NewService(repository)
 
-	products, err := service.List(context.Background())
+	categoryID := int64(3)
+
+	filter := ListFilter{
+		CategoryID: &categoryID,
+		Search:     "pizza",
+		Limit:      20,
+		Offset:     40,
+	}
+
+	products, err := service.List(
+		context.Background(),
+		filter,
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -230,6 +246,42 @@ func TestService_List(t *testing.T) {
 			products[1].Name,
 		)
 	}
+
+	if repository.listFilter.CategoryID == nil {
+		t.Fatal("expected category ID filter, got nil")
+	}
+
+	if *repository.listFilter.CategoryID != categoryID {
+		t.Errorf(
+			"expected category ID %d, got %d",
+			categoryID,
+			*repository.listFilter.CategoryID,
+		)
+	}
+
+	if repository.listFilter.Search != "pizza" {
+		t.Errorf(
+			"expected search %q, got %q",
+			"pizza",
+			repository.listFilter.Search,
+		)
+	}
+
+	if repository.listFilter.Limit != 20 {
+		t.Errorf(
+			"expected limit %d, got %d",
+			20,
+			repository.listFilter.Limit,
+		)
+	}
+
+	if repository.listFilter.Offset != 40 {
+		t.Errorf(
+			"expected offset %d, got %d",
+			40,
+			repository.listFilter.Offset,
+		)
+	}
 }
 
 func TestService_List_RepositoryError(t *testing.T) {
@@ -241,7 +293,10 @@ func TestService_List_RepositoryError(t *testing.T) {
 
 	service := NewService(repository)
 
-	products, err := service.List(context.Background())
+	products, err := service.List(
+		context.Background(),
+		ListFilter{},
+	)
 
 	if products != nil {
 		t.Fatalf(
@@ -712,5 +767,130 @@ func TestService_Deactivate_RepositoryError(t *testing.T) {
 		t.Fatal(
 			"repository error must not become ErrProductNotFound",
 		)
+	}
+}
+
+func TestService_List_Defaults(t *testing.T) {
+	repository := &fakeRepository{
+		products: []Product{},
+	}
+
+	service := NewService(repository)
+
+	_, err := service.List(
+		context.Background(),
+		ListFilter{},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if repository.listFilter.Limit != 20 {
+		t.Errorf(
+			"expected default limit %d, got %d",
+			20,
+			repository.listFilter.Limit,
+		)
+	}
+
+	if repository.listFilter.Offset != 0 {
+		t.Errorf(
+			"expected offset %d, got %d",
+			0,
+			repository.listFilter.Offset,
+		)
+	}
+}
+
+func TestService_List_NormalizesFilter(t *testing.T) {
+	categoryID := int64(5)
+
+	repository := &fakeRepository{
+		products: []Product{},
+	}
+
+	service := NewService(repository)
+
+	_, err := service.List(
+		context.Background(),
+		ListFilter{
+			CategoryID: &categoryID,
+			Search:     "  pizza  ",
+			Limit:      500,
+			Offset:     10,
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if repository.listFilter.Search != "pizza" {
+		t.Errorf(
+			"expected search %q, got %q",
+			"pizza",
+			repository.listFilter.Search,
+		)
+	}
+
+	if repository.listFilter.Limit != 100 {
+		t.Errorf(
+			"expected limit %d, got %d",
+			100,
+			repository.listFilter.Limit,
+		)
+	}
+}
+
+func TestService_List_Validation(t *testing.T) {
+	invalidCategoryID := int64(0)
+
+	tests := []struct {
+		name   string
+		filter ListFilter
+	}{
+		{
+			name: "invalid category id",
+			filter: ListFilter{
+				CategoryID: &invalidCategoryID,
+			},
+		},
+		{
+			name: "negative offset",
+			filter: ListFilter{
+				Offset: -1,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repository := &fakeRepository{}
+			service := NewService(repository)
+
+			products, err := service.List(
+				context.Background(),
+				tt.filter,
+			)
+
+			if products != nil {
+				t.Fatalf(
+					"expected nil products, got %+v",
+					products,
+				)
+			}
+
+			if !errors.Is(err, ErrProductValidation) {
+				t.Fatalf(
+					"expected ErrProductValidation, got %v",
+					err,
+				)
+			}
+
+			if repository.listCalled {
+				t.Fatal(
+					"repository must not be called on validation error",
+				)
+			}
+		})
 	}
 }

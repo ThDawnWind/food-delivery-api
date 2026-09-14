@@ -12,7 +12,7 @@ import (
 
 type ServiceInterface interface {
 	GetByID(ctx context.Context, id int64) (*Product, error)
-	List(ctx context.Context) ([]Product, error)
+	List(ctx context.Context, filter ListFilter) ([]Product, error)
 	Create(ctx context.Context, product *Product) (*Product, error)
 	Update(ctx context.Context, product *Product) (*Product, error)
 	Deactivate(ctx context.Context, id int64) error
@@ -55,8 +55,70 @@ type updateProductRequest struct {
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	products, err := h.service.List(r.Context())
+	query := r.URL.Query()
+
+	filter := ListFilter{
+		Search: query.Get("search"),
+	}
+
+	if rawCategoryID := query.Get("category_id"); rawCategoryID != "" {
+		categoryID, err := strconv.ParseInt(
+			rawCategoryID,
+			10,
+			64,
+		)
+		if err != nil {
+			http.Error(
+				w,
+				"invalid category_id",
+				http.StatusBadRequest,
+			)
+			return
+		}
+
+		filter.CategoryID = &categoryID
+	}
+
+	if rawLimit := query.Get("limit"); rawLimit != "" {
+		limit, err := strconv.Atoi(rawLimit)
+		if err != nil {
+			http.Error(
+				w,
+				"invalid limit",
+				http.StatusBadRequest,
+			)
+			return
+		}
+
+		filter.Limit = limit
+	}
+
+	if rawOffset := query.Get("offset"); rawOffset != "" {
+		offset, err := strconv.Atoi(rawOffset)
+		if err != nil {
+			http.Error(
+				w,
+				"invalid offset",
+				http.StatusBadRequest,
+			)
+			return
+		}
+
+		filter.Offset = offset
+	}
+
+	products, err := h.service.List(
+		r.Context(),
+		filter,
+	)
 	if err != nil {
+		if errors.Is(err, ErrProductValidation) {
+			http.Error(
+				w,
+				err.Error(),
+				http.StatusBadRequest,
+			)
+		}
 		http.Error(
 			w,
 			"internal server error",

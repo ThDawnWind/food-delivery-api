@@ -27,6 +27,13 @@ type ProductImage struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type ListFilter struct {
+	CategoryID *int64
+	Search     string
+	Limit      int
+	Offset     int
+}
+
 var (
 	ErrProductNotFound   = errors.New("product not found")
 	ErrProductValidation = errors.New("product validation error")

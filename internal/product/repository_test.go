@@ -365,7 +365,9 @@ func TestRepository_List(t *testing.T) {
 		t.Fatalf("failed to create product images: %v", err)
 	}
 
-	products, err := repo.List(ctx)
+	products, err := repo.List(ctx, ListFilter{
+		Limit: 20,
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1134,7 +1136,9 @@ func TestRepository_List_ExcludesInactiveProducts(t *testing.T) {
 		}
 	})
 
-	products, err := repo.List(ctx)
+	products, err := repo.List(ctx, ListFilter{
+		Limit: 20,
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1159,5 +1163,415 @@ func TestRepository_List_ExcludesInactiveProducts(t *testing.T) {
 	if inactiveFound {
 		t.Error("inactive product must not be returned by List")
 	}
+}
 
+func TestRepository_List_FilterByCategory(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	var category1ID int64
+	var category2ID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO categories (name, slug)
+		VALUES ($1, $2)
+		RETURNING id
+		`,
+		fmt.Sprintf("Category One %d", suffix),
+		fmt.Sprintf("category-one-%d", suffix),
+	).Scan(&category1ID)
+
+	if err != nil {
+		t.Fatalf("failed to create first category: %v", err)
+	}
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO categories (name, slug)
+		VALUES ($1, $2)
+		RETURNING id
+		`,
+		fmt.Sprintf("Category Two %d", suffix),
+		fmt.Sprintf("category-two-%d", suffix),
+	).Scan(&category2ID)
+
+	if err != nil {
+		t.Fatalf("failed to create second category: %v", err)
+	}
+
+	var product1ID int64
+	var product2ID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO products (
+			name,
+			price,
+			weight,
+			category_id
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+		`,
+		fmt.Sprintf("Category Product One %d", suffix),
+		int64(50000),
+		400,
+		category1ID,
+	).Scan(&product1ID)
+
+	if err != nil {
+		t.Fatalf("failed to create first product: %v", err)
+	}
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO products (
+			name,
+			price,
+			weight,
+			category_id
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+		`,
+		fmt.Sprintf("Category Product Two %d", suffix),
+		int64(60000),
+		500,
+		category2ID,
+	).Scan(&product2ID)
+
+	if err != nil {
+		t.Fatalf("failed to create second product: %v", err)
+	}
+
+	t.Cleanup(func() {
+		ctx := context.Background()
+
+		_, err := dbPool.Exec(
+			ctx,
+			`DELETE FROM products WHERE id = ANY($1::bigint[])`,
+			[]int64{product1ID, product2ID},
+		)
+		if err != nil {
+			t.Errorf("failed to clean up products: %v", err)
+		}
+
+		_, err = dbPool.Exec(
+			ctx,
+			`DELETE FROM categories WHERE id = ANY($1::bigint[])`,
+			[]int64{category1ID, category2ID},
+		)
+		if err != nil {
+			t.Errorf("failed to clean up categories: %v", err)
+		}
+	})
+
+	products, err := repo.List(
+		ctx,
+		ListFilter{
+			CategoryID: &category1ID,
+			Limit:      20,
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var product1Found bool
+	var product2Found bool
+
+	for _, product := range products {
+		switch product.ID {
+		case product1ID:
+			product1Found = true
+
+		case product2ID:
+			product2Found = true
+		}
+	}
+
+	if !product1Found {
+		t.Error("expected product from selected category")
+	}
+
+	if product2Found {
+		t.Error("product from another category must not be returned")
+	}
+}
+
+func TestRepository_List_Search(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	var categoryID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO categories (name, slug)
+		VALUES ($1, $2)
+		RETURNING id
+		`,
+		fmt.Sprintf("Search Category %d", suffix),
+		fmt.Sprintf("search-category-%d", suffix),
+	).Scan(&categoryID)
+
+	if err != nil {
+		t.Fatalf("failed to create category: %v", err)
+	}
+
+	var pizzaID int64
+	var burgerID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO products (
+			name,
+			price,
+			weight,
+			category_id
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+		`,
+		fmt.Sprintf("Pepperoni Pizza %d", suffix),
+		int64(59900),
+		450,
+		categoryID,
+	).Scan(&pizzaID)
+
+	if err != nil {
+		t.Fatalf("failed to create pizza: %v", err)
+	}
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO products (
+			name,
+			price,
+			weight,
+			category_id
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+		`,
+		fmt.Sprintf("Cheese Burger %d", suffix),
+		int64(39900),
+		300,
+		categoryID,
+	).Scan(&burgerID)
+
+	if err != nil {
+		t.Fatalf("failed to create burger: %v", err)
+	}
+
+	t.Cleanup(func() {
+		ctx := context.Background()
+
+		_, err := dbPool.Exec(
+			ctx,
+			`DELETE FROM products WHERE id = ANY($1::bigint[])`,
+			[]int64{pizzaID, burgerID},
+		)
+		if err != nil {
+			t.Errorf("failed to clean up products: %v", err)
+		}
+
+		_, err = dbPool.Exec(
+			ctx,
+			`DELETE FROM categories WHERE id = $1`,
+			categoryID,
+		)
+		if err != nil {
+			t.Errorf("failed to clean up category: %v", err)
+		}
+	})
+
+	products, err := repo.List(
+		ctx,
+		ListFilter{
+			Search: "pIzZa",
+			Limit:  20,
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var pizzaFound bool
+	var burgerFound bool
+
+	for _, product := range products {
+		switch product.ID {
+		case pizzaID:
+			pizzaFound = true
+
+		case burgerID:
+			burgerFound = true
+		}
+	}
+
+	if !pizzaFound {
+		t.Error("expected pizza product in search results")
+	}
+
+	if burgerFound {
+		t.Error("burger product must not be returned by pizza search")
+	}
+}
+
+func TestRepository_List_LimitOffset(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	var categoryID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO categories (name, slug)
+		VALUES ($1, $2)
+		RETURNING id
+		`,
+		fmt.Sprintf("Pagination Category %d", suffix),
+		fmt.Sprintf("pagination-category-%d", suffix),
+	).Scan(&categoryID)
+
+	if err != nil {
+		t.Fatalf("failed to create category: %v", err)
+	}
+
+	productIDs := make([]int64, 0, 3)
+
+	for i := 1; i <= 3; i++ {
+		var productID int64
+
+		err = dbPool.QueryRow(
+			ctx,
+			`
+			INSERT INTO products (
+				name,
+				price,
+				weight,
+				category_id
+			)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id
+			`,
+			fmt.Sprintf("Pagination Product %d %d", i, suffix),
+			int64(10000*i),
+			100*i,
+			categoryID,
+		).Scan(&productID)
+
+		if err != nil {
+			t.Fatalf(
+				"failed to create product %d: %v",
+				i,
+				err,
+			)
+		}
+
+		productIDs = append(productIDs, productID)
+	}
+
+	t.Cleanup(func() {
+		ctx := context.Background()
+
+		_, err := dbPool.Exec(
+			ctx,
+			`DELETE FROM products WHERE id = ANY($1::bigint[])`,
+			productIDs,
+		)
+		if err != nil {
+			t.Errorf("failed to clean up products: %v", err)
+		}
+
+		_, err = dbPool.Exec(
+			ctx,
+			`DELETE FROM categories WHERE id = $1`,
+			categoryID,
+		)
+		if err != nil {
+			t.Errorf("failed to clean up category: %v", err)
+		}
+	})
+
+	products, err := repo.List(
+		ctx,
+		ListFilter{
+			CategoryID: &categoryID,
+			Limit:      1,
+			Offset:     1,
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(products) != 1 {
+		t.Fatalf(
+			"expected %d product, got %d",
+			1,
+			len(products),
+		)
+	}
+
+	if products[0].ID != productIDs[1] {
+		t.Errorf(
+			"expected product ID %d, got %d",
+			productIDs[1],
+			products[0].ID,
+		)
+	}
 }
