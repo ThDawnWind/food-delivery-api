@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ThDawnWind/food-delivery-api/internal/product"
+	"github.com/jackc/pgx/v5"
 )
 
 type ProductReader interface {
@@ -15,6 +16,9 @@ type ProductReader interface {
 
 type OrderRepository interface {
 	Create(ctx context.Context, order *Order) (*Order, error)
+	GetByID(ctx context.Context, id int64) (*Order, error)
+	ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error)
+	UpdateStatus(ctx context.Context, id int64, status Status) error
 }
 
 type Service struct {
@@ -151,4 +155,118 @@ func (s *Service) Create(ctx context.Context, input *CreateOrder) (*Order, error
 	}
 
 	return createOrder, nil
+}
+
+func (s *Service) GetByID(ctx context.Context, id int64) (*Order, error) {
+	if id <= 0 {
+		return nil, fmt.Errorf(
+			"%w: invalid order id",
+			ErrOrderValidation,
+		)
+	}
+
+	order, err := s.repository.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrOrderNotFound
+		}
+
+		return nil, fmt.Errorf(
+			"failed to get order: %w",
+			err,
+		)
+	}
+
+	return order, nil
+}
+
+func (s *Service) ListByUser(
+	ctx context.Context,
+	userID int64,
+	limit int,
+	offset int,
+) ([]Order, error) {
+	if userID <= 0 {
+		return nil, fmt.Errorf(
+			"%w: invalid user id",
+			ErrOrderValidation,
+		)
+	}
+
+	if offset < 0 {
+		return nil, fmt.Errorf(
+			"%w: invalid offset",
+			ErrOrderValidation,
+		)
+	}
+
+	if limit <= 0 {
+		limit = 20
+	}
+
+	if limit > 100 {
+		limit = 100
+	}
+
+	orders, err := s.repository.ListByUser(
+		ctx,
+		userID,
+		limit,
+		offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to list user orders: %w",
+			err,
+		)
+	}
+
+	return orders, nil
+}
+
+func (s *Service) UpdateStatus(ctx context.Context, id int64, status Status) error {
+	if id <= 0 {
+		return fmt.Errorf(
+			"%w: invalid order id",
+			ErrOrderValidation,
+		)
+	}
+
+	order, err := s.repository.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrOrderNotFound
+		}
+
+		return fmt.Errorf(
+			"failed to get order: %w",
+			err,
+		)
+	}
+
+	if !CanTransitionStatus(order.Status, status) {
+		return fmt.Errorf(
+			"%w: cannot transition order from %q to %q",
+			ErrOrderValidation,
+			order.Status,
+			status,
+		)
+	}
+
+	if err := s.repository.UpdateStatus(
+		ctx,
+		id,
+		status,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrOrderNotFound
+		}
+
+		return fmt.Errorf(
+			"failed to update order status: %w",
+			err,
+		)
+	}
+
+	return nil
 }

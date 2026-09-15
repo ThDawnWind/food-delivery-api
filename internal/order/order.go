@@ -63,3 +63,35 @@ var (
 	ErrOrderValidation = errors.New("order validation error")
 	ErrOrderNotFound   = errors.New("order not found")
 )
+
+func CanTransitionStatus(from, to Status) bool {
+	switch from {
+	case StatusNew:
+		return to == StatusConfirmed ||
+			to == StatusCancelled
+
+	case StatusConfirmed:
+		return to == StatusCooking ||
+			to == StatusCancelled
+
+	case StatusCooking:
+		return to == StatusReady ||
+			to == StatusCancelled
+
+	case StatusReady:
+		return to == StatusDelivering ||
+			to == StatusCancelled
+
+	case StatusDelivering:
+		return to == StatusCompleted
+
+	case StatusCompleted:
+		return false
+
+	case StatusCancelled:
+		return false
+
+	default:
+		return false
+	}
+}

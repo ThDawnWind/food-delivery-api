@@ -2,12 +2,14 @@ package order
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/ThDawnWind/food-delivery-api/internal/database"
+	"github.com/jackc/pgx/v5"
 )
 
 func TestRepository_Create(t *testing.T) {
@@ -558,6 +560,832 @@ func TestRepository_Create_RollbackOnItemError(t *testing.T) {
 		t.Fatalf(
 			"expected order items rollback, found %d items",
 			itemCount,
+		)
+	}
+}
+
+func TestRepository_GetByID(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	var userID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO users (
+			username,
+			email,
+			password_hash
+		)
+		VALUES ($1, $2, $3)
+		RETURNING id
+		`,
+		fmt.Sprintf("get-order-user-%d", suffix),
+		fmt.Sprintf("get-order-user-%d@example.com", suffix),
+		"test-password-hash",
+	).Scan(&userID)
+
+	if err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	var categoryID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO categories (name, slug)
+		VALUES ($1, $2)
+		RETURNING id
+		`,
+		fmt.Sprintf("Get Order Category %d", suffix),
+		fmt.Sprintf("get-order-category-%d", suffix),
+	).Scan(&categoryID)
+
+	if err != nil {
+		t.Fatalf("failed to create category: %v", err)
+	}
+
+	var pizzaID int64
+	var burgerID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO products (
+			name,
+			price,
+			weight,
+			category_id
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+		`,
+		"Pepperoni",
+		int64(59900),
+		450,
+		categoryID,
+	).Scan(&pizzaID)
+
+	if err != nil {
+		t.Fatalf("failed to create pizza: %v", err)
+	}
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO products (
+			name,
+			price,
+			weight,
+			category_id
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+		`,
+		"Burger",
+		int64(39900),
+		300,
+		categoryID,
+	).Scan(&burgerID)
+
+	if err != nil {
+		t.Fatalf("failed to create burger: %v", err)
+	}
+
+	t.Cleanup(func() {
+		ctx := context.Background()
+
+		_, _ = dbPool.Exec(
+			ctx,
+			`DELETE FROM orders WHERE user_id = $1`,
+			userID,
+		)
+
+		_, _ = dbPool.Exec(
+			ctx,
+			`DELETE FROM products WHERE id = ANY($1::bigint[])`,
+			[]int64{pizzaID, burgerID},
+		)
+
+		_, _ = dbPool.Exec(
+			ctx,
+			`DELETE FROM categories WHERE id = $1`,
+			categoryID,
+		)
+
+		_, _ = dbPool.Exec(
+			ctx,
+			`DELETE FROM users WHERE id = $1`,
+			userID,
+		)
+	})
+
+	createdOrder, err := repo.Create(
+		ctx,
+		&Order{
+			UserID:          userID,
+			Status:          StatusNew,
+			TotalPrice:      159700,
+			DeliveryAddress: "Test street 1",
+			Items: []OrderItem{
+				{
+					ProductID:     pizzaID,
+					NameSnapshot:  "Pepperoni",
+					PriceSnapshot: 59900,
+					Quantity:      2,
+				},
+				{
+					ProductID:     burgerID,
+					NameSnapshot:  "Burger",
+					PriceSnapshot: 39900,
+					Quantity:      1,
+				},
+			},
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("failed to create order: %v", err)
+	}
+
+	gotOrder, err := repo.GetByID(
+		ctx,
+		createdOrder.ID,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if gotOrder == nil {
+		t.Fatal("expected order, got nil")
+	}
+
+	if gotOrder.ID != createdOrder.ID {
+		t.Errorf(
+			"expected order ID %d, got %d",
+			createdOrder.ID,
+			gotOrder.ID,
+		)
+	}
+
+	if gotOrder.UserID != userID {
+		t.Errorf(
+			"expected user ID %d, got %d",
+			userID,
+			gotOrder.UserID,
+		)
+	}
+
+	if gotOrder.Status != StatusNew {
+		t.Errorf(
+			"expected status %q, got %q",
+			StatusNew,
+			gotOrder.Status,
+		)
+	}
+
+	if gotOrder.TotalPrice != 159700 {
+		t.Errorf(
+			"expected total price %d, got %d",
+			159700,
+			gotOrder.TotalPrice,
+		)
+	}
+
+	if gotOrder.DeliveryAddress != "Test street 1" {
+		t.Errorf(
+			"expected address %q, got %q",
+			"Test street 1",
+			gotOrder.DeliveryAddress,
+		)
+	}
+
+	if len(gotOrder.Items) != 2 {
+		t.Fatalf(
+			"expected %d items, got %d",
+			2,
+			len(gotOrder.Items),
+		)
+	}
+
+	firstItem := gotOrder.Items[0]
+
+	if firstItem.OrderID != gotOrder.ID {
+		t.Errorf(
+			"expected order ID %d, got %d",
+			gotOrder.ID,
+			firstItem.OrderID,
+		)
+	}
+
+	if firstItem.ProductID != pizzaID {
+		t.Errorf(
+			"expected product ID %d, got %d",
+			pizzaID,
+			firstItem.ProductID,
+		)
+	}
+
+	if firstItem.NameSnapshot != "Pepperoni" {
+		t.Errorf(
+			"expected name snapshot %q, got %q",
+			"Pepperoni",
+			firstItem.NameSnapshot,
+		)
+	}
+
+	if firstItem.PriceSnapshot != 59900 {
+		t.Errorf(
+			"expected price snapshot %d, got %d",
+			59900,
+			firstItem.PriceSnapshot,
+		)
+	}
+
+	if firstItem.Quantity != 2 {
+		t.Errorf(
+			"expected quantity %d, got %d",
+			2,
+			firstItem.Quantity,
+		)
+	}
+}
+
+func TestRepository_GetByID_NotFound(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	order, err := repo.GetByID(ctx, 999999999)
+
+	if order != nil {
+		t.Fatalf(
+			"expected nil order, got %+v",
+			order,
+		)
+	}
+
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf(
+			"expected pgx.ErrNoRows, got %v",
+			err,
+		)
+	}
+}
+
+func TestRepository_ListByUser(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	var userID int64
+	var otherUserID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO users (
+			username,
+			email,
+			password_hash
+		)
+		VALUES ($1, $2, $3)
+		RETURNING id
+		`,
+		fmt.Sprintf("list-user-%d", suffix),
+		fmt.Sprintf("list-user-%d@example.com", suffix),
+		"test-password-hash",
+	).Scan(&userID)
+	if err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO users (
+			username,
+			email,
+			password_hash
+		)
+		VALUES ($1, $2, $3)
+		RETURNING id
+		`,
+		fmt.Sprintf("other-user-%d", suffix),
+		fmt.Sprintf("other-user-%d@example.com", suffix),
+		"test-password-hash",
+	).Scan(&otherUserID)
+	if err != nil {
+		t.Fatalf("failed to create other user: %v", err)
+	}
+
+	var categoryID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO categories (name, slug)
+		VALUES ($1, $2)
+		RETURNING id
+		`,
+		fmt.Sprintf("List Order Category %d", suffix),
+		fmt.Sprintf("list-order-category-%d", suffix),
+	).Scan(&categoryID)
+	if err != nil {
+		t.Fatalf("failed to create category: %v", err)
+	}
+
+	var productID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO products (
+			name,
+			price,
+			weight,
+			category_id
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+		`,
+		"Pepperoni",
+		int64(59900),
+		450,
+		categoryID,
+	).Scan(&productID)
+	if err != nil {
+		t.Fatalf("failed to create product: %v", err)
+	}
+
+	t.Cleanup(func() {
+		ctx := context.Background()
+
+		_, _ = dbPool.Exec(
+			ctx,
+			`DELETE FROM orders WHERE user_id = ANY($1::bigint[])`,
+			[]int64{userID, otherUserID},
+		)
+
+		_, _ = dbPool.Exec(
+			ctx,
+			`DELETE FROM products WHERE id = $1`,
+			productID,
+		)
+
+		_, _ = dbPool.Exec(
+			ctx,
+			`DELETE FROM categories WHERE id = $1`,
+			categoryID,
+		)
+
+		_, _ = dbPool.Exec(
+			ctx,
+			`DELETE FROM users WHERE id = ANY($1::bigint[])`,
+			[]int64{userID, otherUserID},
+		)
+	})
+
+	firstOrder, err := repo.Create(
+		ctx,
+		&Order{
+			UserID:          userID,
+			Status:          StatusNew,
+			TotalPrice:      59900,
+			DeliveryAddress: "First street",
+			Items: []OrderItem{
+				{
+					ProductID:     productID,
+					NameSnapshot:  "Pepperoni",
+					PriceSnapshot: 59900,
+					Quantity:      1,
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("failed to create first order: %v", err)
+	}
+
+	secondOrder, err := repo.Create(
+		ctx,
+		&Order{
+			UserID:          userID,
+			Status:          StatusNew,
+			TotalPrice:      119800,
+			DeliveryAddress: "Second street",
+			Items: []OrderItem{
+				{
+					ProductID:     productID,
+					NameSnapshot:  "Pepperoni",
+					PriceSnapshot: 59900,
+					Quantity:      2,
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("failed to create second order: %v", err)
+	}
+
+	_, err = repo.Create(
+		ctx,
+		&Order{
+			UserID:          otherUserID,
+			Status:          StatusNew,
+			TotalPrice:      59900,
+			DeliveryAddress: "Other street",
+			Items: []OrderItem{
+				{
+					ProductID:     productID,
+					NameSnapshot:  "Pepperoni",
+					PriceSnapshot: 59900,
+					Quantity:      1,
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("failed to create other user order: %v", err)
+	}
+
+	orders, err := repo.ListByUser(
+		ctx,
+		userID,
+		20,
+		0,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(orders) != 2 {
+		t.Fatalf(
+			"expected %d orders, got %d",
+			2,
+			len(orders),
+		)
+	}
+
+	if orders[0].ID != secondOrder.ID {
+		t.Errorf(
+			"expected first order ID %d, got %d",
+			secondOrder.ID,
+			orders[0].ID,
+		)
+	}
+
+	if orders[1].ID != firstOrder.ID {
+		t.Errorf(
+			"expected second order ID %d, got %d",
+			firstOrder.ID,
+			orders[1].ID,
+		)
+	}
+
+	for _, order := range orders {
+		if order.UserID != userID {
+			t.Errorf(
+				"expected user ID %d, got %d",
+				userID,
+				order.UserID,
+			)
+		}
+	}
+
+	if len(orders[0].Items) != 1 {
+		t.Fatalf(
+			"expected %d item in first order, got %d",
+			1,
+			len(orders[0].Items),
+		)
+	}
+
+	if orders[0].Items[0].OrderID != secondOrder.ID {
+		t.Errorf(
+			"expected item order ID %d, got %d",
+			secondOrder.ID,
+			orders[0].Items[0].OrderID,
+		)
+	}
+
+	if orders[0].Items[0].Quantity != 2 {
+		t.Errorf(
+			"expected quantity %d, got %d",
+			2,
+			orders[0].Items[0].Quantity,
+		)
+	}
+
+	firstPage, err := repo.ListByUser(
+		ctx,
+		userID,
+		1,
+		0,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(firstPage) != 1 {
+		t.Fatalf(
+			"expected %d order, got %d",
+			1,
+			len(firstPage),
+		)
+	}
+
+	if firstPage[0].ID != secondOrder.ID {
+		t.Errorf(
+			"expected order ID %d, got %d",
+			secondOrder.ID,
+			firstPage[0].ID,
+		)
+	}
+
+	secondPage, err := repo.ListByUser(
+		ctx,
+		userID,
+		1,
+		1,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(secondPage) != 1 {
+		t.Fatalf(
+			"expected %d order, got %d",
+			1,
+			len(secondPage),
+		)
+	}
+
+	if secondPage[0].ID != firstOrder.ID {
+		t.Errorf(
+			"expected order ID %d, got %d",
+			firstOrder.ID,
+			secondPage[0].ID,
+		)
+	}
+}
+
+func TestRepository_ListByUser_Empty(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf(
+			"failed to connect to database: %v",
+			err,
+		)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	orders, err := repo.ListByUser(
+		ctx,
+		999999999,
+		20,
+		0,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if orders == nil {
+		t.Fatal(
+			"expected empty slice, got nil",
+		)
+	}
+
+	if len(orders) != 0 {
+		t.Fatalf(
+			"expected empty orders, got %d",
+			len(orders),
+		)
+	}
+}
+
+func TestRepository_UpdateStatus_NotFound(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf(
+			"failed to connect to database: %v",
+			err,
+		)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	err = repo.UpdateStatus(
+		ctx,
+		999999999,
+		StatusConfirmed,
+	)
+
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf(
+			"expected pgx.ErrNoRows, got %v",
+			err,
+		)
+	}
+}
+
+func TestRepository_UpdateStatus(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf(
+			"failed to connect to database: %v",
+			err,
+		)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	var userID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO users (
+			username,
+			email,
+			password_hash
+		)
+		VALUES ($1, $2, $3)
+		RETURNING id
+		`,
+		fmt.Sprintf("status-user-%d", suffix),
+		fmt.Sprintf("status-user-%d@example.com", suffix),
+		"test-password-hash",
+	).Scan(&userID)
+	if err != nil {
+		t.Fatalf(
+			"failed to create user: %v",
+			err,
+		)
+	}
+
+	var orderID int64
+	var createdAt time.Time
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		INSERT INTO orders (
+			user_id,
+			status,
+			total_price,
+			delivery_address
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, created_at
+		`,
+		userID,
+		StatusNew,
+		int64(59900),
+		"Test street 1",
+	).Scan(
+		&orderID,
+		&createdAt,
+	)
+	if err != nil {
+		t.Fatalf(
+			"failed to create order: %v",
+			err,
+		)
+	}
+
+	t.Cleanup(func() {
+		ctx := context.Background()
+
+		_, _ = dbPool.Exec(
+			ctx,
+			`DELETE FROM orders WHERE id = $1`,
+			orderID,
+		)
+
+		_, _ = dbPool.Exec(
+			ctx,
+			`DELETE FROM users WHERE id = $1`,
+			userID,
+		)
+	})
+
+	err = repo.UpdateStatus(
+		ctx,
+		orderID,
+		StatusConfirmed,
+	)
+	if err != nil {
+		t.Fatalf(
+			"unexpected update status error: %v",
+			err,
+		)
+	}
+
+	var (
+		status    Status
+		updatedAt time.Time
+	)
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		SELECT
+			status,
+			updated_at
+		FROM orders
+		WHERE id = $1
+		`,
+		orderID,
+	).Scan(
+		&status,
+		&updatedAt,
+	)
+	if err != nil {
+		t.Fatalf(
+			"failed to get updated order: %v",
+			err,
+		)
+	}
+
+	if status != StatusConfirmed {
+		t.Errorf(
+			"expected status %q, got %q",
+			StatusConfirmed,
+			status,
+		)
+	}
+
+	if updatedAt.Before(createdAt) {
+		t.Errorf(
+			"expected updated_at not to be before created_at",
 		)
 	}
 }
