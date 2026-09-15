@@ -13,6 +13,11 @@ type fakeProductReader struct {
 	err      error
 }
 
+type fakeOrderRepository struct {
+	order *Order
+	err   error
+}
+
 func (f *fakeProductReader) GetByID(ctx context.Context, id int64) (*product.Product, error) {
 	if f.err != nil {
 		return nil, f.err
@@ -24,6 +29,16 @@ func (f *fakeProductReader) GetByID(ctx context.Context, id int64) (*product.Pro
 	}
 
 	return productData, nil
+}
+
+func (f *fakeOrderRepository) Create(ctx context.Context, order *Order) (*Order, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	f.order = order
+
+	return order, nil
 }
 
 func TestService_Create(t *testing.T) {
@@ -44,7 +59,12 @@ func TestService_Create(t *testing.T) {
 		},
 	}
 
-	service := NewService(products)
+	repository := &fakeOrderRepository{}
+
+	service := NewService(
+		products,
+		repository,
+	)
 
 	input := &CreateOrder{
 		UserID:          10,
@@ -72,6 +92,10 @@ func TestService_Create(t *testing.T) {
 
 	if order == nil {
 		t.Fatal("expected order, got nil")
+	}
+
+	if repository.order == nil {
+		t.Fatal("expected order to be passed to repository")
 	}
 
 	if order.UserID != 10 {
@@ -161,6 +185,38 @@ func TestService_Create(t *testing.T) {
 			"expected price snapshot %d, got %d",
 			39900,
 			order.Items[1].PriceSnapshot,
+		)
+	}
+
+	if repository.order.TotalPrice != expectedTotal {
+		t.Errorf(
+			"expected repository total price %d, got %d",
+			expectedTotal,
+			repository.order.TotalPrice,
+		)
+	}
+
+	if repository.order.Status != StatusNew {
+		t.Errorf(
+			"expected repository status %q, got %q",
+			StatusNew,
+			repository.order.Status,
+		)
+	}
+
+	if len(repository.order.Items) != 2 {
+		t.Fatalf(
+			"expected repository to receive %d items, got %d",
+			2,
+			len(repository.order.Items),
+		)
+	}
+
+	if repository.order.Items[0].NameSnapshot != "Pepperoni" {
+		t.Errorf(
+			"expected name snapshot %q, got %q",
+			"Pepperoni",
+			repository.order.Items[0].NameSnapshot,
 		)
 	}
 }
@@ -266,7 +322,12 @@ func TestService_Create_Validation(t *testing.T) {
 				},
 			}
 
-			service := NewService(products)
+			repository := &fakeOrderRepository{}
+
+			service := NewService(
+				products,
+				repository,
+			)
 
 			order, err := service.Create(
 				context.Background(),
@@ -286,6 +347,12 @@ func TestService_Create_Validation(t *testing.T) {
 					err,
 				)
 			}
+
+			if repository.order != nil {
+				t.Fatal(
+					"repository must not be called on validation error",
+				)
+			}
 		})
 	}
 }
@@ -302,7 +369,12 @@ func TestService_Create_InactiveProduct(t *testing.T) {
 		},
 	}
 
-	service := NewService(products)
+	repository := &fakeOrderRepository{}
+
+	service := NewService(
+		products,
+		repository,
+	)
 
 	input := &CreateOrder{
 		UserID:          1,
@@ -342,7 +414,12 @@ func TestService_Create_ProductReaderError(t *testing.T) {
 		err: productErr,
 	}
 
-	service := NewService(products)
+	repository := &fakeOrderRepository{}
+
+	service := NewService(
+		products,
+		repository,
+	)
 
 	input := &CreateOrder{
 		UserID:          1,
@@ -367,10 +444,16 @@ func TestService_Create_ProductReaderError(t *testing.T) {
 		)
 	}
 
-	if !errors.Is(err, ErrOrderValidation) {
+	if !errors.Is(err, productErr) {
 		t.Fatalf(
-			"expected ErrOrderValidation, got %v",
+			"expected product reader error, got %v",
 			err,
+		)
+	}
+
+	if errors.Is(err, ErrOrderValidation) {
+		t.Fatal(
+			"product reader error must not become ErrOrderValidation",
 		)
 	}
 }
@@ -380,7 +463,12 @@ func TestService_Create_ProductNotFound(t *testing.T) {
 		products: map[int64]*product.Product{},
 	}
 
-	service := NewService(products)
+	repository := &fakeOrderRepository{}
+
+	service := NewService(
+		products,
+		repository,
+	)
 
 	input := &CreateOrder{
 		UserID:          1,
@@ -408,6 +496,60 @@ func TestService_Create_ProductNotFound(t *testing.T) {
 	if !errors.Is(err, ErrOrderValidation) {
 		t.Fatalf(
 			"expected ErrOrderValidation, got %v",
+			err,
+		)
+	}
+}
+
+func TestService_Create_RepositoryError(t *testing.T) {
+	repositoryErr := errors.New("database unavailable")
+
+	products := &fakeProductReader{
+		products: map[int64]*product.Product{
+			1: {
+				ID:       1,
+				Name:     "Pepperoni",
+				Price:    59900,
+				IsActive: true,
+			},
+		},
+	}
+
+	repository := &fakeOrderRepository{
+		err: repositoryErr,
+	}
+
+	service := NewService(
+		products,
+		repository,
+	)
+
+	input := &CreateOrder{
+		UserID:          1,
+		DeliveryAddress: "Test street 1",
+		Items: []CreateItem{
+			{
+				ProductID: 1,
+				Quantity:  2,
+			},
+		},
+	}
+
+	order, err := service.Create(
+		context.Background(),
+		input,
+	)
+
+	if order != nil {
+		t.Fatalf(
+			"expected nil order, got %+v",
+			order,
+		)
+	}
+
+	if !errors.Is(err, repositoryErr) {
+		t.Fatalf(
+			"expected repository error, got %v",
 			err,
 		)
 	}

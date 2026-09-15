@@ -13,13 +13,19 @@ type ProductReader interface {
 	GetByID(ctx context.Context, id int64) (*product.Product, error)
 }
 
-type Service struct {
-	products ProductReader
+type OrderRepository interface {
+	Create(ctx context.Context, order *Order) (*Order, error)
 }
 
-func NewService(products ProductReader) *Service {
+type Service struct {
+	products   ProductReader
+	repository OrderRepository
+}
+
+func NewService(products ProductReader, repository OrderRepository) *Service {
 	return &Service{
-		products: products,
+		products:   products,
+		repository: repository,
 	}
 }
 
@@ -132,5 +138,17 @@ func (s *Service) Create(ctx context.Context, input *CreateOrder) (*Order, error
 		order.TotalPrice += productData.Price * int64(item.Quantity)
 	}
 
-	return order, nil
+	createOrder, err := s.repository.Create(
+		ctx,
+		order,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to create order: %w",
+			err,
+		)
+	}
+
+	return createOrder, nil
 }
