@@ -13,6 +13,7 @@ import (
 	"github.com/ThDawnWind/food-delivery-api/internal/category"
 	"github.com/ThDawnWind/food-delivery-api/internal/config"
 	"github.com/ThDawnWind/food-delivery-api/internal/database"
+	"github.com/ThDawnWind/food-delivery-api/internal/order"
 	"github.com/ThDawnWind/food-delivery-api/internal/product"
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
@@ -70,6 +71,13 @@ func main() {
 	productService := product.NewService(productRepository)
 	productHandler := product.NewHandler(productService)
 
+	orderRepository := order.NewRepository(dbPool)
+	orderService := order.NewService(
+		productService,
+		orderRepository,
+	)
+	orderHandler := order.NewHandler(orderService)
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
@@ -85,6 +93,11 @@ func main() {
 	router.Mount(
 		"/api/v1/products",
 		productHandler.Routes(),
+	)
+
+	router.Mount(
+		"/api/v1/orders",
+		orderHandler.Routes(),
 	)
 
 	server := &http.Server{
