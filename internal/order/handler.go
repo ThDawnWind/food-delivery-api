@@ -296,6 +296,31 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	role, ok := auth.RoleFromContext(
+		r.Context(),
+	)
+	if !ok {
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]string{
+				"error": "unauthorized",
+			},
+		)
+		return
+	}
+
+	if role != "admin" {
+		writeJSON(
+			w,
+			http.StatusForbidden,
+			map[string]string{
+				"error": "forbidden",
+			},
+		)
+		return
+	}
+
 	var req updateOrderStatusRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

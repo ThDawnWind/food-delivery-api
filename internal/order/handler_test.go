@@ -785,9 +785,20 @@ func TestHandler_UpdateStatus(t *testing.T) {
 		bytes.NewReader(body),
 	)
 
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(rec, req)
+	protected := authenticatedHandler(
+		handler.Routes(),
+		10,
+		"admin",
+	)
+
+	protected.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf(
@@ -829,9 +840,20 @@ func TestHandler_UpdateStatus_InvalidID(t *testing.T) {
 		bytes.NewReader(body),
 	)
 
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(rec, req)
+	protected := authenticatedHandler(
+		handler.Routes(),
+		10,
+		"admin",
+	)
+
+	protected.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf(
@@ -853,9 +875,20 @@ func TestHandler_UpdateStatus_InvalidJSON(t *testing.T) {
 		bytes.NewBufferString(`{"status":`),
 	)
 
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(rec, req)
+	protected := authenticatedHandler(
+		handler.Routes(),
+		10,
+		"admin",
+	)
+
+	protected.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf(
@@ -883,9 +916,20 @@ func TestHandler_UpdateStatus_ValidationError(t *testing.T) {
 		bytes.NewReader(body),
 	)
 
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(rec, req)
+	protected := authenticatedHandler(
+		handler.Routes(),
+		10,
+		"admin",
+	)
+
+	protected.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf(
@@ -913,9 +957,20 @@ func TestHandler_UpdateStatus_NotFound(t *testing.T) {
 		bytes.NewReader(body),
 	)
 
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(rec, req)
+	protected := authenticatedHandler(
+		handler.Routes(),
+		10,
+		"admin",
+	)
+
+	protected.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf(
@@ -943,14 +998,97 @@ func TestHandler_UpdateStatus_InternalError(t *testing.T) {
 		bytes.NewReader(body),
 	)
 
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(rec, req)
+	protected := authenticatedHandler(
+		handler.Routes(),
+		10,
+		"admin",
+	)
+
+	protected.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf(
 			"expected status %d, got %d",
 			http.StatusInternalServerError,
+			rec.Code,
+		)
+	}
+}
+
+func TestHandler_UpdateStatus_ForbiddenForUser(t *testing.T) {
+	service := &fakeOrderService{}
+
+	handler := NewHandler(service)
+
+	body := []byte(`{
+		"status": "confirmed"
+	}`)
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/10/status",
+		bytes.NewReader(body),
+	)
+
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
+	rec := httptest.NewRecorder()
+
+	protected := authenticatedHandler(
+		handler.Routes(),
+		10,
+		"user",
+	)
+
+	protected.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusForbidden,
+			rec.Code,
+		)
+	}
+
+	if service.updateID != 0 {
+		t.Fatal(
+			"service must not be called for non-admin user",
+		)
+	}
+}
+
+func TestHandler_UpdateStatus_Unauthorized(t *testing.T) {
+	service := &fakeOrderService{}
+	handler := NewHandler(service)
+
+	body := []byte(`{
+		"status": "confirmed"
+	}`)
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/10/status",
+		bytes.NewReader(body),
+	)
+
+	rec := httptest.NewRecorder()
+
+	handler.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusUnauthorized,
 			rec.Code,
 		)
 	}
