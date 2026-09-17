@@ -358,6 +358,98 @@ func TestHandler_Create_InternalError(t *testing.T) {
 	}
 }
 
+func TestHandler_GetByID(t *testing.T) {
+	service := &fakeOrderService{
+		getOrder: &Order{
+			ID:              10,
+			UserID:          5,
+			Status:          StatusNew,
+			TotalPrice:      74900,
+			DeliveryAddress: "Test street 10",
+		},
+	}
+
+	handler := NewHandler(service)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/10",
+		nil,
+	)
+
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
+	rec := httptest.NewRecorder()
+
+	protected := authenticatedHandler(
+		handler.Routes(),
+		5,
+		"user",
+	)
+
+	protected.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusOK,
+			rec.Code,
+		)
+	}
+
+	if service.getID != 10 {
+		t.Errorf(
+			"expected order ID %d, got %d",
+			10,
+			service.getID,
+		)
+	}
+}
+
+func TestHandler_GetByID_OtherUserOrder(t *testing.T) {
+	service := &fakeOrderService{
+		getOrder: &Order{
+			ID:     10,
+			UserID: 99,
+			Status: StatusNew,
+		},
+	}
+
+	handler := NewHandler(service)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/10",
+		nil,
+	)
+
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
+	rec := httptest.NewRecorder()
+
+	protected := authenticatedHandler(
+		handler.Routes(),
+		5,
+		"user",
+	)
+
+	protected.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusNotFound,
+			rec.Code,
+		)
+	}
+}
+
 func TestHandler_GetByID_InvalidID(t *testing.T) {
 	service := &fakeOrderService{}
 	handler := NewHandler(service)
@@ -400,7 +492,18 @@ func TestHandler_GetByID_NotFound(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(rec, req)
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
+	protected := authenticatedHandler(
+		handler.Routes(),
+		10,
+		"user",
+	)
+
+	protected.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf(
@@ -426,7 +529,18 @@ func TestHandler_GetByID_InternalError(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(rec, req)
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
+	protected := authenticatedHandler(
+		handler.Routes(),
+		10,
+		"user",
+	)
+
+	protected.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf(

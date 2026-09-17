@@ -138,6 +138,20 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID, ok := auth.UserIDFromContext(
+		r.Context(),
+	)
+	if !ok || userID <= 0 {
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]string{
+				"error": "unauthorized",
+			},
+		)
+		return
+	}
+
 	order, err := h.service.GetByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrOrderNotFound) {
@@ -156,6 +170,17 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 			http.StatusInternalServerError,
 			map[string]string{
 				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	if order.UserID != userID {
+		writeJSON(
+			w,
+			http.StatusNotFound,
+			map[string]string{
+				"error": "order not found",
 			},
 		)
 		return
