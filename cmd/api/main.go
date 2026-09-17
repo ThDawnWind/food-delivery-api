@@ -10,11 +10,13 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/ThDawnWind/food-delivery-api/internal/auth"
 	"github.com/ThDawnWind/food-delivery-api/internal/category"
 	"github.com/ThDawnWind/food-delivery-api/internal/config"
 	"github.com/ThDawnWind/food-delivery-api/internal/database"
 	"github.com/ThDawnWind/food-delivery-api/internal/order"
 	"github.com/ThDawnWind/food-delivery-api/internal/product"
+	"github.com/ThDawnWind/food-delivery-api/internal/user"
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
 )
@@ -71,6 +73,27 @@ func main() {
 	productService := product.NewService(productRepository)
 	productHandler := product.NewHandler(productService)
 
+	userRepository := user.NewRepository(dbPool)
+	userService := user.NewService(userRepository)
+
+	tokenManager, err := auth.NewTokenManager(
+		cfg.JWT.Secret,
+		cfg.JWT.TTL,
+	)
+	if err != nil {
+		log.Fatalf(
+			"Error creating token manager: %v",
+			err,
+		)
+	}
+
+	authService := auth.NewService(
+		userService,
+		tokenManager,
+	)
+
+	authHandler := auth.NewHandler(authService)
+
 	orderRepository := order.NewRepository(dbPool)
 	orderService := order.NewService(
 		productService,
@@ -98,6 +121,11 @@ func main() {
 	router.Mount(
 		"/api/v1/orders",
 		orderHandler.Routes(),
+	)
+
+	router.Mount(
+		"/api/v1/auth",
+		authHandler.Routes(),
 	)
 
 	server := &http.Server{

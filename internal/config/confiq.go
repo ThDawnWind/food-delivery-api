@@ -1,9 +1,11 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -11,6 +13,7 @@ type Config struct {
 	Env      string
 	HTTP     HTTPConfig
 	Database DatabaseConfig
+	JWT      *JWTConfig
 }
 
 type HTTPConfig struct {
@@ -22,6 +25,11 @@ type HTTPConfig struct {
 
 type DatabaseConfig struct {
 	URL string
+}
+
+type JWTConfig struct {
+	Secret string
+	TTL    time.Duration
 }
 
 func Load() (Config, error) {
@@ -91,6 +99,35 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("DATABASE_URL environment variable is not set")
 	}
 
+	jwtSecret := strings.TrimSpace(
+		os.Getenv("JWT_SECRET"),
+	)
+
+	if len(jwtSecret) < 32 {
+		return Config{}, errors.New(
+			"JWT_SECRET must be at least 32 characters",
+		)
+	}
+
+	jwtTTLRaw := os.Getenv("JWT_TTL")
+	if jwtTTLRaw == "" {
+		jwtTTLRaw = "24h"
+	}
+
+	jwtTTL, err := time.ParseDuration(jwtTTLRaw)
+	if err != nil {
+		return Config{}, fmt.Errorf(
+			"invalid JWT_TTL: %w",
+			err,
+		)
+	}
+
+	if jwtTTL <= 0 {
+		return Config{}, errors.New(
+			"JWT_TTL must be greater than zero",
+		)
+	}
+
 	return Config{
 		Env: env,
 		HTTP: HTTPConfig{
@@ -101,6 +138,10 @@ func Load() (Config, error) {
 		},
 		Database: DatabaseConfig{
 			URL: databaseURL,
+		},
+		JWT: &JWTConfig{
+			Secret: jwtSecret,
+			TTL:    jwtTTL,
 		},
 	}, nil
 }

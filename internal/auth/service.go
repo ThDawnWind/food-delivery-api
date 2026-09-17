@@ -60,7 +60,7 @@ func (s *Service) Login(ctx context.Context, input *user.LoginUser) (*LoginResul
 }
 
 func (s *Service) Register(ctx context.Context, input *user.RegisterUser) (*user.User, error) {
-	userData, err := s.Register(
+	userData, err := s.users.Register(
 		ctx,
 		input,
 	)
