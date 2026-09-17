@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/ThDawnWind/food-delivery-api/internal/auth"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -28,7 +29,6 @@ func NewHandler(service ServiceInterface) *Handler {
 }
 
 type createOrderRequest struct {
-	UserID          int64                    `json:"user_id"`
 	DeliveryAddress string                   `json:"delivery_address"`
 	Items           []createOrderItemRequest `json:"items"`
 }
@@ -56,8 +56,22 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID, ok := auth.UserIDFromContext(
+		r.Context(),
+	)
+	if !ok || userID <= 0 {
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]string{
+				"error": "unauthorized",
+			},
+		)
+		return
+	}
+
 	input := &CreateOrder{
-		UserID:          req.UserID,
+		UserID:          userID,
 		DeliveryAddress: req.DeliveryAddress,
 		Items: make(
 			[]CreateItem,
@@ -155,17 +169,15 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
-	userID, err := strconv.ParseInt(
-		r.URL.Query().Get("user_id"),
-		10,
-		64,
+	userID, ok := auth.UserIDFromContext(
+		r.Context(),
 	)
-	if err != nil || userID <= 0 {
+	if !ok || userID <= 0 {
 		writeJSON(
 			w,
-			http.StatusBadRequest,
+			http.StatusUnauthorized,
 			map[string]string{
-				"error": "invalid user id",
+				"error": "unauthorized",
 			},
 		)
 		return
@@ -174,7 +186,7 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 	limit := 0
 
 	if value := r.URL.Query().Get("limit"); value != "" {
-		limit, err = strconv.Atoi(value)
+		parrsedlimit, err := strconv.Atoi(value)
 		if err != nil {
 			writeJSON(
 				w,
@@ -185,12 +197,14 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
+
+		limit = parrsedlimit
 	}
 
 	offset := 0
 
 	if value := r.URL.Query().Get("offset"); value != "" {
-		offset, err = strconv.Atoi(value)
+		parsedOffset, err := strconv.Atoi(value)
 		if err != nil {
 			writeJSON(
 				w,
@@ -201,6 +215,8 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
+
+		offset = parsedOffset
 	}
 
 	orders, err := h.service.ListByUser(

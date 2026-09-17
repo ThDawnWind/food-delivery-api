@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/ThDawnWind/food-delivery-api/internal/user"
+
 	"github.com/go-chi/chi/v5"
 )
 

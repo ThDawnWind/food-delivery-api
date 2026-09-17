@@ -118,10 +118,14 @@ func main() {
 		productHandler.Routes(),
 	)
 
-	router.Mount(
-		"/api/v1/orders",
-		orderHandler.Routes(),
-	)
+	router.Group(func(r chi.Router) {
+		r.Use(auth.Middleware(tokenManager))
+
+		r.Mount(
+			"/api/v1/orders",
+			orderHandler.Routes(),
+		)
+	})
 
 	router.Mount(
 		"/api/v1/auth",

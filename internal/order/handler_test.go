@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/ThDawnWind/food-delivery-api/internal/auth"
 )
 
 type fakeOrderService struct {
@@ -66,6 +68,25 @@ func (f *fakeOrderService) UpdateStatus(ctx context.Context, id int64, status St
 	return f.updateErr
 }
 
+type fakeTokenParser struct {
+	claims *auth.Claims
+}
+
+func (f *fakeTokenParser) Parse(tokenString string) (*auth.Claims, error) {
+	return f.claims, nil
+}
+
+func authenticatedHandler(handler http.Handler, userID int64, role string) http.Handler {
+	parser := &fakeTokenParser{
+		claims: &auth.Claims{
+			UserID: userID,
+			Role:   role,
+		},
+	}
+
+	return auth.Middleware(parser)(handler)
+}
+
 func TestHandler_Create(t *testing.T) {
 	service := &fakeOrderService{
 		createOrder: &Order{
@@ -89,7 +110,6 @@ func TestHandler_Create(t *testing.T) {
 
 	body := []byte(`
 	{
-		"user_id": 10,
 		"delivery_address": "Test street 1",
 		"items": [
 			{
@@ -108,7 +128,17 @@ func TestHandler_Create(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+	protected := authenticatedHandler(
+		handler.Routes(),
+		10,
+		"user",
+	)
+
+	protected.ServeHTTP(
 		rec,
 		req,
 	)
@@ -210,7 +240,7 @@ func TestHandler_Create_InvalidJSON(t *testing.T) {
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/",
-		bytes.NewBufferString(`{"user_id":`),
+		bytes.NewBufferString(`{"delivery_address":`),
 	)
 
 	rec := httptest.NewRecorder()
@@ -244,7 +274,6 @@ func TestHandler_Create_ValidationError(t *testing.T) {
 
 	body := []byte(`
 	{
-		"user_id": 0,
 		"delivery_address": "",
 		"items": []
 	}
@@ -256,12 +285,20 @@ func TestHandler_Create_ValidationError(t *testing.T) {
 		bytes.NewReader(body),
 	)
 
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(
-		rec,
-		req,
+	protected := authenticatedHandler(
+		handler.Routes(),
+		10,
+		"user",
 	)
+
+	protected.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf(
@@ -281,7 +318,6 @@ func TestHandler_Create_InternalError(t *testing.T) {
 
 	body := []byte(`
 	{
-		"user_id": 10,
 		"delivery_address": "Test street 1",
 		"items": [
 			{
@@ -298,12 +334,20 @@ func TestHandler_Create_InternalError(t *testing.T) {
 		bytes.NewReader(body),
 	)
 
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(
-		rec,
-		req,
+	protected := authenticatedHandler(
+		handler.Routes(),
+		10,
+		"user",
 	)
+
+	protected.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf(
@@ -415,13 +459,24 @@ func TestHandler_ListByUser(t *testing.T) {
 
 	req := httptest.NewRequest(
 		http.MethodGet,
-		"/?user_id=10&limit=50&offset=5",
+		"/?limit=50&offset=5",
 		nil,
+	)
+
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
 	)
 
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(rec, req)
+	protected := authenticatedHandler(
+		handler.Routes(),
+		10,
+		"user",
+	)
+
+	protected.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf(
@@ -473,7 +528,7 @@ func TestHandler_ListByUser(t *testing.T) {
 	}
 }
 
-func TestHandler_ListByUser_InvalidUserID(t *testing.T) {
+func TestHandler_ListByUser_Unauthorized(t *testing.T) {
 	service := &fakeOrderService{}
 	handler := NewHandler(service)
 
@@ -487,10 +542,10 @@ func TestHandler_ListByUser_InvalidUserID(t *testing.T) {
 
 	handler.Routes().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
+	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf(
 			"expected status %d, got %d",
-			http.StatusBadRequest,
+			http.StatusUnauthorized,
 			rec.Code,
 		)
 	}
@@ -502,13 +557,24 @@ func TestHandler_ListByUser_InvalidLimit(t *testing.T) {
 
 	req := httptest.NewRequest(
 		http.MethodGet,
-		"/?user_id=10&limit=abc",
+		"/?limit=abc",
 		nil,
+	)
+
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
 	)
 
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(rec, req)
+	protected := authenticatedHandler(
+		handler.Routes(),
+		10,
+		"user",
+	)
+
+	protected.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf(
@@ -525,13 +591,24 @@ func TestHandler_ListByUser_InvalidOffset(t *testing.T) {
 
 	req := httptest.NewRequest(
 		http.MethodGet,
-		"/?user_id=10&offset=abc",
+		"/?offset=abc",
 		nil,
+	)
+
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
 	)
 
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(rec, req)
+	protected := authenticatedHandler(
+		handler.Routes(),
+		10,
+		"user",
+	)
+
+	protected.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf(
@@ -551,13 +628,24 @@ func TestHandler_ListByUser_InternalError(t *testing.T) {
 
 	req := httptest.NewRequest(
 		http.MethodGet,
-		"/?user_id=10",
+		"/",
 		nil,
+	)
+
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
 	)
 
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(rec, req)
+	protected := authenticatedHandler(
+		handler.Routes(),
+		10,
+		"user",
+	)
+
+	protected.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf(
