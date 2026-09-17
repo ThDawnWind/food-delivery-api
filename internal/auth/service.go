@@ -8,6 +8,7 @@ import (
 )
 
 type UserAuthenticator interface {
+	Register(ctx context.Context, input *user.RegisterUser) (*user.User, error)
 	Login(ctx context.Context, input *user.LoginUser) (*user.User, error)
 }
 
@@ -56,4 +57,17 @@ func (s *Service) Login(ctx context.Context, input *user.LoginUser) (*LoginResul
 		AccessToken: token,
 		User:        userData,
 	}, nil
+}
+
+func (s *Service) Register(ctx context.Context, input *user.RegisterUser) (*user.User, error) {
+	userData, err := s.Register(
+		ctx,
+		input,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return userData, nil
 }

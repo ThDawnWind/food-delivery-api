@@ -11,6 +11,18 @@ import (
 type fakeUserAuthenticator struct {
 	user *user.User
 	err  error
+
+	registerInput *user.RegisterUser
+}
+
+func (f *fakeUserAuthenticator) Register(ctx context.Context, input *user.RegisterUser) (*user.User, error) {
+	f.registerInput = input
+
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	return f.user, nil
 }
 
 func (f *fakeUserAuthenticator) Login(ctx context.Context, input *user.LoginUser) (*user.User, error) {
