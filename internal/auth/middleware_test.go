@@ -224,3 +224,127 @@ func TestMiddleware_ValidToken(t *testing.T) {
 		)
 	}
 }
+
+func TestRequireRole(t *testing.T) {
+	handler := http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	parser := &fakeTokenParser{
+		claims: &Claims{
+			UserID: 10,
+			Role:   "admin",
+		},
+	}
+
+	protected := Middleware(parser)(
+		RequireRole("admin")(handler),
+	)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/",
+		nil,
+	)
+
+	request.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
+	recorder := httptest.NewRecorder()
+
+	protected.ServeHTTP(
+		recorder,
+		request,
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusOK,
+			recorder.Code,
+		)
+	}
+}
+
+func TestRequireRole_Forbidden(t *testing.T) {
+	handler := http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	parser := &fakeTokenParser{
+		claims: &Claims{
+			UserID: 10,
+			Role:   "user",
+		},
+	}
+
+	protected := Middleware(parser)(
+		RequireRole("admin")(handler),
+	)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/",
+		nil,
+	)
+
+	request.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
+	recorder := httptest.NewRecorder()
+
+	protected.ServeHTTP(
+		recorder,
+		request,
+	)
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusForbidden,
+			recorder.Code,
+		)
+	}
+}
+
+func TestRequireRole_Unauthorized(t *testing.T) {
+	handler := http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/",
+		nil,
+	)
+
+	recorder := httptest.NewRecorder()
+
+	RequireRole("admin")(
+		handler,
+	).ServeHTTP(
+		recorder,
+		request,
+	)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusUnauthorized,
+			recorder.Code,
+		)
+	}
+}

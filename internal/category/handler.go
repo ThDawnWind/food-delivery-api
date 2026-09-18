@@ -243,16 +243,3 @@ func (h *Handler) Delete(
 
 	w.WriteHeader(http.StatusNoContent)
 }
-
-func (h *Handler) Routes() chi.Router {
-	r := chi.NewRouter()
-
-	r.Get("/", h.List)
-	r.Post("/", h.Create)
-
-	r.Get("/{id}", h.GetByID)
-	r.Put("/{id}", h.Update)
-	r.Delete("/{id}", h.Delete)
-
-	return r
-}

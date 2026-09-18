@@ -113,15 +113,33 @@ func main() {
 	router.Get("/health", healthHandler)
 	router.Get("/slow", slowHandler)
 
-	router.Mount(
-		"/api/v1/categories",
-		categoryHandler.Routes(),
-	)
+	router.Route("/api/v1/categories", func(r chi.Router) {
+		r.Get("/", categoryHandler.List)
+		r.Get("/{id}", categoryHandler.GetByID)
 
-	router.Mount(
-		"/api/v1/products",
-		productHandler.Routes(),
-	)
+		r.Group(func(r chi.Router) {
+			r.Use(auth.Middleware(tokenManager))
+			r.Use(auth.RequireRole("admin"))
+
+			r.Post("/", categoryHandler.Create)
+			r.Put("/{id}", categoryHandler.Update)
+			r.Delete("/{id}", categoryHandler.Delete)
+		})
+	})
+
+	router.Route("/api/v1/products", func(r chi.Router) {
+		r.Get("/", productHandler.List)
+		r.Get("/{id}", productHandler.GetByID)
+
+		r.Group(func(r chi.Router) {
+			r.Use(auth.Middleware(tokenManager))
+			r.Use(auth.RequireRole("admin"))
+
+			r.Post("/", productHandler.Create)
+			r.Patch("/{id}", productHandler.Update)
+			r.Delete("/{id}", productHandler.Delete)
+		})
+	})
 
 	router.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(tokenManager))
