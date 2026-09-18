@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/ThDawnWind/food-delivery-api/internal/address"
 	"github.com/ThDawnWind/food-delivery-api/internal/auth"
 	"github.com/ThDawnWind/food-delivery-api/internal/category"
 	"github.com/ThDawnWind/food-delivery-api/internal/config"
@@ -101,6 +102,10 @@ func main() {
 	)
 	orderHandler := order.NewHandler(orderService)
 
+	addressRepository := address.NewRepository(dbPool)
+	addressService := address.NewService(addressRepository)
+	addressHandler := address.NewHandler(addressService)
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
@@ -124,6 +129,11 @@ func main() {
 		r.Mount(
 			"/api/v1/orders",
 			orderHandler.Routes(),
+		)
+
+		r.Mount(
+			"/api/v1/addresses",
+			addressHandler.Routes(),
 		)
 	})
 
