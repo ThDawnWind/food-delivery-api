@@ -296,31 +296,6 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	role, ok := auth.RoleFromContext(
-		r.Context(),
-	)
-	if !ok {
-		writeJSON(
-			w,
-			http.StatusUnauthorized,
-			map[string]string{
-				"error": "unauthorized",
-			},
-		)
-		return
-	}
-
-	if role != "admin" {
-		writeJSON(
-			w,
-			http.StatusForbidden,
-			map[string]string{
-				"error": "forbidden",
-			},
-		)
-		return
-	}
-
 	var req updateOrderStatusRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -374,14 +349,20 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Routes() http.Handler {
-	r := chi.NewRouter()
+	router := chi.NewRouter()
 
-	r.Post("/", h.Create)
-	r.Get("/", h.ListByUser)
-	r.Get("/{id}", h.GetByID)
-	r.Patch("/{id}/status", h.UpdateStatus)
+	router.Post("/", h.Create)
+	router.Get("/", h.ListByUser)
+	router.Get("/{id}", h.GetByID)
 
-	return r
+	router.With(
+		auth.RequireRole("admin"),
+	).Patch(
+		"/{id}/status",
+		h.UpdateStatus,
+	)
+
+	return router
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {
