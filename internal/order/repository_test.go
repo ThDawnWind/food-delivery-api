@@ -10,6 +10,8 @@ import (
 
 	"github.com/ThDawnWind/food-delivery-api/internal/database"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 )
 
 func TestRepository_Create(t *testing.T) {
@@ -1388,4 +1390,229 @@ func TestRepository_UpdateStatus(t *testing.T) {
 			"expected updated_at not to be before created_at",
 		)
 	}
+}
+
+func TestRepository_ListAll(t *testing.T) {
+	ctx := context.Background()
+
+	db := newTestPool(t)
+	repository := NewRepository(db)
+
+	suffix := time.Now().UnixNano()
+
+	var firstUserID int64
+
+	err := db.QueryRow(
+		ctx,
+		`
+		INSERT INTO users (
+			username,
+			email,
+			password_hash,
+			role
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+		`,
+		fmt.Sprintf("list_all_user_1_%d", suffix),
+		fmt.Sprintf("list_all_user_1_%d@example.com", suffix),
+		"test-password-hash",
+		"user",
+	).Scan(&firstUserID)
+	if err != nil {
+		t.Fatalf(
+			"failed to create first user: %v",
+			err,
+		)
+	}
+
+	var secondUserID int64
+
+	err = db.QueryRow(
+		ctx,
+		`
+		INSERT INTO users (
+			username,
+			email,
+			password_hash,
+			role
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+		`,
+		fmt.Sprintf("list_all_user_2_%d", suffix),
+		fmt.Sprintf("list_all_user_2_%d@example.com", suffix),
+		"test-password-hash",
+		"user",
+	).Scan(&secondUserID)
+	if err != nil {
+		t.Fatalf(
+			"failed to create second user: %v",
+			err,
+		)
+	}
+
+	var firstOrderID int64
+
+	err = db.QueryRow(
+		ctx,
+		`
+		INSERT INTO orders (
+			user_id,
+			status,
+			total_price,
+			delivery_address
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+		`,
+		firstUserID,
+		"new",
+		10000,
+		"First test address",
+	).Scan(&firstOrderID)
+	if err != nil {
+		t.Fatalf(
+			"failed to create first order: %v",
+			err,
+		)
+	}
+
+	var secondOrderID int64
+
+	err = db.QueryRow(
+		ctx,
+		`
+		INSERT INTO orders (
+			user_id,
+			status,
+			total_price,
+			delivery_address
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+		`,
+		secondUserID,
+		"new",
+		20000,
+		"Second test address",
+	).Scan(&secondOrderID)
+	if err != nil {
+		t.Fatalf(
+			"failed to create second order: %v",
+			err,
+		)
+	}
+
+	t.Cleanup(func() {
+		_, _ = db.Exec(
+			context.Background(),
+			`
+			DELETE FROM orders
+			WHERE id = $1 OR id = $2
+			`,
+			firstOrderID,
+			secondOrderID,
+		)
+
+		_, _ = db.Exec(
+			context.Background(),
+			`
+			DELETE FROM users
+			WHERE id = $1 OR id = $2
+			`,
+			firstUserID,
+			secondUserID,
+		)
+	})
+
+	orders, err := repository.ListAll(
+		ctx,
+		100,
+		0,
+	)
+	if err != nil {
+		t.Fatalf(
+			"unexpected error: %v",
+			err,
+		)
+	}
+
+	var firstFound bool
+	var secondFound bool
+
+	for _, order := range orders {
+		switch order.ID {
+		case firstOrderID:
+			firstFound = true
+
+			if order.UserID != firstUserID {
+				t.Errorf(
+					"expected first user ID %d, got %d",
+					firstUserID,
+					order.UserID,
+				)
+			}
+
+		case secondOrderID:
+			secondFound = true
+
+			if order.UserID != secondUserID {
+				t.Errorf(
+					"expected second user ID %d, got %d",
+					secondUserID,
+					order.UserID,
+				)
+			}
+		}
+	}
+
+	if !firstFound {
+		t.Errorf(
+			"expected order %d to be returned",
+			firstOrderID,
+		)
+	}
+
+	if !secondFound {
+		t.Errorf(
+			"expected order %d to be returned",
+			secondOrderID,
+		)
+	}
+}
+
+func newTestPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+
+	if err := godotenv.Load("../../.env.test"); err != nil {
+		t.Fatalf(
+			"failed to load .env.test: %v",
+			err,
+		)
+	}
+
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Fatal(
+			"TEST_DATABASE_URL is not set",
+		)
+	}
+
+	pool, err := pgxpool.New(
+		context.Background(),
+		databaseURL,
+	)
+	if err != nil {
+		t.Fatalf(
+			"failed to create test database pool: %v",
+			err,
+		)
+	}
+
+	t.Cleanup(func() {
+		pool.Close()
+	})
+
+	return pool
 }

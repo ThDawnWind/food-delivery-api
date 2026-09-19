@@ -25,6 +25,11 @@ type fakeOrderRepository struct {
 
 	updatedOrderID int64
 	updatedStatus  Status
+
+	listAllLimit  int
+	listAllOffset int
+	listAllOrders []*Order
+	listAllErr    error
 }
 
 func (f *fakeProductReader) GetByID(ctx context.Context, id int64) (*product.Product, error) {
@@ -83,6 +88,17 @@ func (f *fakeOrderRepository) UpdateStatus(ctx context.Context, id int64, status
 	f.updatedStatus = status
 
 	return nil
+}
+
+func (f *fakeOrderRepository) ListAll(ctx context.Context, limit int, offset int) ([]*Order, error) {
+	f.listAllLimit = limit
+	f.listAllOffset = offset
+
+	if f.listAllErr != nil {
+		return nil, f.listAllErr
+	}
+
+	return f.listAllOrders, nil
 }
 
 func TestService_Create(t *testing.T) {
@@ -1085,6 +1101,162 @@ func TestService_UpdateStatus_NotFound(t *testing.T) {
 	if !errors.Is(err, ErrOrderNotFound) {
 		t.Fatalf(
 			"expected ErrOrderNotFound, got %v",
+			err,
+		)
+	}
+}
+
+func TestService_ListAll(t *testing.T) {
+	repository := &fakeOrderRepository{
+		listAllOrders: []*Order{
+			{
+				ID:     1,
+				UserID: 10,
+				Status: "new",
+			},
+			{
+				ID:     2,
+				UserID: 20,
+				Status: "confirmed",
+			},
+		},
+	}
+
+	service := NewService(
+		nil,
+		repository,
+	)
+
+	orders, err := service.ListAll(
+		context.Background(),
+		20,
+		0,
+	)
+	if err != nil {
+		t.Fatalf(
+			"unexpected error: %v",
+			err,
+		)
+	}
+
+	if len(orders) != 2 {
+		t.Fatalf(
+			"expected %d orders, got %d",
+			2,
+			len(orders),
+		)
+	}
+
+	if repository.listAllLimit != 20 {
+		t.Errorf(
+			"expected limit %d, got %d",
+			20,
+			repository.listAllLimit,
+		)
+	}
+
+	if repository.listAllOffset != 0 {
+		t.Errorf(
+			"expected offset %d, got %d",
+			0,
+			repository.listAllOffset,
+		)
+	}
+}
+
+func TestService_ListAll_Validation(t *testing.T) {
+	tests := []struct {
+		name   string
+		limit  int
+		offset int
+	}{
+		{
+			name:   "zero limit",
+			limit:  0,
+			offset: 0,
+		},
+		{
+			name:   "negative limit",
+			limit:  -1,
+			offset: 0,
+		},
+		{
+			name:   "limit too large",
+			limit:  101,
+			offset: 0,
+		},
+		{
+			name:   "negative offset",
+			limit:  20,
+			offset: -1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repository := &fakeOrderRepository{}
+
+			service := NewService(
+				nil,
+				repository,
+			)
+
+			orders, err := service.ListAll(
+				context.Background(),
+				tt.limit,
+				tt.offset,
+			)
+
+			if orders != nil {
+				t.Fatalf(
+					"expected nil orders, got %+v",
+					orders,
+				)
+			}
+
+			if !errors.Is(
+				err,
+				ErrOrderValidation,
+			) {
+				t.Fatalf(
+					"expected ErrOrderValidation, got %v",
+					err,
+				)
+			}
+		})
+	}
+}
+
+func TestService_ListAll_RepositoryError(t *testing.T) {
+	repositoryErr := errors.New(
+		"database unavailable",
+	)
+
+	repository := &fakeOrderRepository{
+		listAllErr: repositoryErr,
+	}
+
+	service := NewService(
+		nil,
+		repository,
+	)
+
+	orders, err := service.ListAll(
+		context.Background(),
+		20,
+		0,
+	)
+
+	if orders != nil {
+		t.Fatalf(
+			"expected nil orders, got %+v",
+			orders,
+		)
+	}
+
+	if !errors.Is(err, repositoryErr) {
+		t.Fatalf(
+			"expected repository error, got %v",
 			err,
 		)
 	}

@@ -141,6 +141,16 @@ func main() {
 		})
 	})
 
+	router.Route("/api/v1/admin", func(r chi.Router) {
+		r.Use(auth.Middleware(tokenManager))
+		r.Use(auth.RequireRole("admin"))
+
+		r.Get(
+			"/orders",
+			orderHandler.ListAll,
+		)
+	})
+
 	router.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(tokenManager))
 

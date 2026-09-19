@@ -15,6 +15,7 @@ type ServiceInterface interface {
 	Create(ctx context.Context, input *CreateOrder) (*Order, error)
 	GetByID(ctx context.Context, id int64) (*Order, error)
 	ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error)
+	ListAll(ctx context.Context, limit int, offset int) ([]*Order, error)
 	UpdateStatus(ctx context.Context, id int64, status Status) error
 }
 
@@ -346,6 +347,73 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
+	limit := 20
+	offset := 0
+
+	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
+		parsedLimit, err := strconv.Atoi(rawLimit)
+		if err != nil {
+			http.Error(
+				w,
+				"invalid limit",
+				http.StatusBadRequest,
+			)
+			return
+		}
+
+		limit = parsedLimit
+	}
+
+	if rawOffset := r.URL.Query().Get("offset"); rawOffset != "" {
+		parsedOffset, err := strconv.Atoi(rawOffset)
+		if err != nil {
+			http.Error(
+				w,
+				"invalid offset",
+				http.StatusBadRequest,
+			)
+			return
+		}
+
+		offset = parsedOffset
+	}
+
+	orders, err := h.service.ListAll(
+		r.Context(),
+		limit,
+		offset,
+	)
+	if err != nil {
+		if errors.Is(err, ErrOrderValidation) {
+			http.Error(
+				w,
+				err.Error(),
+				http.StatusBadRequest,
+			)
+			return
+		}
+
+		http.Error(
+			w,
+			"internal server error",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	w.Header().Set(
+		"Content-Type",
+		"application/json",
+	)
+
+	if err := json.NewEncoder(w).Encode(
+		orders,
+	); err != nil {
+		return
+	}
 }
 
 func (h *Handler) Routes() http.Handler {

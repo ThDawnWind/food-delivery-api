@@ -399,3 +399,105 @@ func (r *Repository) UpdateStatus(ctx context.Context, id int64, status Status) 
 	}
 	return nil
 }
+
+func (r *Repository) ListAll(
+	ctx context.Context,
+	limit int,
+	offset int,
+) ([]*Order, error) {
+	rows, err := r.db.Query(
+		ctx,
+		`
+		SELECT
+			id,
+			user_id,
+			status,
+			total_price,
+			delivery_address,
+			created_at,
+			updated_at
+		FROM orders
+		ORDER BY created_at DESC, id DESC
+		LIMIT $1
+		OFFSET $2
+		`,
+		limit,
+		offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to query orders: %w",
+			err,
+		)
+	}
+	defer rows.Close()
+
+	orders := make([]*Order, 0)
+
+	for rows.Next() {
+		var order Order
+
+		err := rows.Scan(
+			&order.ID,
+			&order.UserID,
+			&order.Status,
+			&order.TotalPrice,
+			&order.DeliveryAddress,
+			&order.CreatedAt,
+			&order.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to scan order: %w",
+				err,
+			)
+		}
+
+		order.Items = make([]OrderItem, 0)
+
+		orders = append(
+			orders,
+			&order,
+		)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf(
+			"failed to iterate orders: %w",
+			err,
+		)
+	}
+
+	if len(orders) == 0 {
+		return orders, nil
+	}
+
+	orderIDs := make([]int64, 0, len(orders))
+
+	for _, order := range orders {
+		orderIDs = append(
+			orderIDs,
+			order.ID,
+		)
+	}
+
+	itemsByOrderID, err := r.listItemsByOrderIDs(
+		ctx,
+		orderIDs,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to get order items: %w",
+			err,
+		)
+	}
+
+	for i := range orders {
+		items, ok := itemsByOrderID[orders[i].ID]
+		if ok {
+			orders[i].Items = items
+		}
+	}
+
+	return orders, nil
+}

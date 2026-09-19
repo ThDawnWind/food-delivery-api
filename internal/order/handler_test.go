@@ -30,6 +30,11 @@ type fakeOrderService struct {
 	updateID     int64
 	updateStatus Status
 	updateErr    error
+
+	listAllLimit  int
+	listAllOffset int
+	listAllOrders []*Order
+	listAllErr    error
 }
 
 func (f *fakeOrderService) Create(ctx context.Context, input *CreateOrder) (*Order, error) {
@@ -60,6 +65,17 @@ func (f *fakeOrderService) ListByUser(ctx context.Context, userID int64, limit i
 		return nil, f.listErr
 	}
 	return f.listOrders, nil
+}
+
+func (f *fakeOrderService) ListAll(ctx context.Context, limit int, offset int) ([]*Order, error) {
+	f.listAllLimit = limit
+	f.listAllOffset = offset
+
+	if f.listAllErr != nil {
+		return nil, f.listAllErr
+	}
+
+	return f.listAllOrders, nil
 }
 
 func (f *fakeOrderService) UpdateStatus(ctx context.Context, id int64, status Status) error {
@@ -1091,5 +1107,275 @@ func TestHandler_UpdateStatus_Unauthorized(t *testing.T) {
 			http.StatusUnauthorized,
 			rec.Code,
 		)
+	}
+}
+
+func TestHandler_ListAll_DefaultPagination(t *testing.T) {
+	service := &fakeOrderService{
+		listAllOrders: []*Order{
+			{
+				ID:     1,
+				UserID: 10,
+				Status: "new",
+			},
+			{
+				ID:     2,
+				UserID: 20,
+				Status: "confirmed",
+			},
+		},
+	}
+
+	handler := NewHandler(service)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/admin/orders",
+		nil,
+	)
+
+	recorder := httptest.NewRecorder()
+
+	handler.ListAll(
+		recorder,
+		request,
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusOK,
+			recorder.Code,
+		)
+	}
+
+	if service.listAllLimit != 20 {
+		t.Errorf(
+			"expected limit %d, got %d",
+			20,
+			service.listAllLimit,
+		)
+	}
+
+	if service.listAllOffset != 0 {
+		t.Errorf(
+			"expected offset %d, got %d",
+			0,
+			service.listAllOffset,
+		)
+	}
+
+	var response []*Order
+
+	if err := json.NewDecoder(
+		recorder.Body,
+	).Decode(&response); err != nil {
+		t.Fatalf(
+			"failed to decode response: %v",
+			err,
+		)
+	}
+
+	if len(response) != 2 {
+		t.Fatalf(
+			"expected %d orders, got %d",
+			2,
+			len(response),
+		)
+	}
+}
+
+func TestHandler_ListAll_CustomPagination(t *testing.T) {
+	service := &fakeOrderService{
+		listAllOrders: []*Order{},
+	}
+
+	handler := NewHandler(service)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/admin/orders?limit=50&offset=25",
+		nil,
+	)
+
+	recorder := httptest.NewRecorder()
+
+	handler.ListAll(
+		recorder,
+		request,
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusOK,
+			recorder.Code,
+		)
+	}
+
+	if service.listAllLimit != 50 {
+		t.Errorf(
+			"expected limit %d, got %d",
+			50,
+			service.listAllLimit,
+		)
+	}
+
+	if service.listAllOffset != 25 {
+		t.Errorf(
+			"expected offset %d, got %d",
+			25,
+			service.listAllOffset,
+		)
+	}
+}
+
+func TestHandler_ListAll_InvalidPagination(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+	}{
+		{
+			name: "invalid limit",
+			url:  "/admin/orders?limit=abc",
+		},
+		{
+			name: "invalid offset",
+			url:  "/admin/orders?offset=abc",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := &fakeOrderService{}
+			handler := NewHandler(service)
+
+			request := httptest.NewRequest(
+				http.MethodGet,
+				tt.url,
+				nil,
+			)
+
+			recorder := httptest.NewRecorder()
+
+			handler.ListAll(
+				recorder,
+				request,
+			)
+
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf(
+					"expected status %d, got %d",
+					http.StatusBadRequest,
+					recorder.Code,
+				)
+			}
+		})
+	}
+}
+func TestHandler_ListAll_InternalError(t *testing.T) {
+	service := &fakeOrderService{
+		listAllErr: errors.New(
+			"database unavailable",
+		),
+	}
+
+	handler := NewHandler(service)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/admin/orders",
+		nil,
+	)
+
+	recorder := httptest.NewRecorder()
+
+	handler.ListAll(
+		recorder,
+		request,
+	)
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusInternalServerError,
+			recorder.Code,
+		)
+	}
+}
+
+func TestHandler_ListAll_ValidationError(t *testing.T) {
+	service := &fakeOrderService{
+		listAllErr: ErrOrderValidation,
+	}
+
+	handler := NewHandler(service)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/admin/orders?limit=101",
+		nil,
+	)
+
+	recorder := httptest.NewRecorder()
+
+	handler.ListAll(
+		recorder,
+		request,
+	)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			recorder.Code,
+		)
+	}
+}
+
+func TestHandler_ListAll_ServiceValidationError(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+	}{
+		{
+			name: "limit too large",
+			url:  "/admin/orders?limit=101",
+		},
+		{
+			name: "negative offset",
+			url:  "/admin/orders?offset=-1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := &fakeOrderService{
+				listAllErr: ErrOrderValidation,
+			}
+
+			handler := NewHandler(service)
+
+			request := httptest.NewRequest(
+				http.MethodGet,
+				tt.url,
+				nil,
+			)
+
+			recorder := httptest.NewRecorder()
+
+			handler.ListAll(
+				recorder,
+				request,
+			)
+
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf(
+					"expected status %d, got %d",
+					http.StatusBadRequest,
+					recorder.Code,
+				)
+			}
+		})
 	}
 }
