@@ -32,6 +32,7 @@ type fakeOrderService struct {
 	updateErr    error
 
 	listAllLimit  int
+	listAllStatus string
 	listAllOffset int
 	listAllOrders []*Order
 	listAllErr    error
@@ -67,7 +68,8 @@ func (f *fakeOrderService) ListByUser(ctx context.Context, userID int64, limit i
 	return f.listOrders, nil
 }
 
-func (f *fakeOrderService) ListAll(ctx context.Context, limit int, offset int) ([]*Order, error) {
+func (f *fakeOrderService) ListAll(ctx context.Context, status string, limit int, offset int) ([]*Order, error) {
+	f.listAllStatus = status
 	f.listAllLimit = limit
 	f.listAllOffset = offset
 

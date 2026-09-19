@@ -1528,6 +1528,7 @@ func TestRepository_ListAll(t *testing.T) {
 
 	orders, err := repository.ListAll(
 		ctx,
+		"",
 		100,
 		0,
 	)
@@ -1615,4 +1616,154 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 	})
 
 	return pool
+}
+
+func TestRepository_ListAll_FilterByStatus(t *testing.T) {
+	ctx := context.Background()
+
+	db := newTestPool(t)
+	repository := NewRepository(db)
+
+	suffix := time.Now().UnixNano()
+
+	var userID int64
+
+	err := db.QueryRow(
+		ctx,
+		`
+		INSERT INTO users (
+			username,
+			email,
+			password_hash,
+			role
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+		`,
+		fmt.Sprintf("status_filter_user_%d", suffix),
+		fmt.Sprintf("status_filter_user_%d@example.com", suffix),
+		"test-password-hash",
+		"user",
+	).Scan(&userID)
+	if err != nil {
+		t.Fatalf(
+			"failed to create user: %v",
+			err,
+		)
+	}
+
+	var newOrderID int64
+
+	err = db.QueryRow(
+		ctx,
+		`
+		INSERT INTO orders (
+			user_id,
+			status,
+			total_price,
+			delivery_address
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+		`,
+		userID,
+		"new",
+		10000,
+		"New order address",
+	).Scan(&newOrderID)
+	if err != nil {
+		t.Fatalf(
+			"failed to create new order: %v",
+			err,
+		)
+	}
+
+	var confirmedOrderID int64
+
+	err = db.QueryRow(
+		ctx,
+		`
+		INSERT INTO orders (
+			user_id,
+			status,
+			total_price,
+			delivery_address
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+		`,
+		userID,
+		"confirmed",
+		20000,
+		"Confirmed order address",
+	).Scan(&confirmedOrderID)
+	if err != nil {
+		t.Fatalf(
+			"failed to create confirmed order: %v",
+			err,
+		)
+	}
+
+	t.Cleanup(func() {
+		_, _ = db.Exec(
+			context.Background(),
+			`
+			DELETE FROM orders
+			WHERE id = $1 OR id = $2
+			`,
+			newOrderID,
+			confirmedOrderID,
+		)
+
+		_, _ = db.Exec(
+			context.Background(),
+			`
+			DELETE FROM users
+			WHERE id = $1
+			`,
+			userID,
+		)
+	})
+
+	orders, err := repository.ListAll(
+		ctx,
+		"confirmed",
+		100,
+		0,
+	)
+	if err != nil {
+		t.Fatalf(
+			"unexpected error: %v",
+			err,
+		)
+	}
+
+	var confirmedFound bool
+
+	for _, order := range orders {
+		if order.Status != "confirmed" {
+			t.Fatalf(
+				"expected only confirmed orders, got status %q",
+				order.Status,
+			)
+		}
+
+		if order.ID == confirmedOrderID {
+			confirmedFound = true
+		}
+
+		if order.ID == newOrderID {
+			t.Fatalf(
+				"new order %d must not be returned",
+				newOrderID,
+			)
+		}
+	}
+
+	if !confirmedFound {
+		t.Fatalf(
+			"expected confirmed order %d to be returned",
+			confirmedOrderID,
+		)
+	}
 }

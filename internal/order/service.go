@@ -19,7 +19,7 @@ type OrderRepository interface {
 	GetByID(ctx context.Context, id int64) (*Order, error)
 	ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error)
 	UpdateStatus(ctx context.Context, id int64, status Status) error
-	ListAll(ctx context.Context, limit int, offset int) ([]*Order, error)
+	ListAll(ctx context.Context, status string, limit int, offset int) ([]*Order, error)
 }
 
 type Service struct {
@@ -272,7 +272,7 @@ func (s *Service) UpdateStatus(ctx context.Context, id int64, status Status) err
 	return nil
 }
 
-func (s *Service) ListAll(ctx context.Context, limit int, offset int) ([]*Order, error) {
+func (s *Service) ListAll(ctx context.Context, status string, limit, offset int) ([]*Order, error) {
 	if limit <= 0 {
 		return nil, fmt.Errorf(
 			"%w: limit must be greater than zero",
@@ -294,8 +294,27 @@ func (s *Service) ListAll(ctx context.Context, limit int, offset int) ([]*Order,
 		)
 	}
 
+	if status != "" {
+		switch Status(status) {
+		case StatusNew,
+			StatusConfirmed,
+			StatusCooking,
+			StatusReady,
+			StatusDelivering,
+			StatusCompleted,
+			StatusCancelled:
+
+		default:
+			return nil, fmt.Errorf(
+				"%w: invalid order status",
+				ErrOrderValidation,
+			)
+		}
+	}
+
 	orders, err := s.repository.ListAll(
 		ctx,
+		status,
 		limit,
 		offset,
 	)

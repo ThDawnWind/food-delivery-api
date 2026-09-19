@@ -30,6 +30,8 @@ type fakeOrderRepository struct {
 	listAllOffset int
 	listAllOrders []*Order
 	listAllErr    error
+
+	listAllStatus string
 }
 
 func (f *fakeProductReader) GetByID(ctx context.Context, id int64) (*product.Product, error) {
@@ -90,7 +92,8 @@ func (f *fakeOrderRepository) UpdateStatus(ctx context.Context, id int64, status
 	return nil
 }
 
-func (f *fakeOrderRepository) ListAll(ctx context.Context, limit int, offset int) ([]*Order, error) {
+func (f *fakeOrderRepository) ListAll(ctx context.Context, status string, limit int, offset int) ([]*Order, error) {
+	f.listAllStatus = status
 	f.listAllLimit = limit
 	f.listAllOffset = offset
 
@@ -1129,6 +1132,7 @@ func TestService_ListAll(t *testing.T) {
 
 	orders, err := service.ListAll(
 		context.Background(),
+		"",
 		20,
 		0,
 	)
@@ -1203,6 +1207,7 @@ func TestService_ListAll_Validation(t *testing.T) {
 
 			orders, err := service.ListAll(
 				context.Background(),
+				"",
 				tt.limit,
 				tt.offset,
 			)
@@ -1243,6 +1248,7 @@ func TestService_ListAll_RepositoryError(t *testing.T) {
 
 	orders, err := service.ListAll(
 		context.Background(),
+		"",
 		20,
 		0,
 	)
@@ -1258,6 +1264,71 @@ func TestService_ListAll_RepositoryError(t *testing.T) {
 		t.Fatalf(
 			"expected repository error, got %v",
 			err,
+		)
+	}
+}
+
+func TestService_ListAll_InvalidStatus(t *testing.T) {
+	repository := &fakeOrderRepository{}
+
+	service := NewService(
+		nil,
+		repository,
+	)
+
+	orders, err := service.ListAll(
+		context.Background(),
+		"potato",
+		20,
+		0,
+	)
+
+	if orders != nil {
+		t.Fatalf(
+			"expected nil orders, got %+v",
+			orders,
+		)
+	}
+
+	if !errors.Is(
+		err,
+		ErrOrderValidation,
+	) {
+		t.Fatalf(
+			"expected ErrOrderValidation, got %v",
+			err,
+		)
+	}
+}
+
+func TestService_ListAll_WithStatus(t *testing.T) {
+	repository := &fakeOrderRepository{
+		listAllOrders: []*Order{},
+	}
+
+	service := NewService(
+		nil,
+		repository,
+	)
+
+	_, err := service.ListAll(
+		context.Background(),
+		"confirmed",
+		20,
+		0,
+	)
+	if err != nil {
+		t.Fatalf(
+			"unexpected error: %v",
+			err,
+		)
+	}
+
+	if repository.listAllStatus != "confirmed" {
+		t.Errorf(
+			"expected status %q, got %q",
+			"confirmed",
+			repository.listAllStatus,
 		)
 	}
 }

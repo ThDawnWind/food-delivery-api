@@ -400,11 +400,7 @@ func (r *Repository) UpdateStatus(ctx context.Context, id int64, status Status) 
 	return nil
 }
 
-func (r *Repository) ListAll(
-	ctx context.Context,
-	limit int,
-	offset int,
-) ([]*Order, error) {
+func (r *Repository) ListAll(ctx context.Context, status string, limit int, offset int) ([]*Order, error) {
 	rows, err := r.db.Query(
 		ctx,
 		`
@@ -417,10 +413,12 @@ func (r *Repository) ListAll(
 			created_at,
 			updated_at
 		FROM orders
+		WHERE ($1 = '' OR status = $1)
 		ORDER BY created_at DESC, id DESC
-		LIMIT $1
-		OFFSET $2
+		LIMIT $2
+		OFFSET $3
 		`,
+		status,
 		limit,
 		offset,
 	)

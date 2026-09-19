@@ -15,7 +15,7 @@ type ServiceInterface interface {
 	Create(ctx context.Context, input *CreateOrder) (*Order, error)
 	GetByID(ctx context.Context, id int64) (*Order, error)
 	ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error)
-	ListAll(ctx context.Context, limit int, offset int) ([]*Order, error)
+	ListAll(ctx context.Context, status string, limit int, offset int) ([]*Order, error)
 	UpdateStatus(ctx context.Context, id int64, status Status) error
 }
 
@@ -352,6 +352,7 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 	limit := 20
 	offset := 0
+	status := r.URL.Query().Get("status")
 
 	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
 		parsedLimit, err := strconv.Atoi(rawLimit)
@@ -383,6 +384,7 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 
 	orders, err := h.service.ListAll(
 		r.Context(),
+		status,
 		limit,
 		offset,
 	)
