@@ -59,6 +59,13 @@ type CreateItem struct {
 	Quantity  int   `json:"quantity"`
 }
 
+type ListOrdersFilter struct {
+	Status string
+	UserID *int64
+	Limit  int
+	Offset int
+}
+
 var (
 	ErrOrderValidation = errors.New("order validation error")
 	ErrOrderNotFound   = errors.New("order not found")

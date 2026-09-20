@@ -26,12 +26,10 @@ type fakeOrderRepository struct {
 	updatedOrderID int64
 	updatedStatus  Status
 
-	listAllLimit  int
-	listAllOffset int
 	listAllOrders []*Order
 	listAllErr    error
 
-	listAllStatus string
+	listAllFilter ListOrdersFilter
 }
 
 func (f *fakeProductReader) GetByID(ctx context.Context, id int64) (*product.Product, error) {
@@ -92,10 +90,8 @@ func (f *fakeOrderRepository) UpdateStatus(ctx context.Context, id int64, status
 	return nil
 }
 
-func (f *fakeOrderRepository) ListAll(ctx context.Context, status string, limit int, offset int) ([]*Order, error) {
-	f.listAllStatus = status
-	f.listAllLimit = limit
-	f.listAllOffset = offset
+func (f *fakeOrderRepository) ListAll(ctx context.Context, filter ListOrdersFilter) ([]*Order, error) {
+	f.listAllFilter = filter
 
 	if f.listAllErr != nil {
 		return nil, f.listAllErr
@@ -1132,9 +1128,10 @@ func TestService_ListAll(t *testing.T) {
 
 	orders, err := service.ListAll(
 		context.Background(),
-		"",
-		20,
-		0,
+		ListOrdersFilter{
+			Limit:  20,
+			Offset: 0,
+		},
 	)
 	if err != nil {
 		t.Fatalf(
@@ -1151,48 +1148,62 @@ func TestService_ListAll(t *testing.T) {
 		)
 	}
 
-	if repository.listAllLimit != 20 {
+	if repository.listAllFilter.Limit != 20 {
 		t.Errorf(
 			"expected limit %d, got %d",
 			20,
-			repository.listAllLimit,
+			repository.listAllFilter.Limit,
 		)
 	}
 
-	if repository.listAllOffset != 0 {
+	if repository.listAllFilter.Offset != 0 {
 		t.Errorf(
 			"expected offset %d, got %d",
 			0,
-			repository.listAllOffset,
+			repository.listAllFilter.Offset,
 		)
 	}
 }
 
 func TestService_ListAll_Validation(t *testing.T) {
+	invalidUserID := int64(0)
+
 	tests := []struct {
 		name   string
-		limit  int
-		offset int
+		filter ListOrdersFilter
 	}{
 		{
-			name:   "zero limit",
-			limit:  0,
-			offset: 0,
+			name: "zero limit",
+			filter: ListOrdersFilter{
+				Limit: 0,
+			},
 		},
 		{
-			name:   "negative limit",
-			limit:  -1,
-			offset: 0,
+			name: "negative limit",
+			filter: ListOrdersFilter{
+				Limit: -1,
+			},
 		},
 		{
-			name:   "limit too large",
-			limit:  101,
-			offset: 0,
+			name: "limit too large",
+			filter: ListOrdersFilter{
+				Limit: 101,
+			},
 		},
 		{
-			name:   "negative offset",
-			limit:  20,
-			offset: -1,
+			name: "negative offset",
+			filter: ListOrdersFilter{
+				Limit:  20,
+				Offset: -1,
+			},
+		},
+		{
+			name: "invalid user id",
+			filter: ListOrdersFilter{
+				UserID: &invalidUserID,
+				Limit:  20,
+				Offset: 0,
+			},
 		},
 	}
 
@@ -1207,9 +1218,7 @@ func TestService_ListAll_Validation(t *testing.T) {
 
 			orders, err := service.ListAll(
 				context.Background(),
-				"",
-				tt.limit,
-				tt.offset,
+				tt.filter,
 			)
 
 			if orders != nil {
@@ -1219,10 +1228,7 @@ func TestService_ListAll_Validation(t *testing.T) {
 				)
 			}
 
-			if !errors.Is(
-				err,
-				ErrOrderValidation,
-			) {
+			if !errors.Is(err, ErrOrderValidation) {
 				t.Fatalf(
 					"expected ErrOrderValidation, got %v",
 					err,
@@ -1248,9 +1254,10 @@ func TestService_ListAll_RepositoryError(t *testing.T) {
 
 	orders, err := service.ListAll(
 		context.Background(),
-		"",
-		20,
-		0,
+		ListOrdersFilter{
+			Limit:  20,
+			Offset: 0,
+		},
 	)
 
 	if orders != nil {
@@ -1278,9 +1285,11 @@ func TestService_ListAll_InvalidStatus(t *testing.T) {
 
 	orders, err := service.ListAll(
 		context.Background(),
-		"potato",
-		20,
-		0,
+		ListOrdersFilter{
+			Status: "potato",
+			Limit:  20,
+			Offset: 0,
+		},
 	)
 
 	if orders != nil {
@@ -1313,9 +1322,11 @@ func TestService_ListAll_WithStatus(t *testing.T) {
 
 	_, err := service.ListAll(
 		context.Background(),
-		"confirmed",
-		20,
-		0,
+		ListOrdersFilter{
+			Status: "confirmed",
+			Limit:  20,
+			Offset: 0,
+		},
 	)
 	if err != nil {
 		t.Fatalf(
@@ -1324,11 +1335,51 @@ func TestService_ListAll_WithStatus(t *testing.T) {
 		)
 	}
 
-	if repository.listAllStatus != "confirmed" {
+	if repository.listAllFilter.Status != "confirmed" {
 		t.Errorf(
 			"expected status %q, got %q",
 			"confirmed",
-			repository.listAllStatus,
+			repository.listAllFilter.Status,
+		)
+	}
+}
+
+func TestService_ListAll_WithUserID(t *testing.T) {
+	userID := int64(5)
+
+	repository := &fakeOrderRepository{
+		listAllOrders: []*Order{},
+	}
+
+	service := NewService(
+		nil,
+		repository,
+	)
+
+	_, err := service.ListAll(
+		context.Background(),
+		ListOrdersFilter{
+			UserID: &userID,
+			Limit:  20,
+			Offset: 0,
+		},
+	)
+	if err != nil {
+		t.Fatalf(
+			"unexpected error: %v",
+			err,
+		)
+	}
+
+	if repository.listAllFilter.UserID == nil {
+		t.Fatal("expected user ID filter")
+	}
+
+	if *repository.listAllFilter.UserID != 5 {
+		t.Errorf(
+			"expected user ID %d, got %d",
+			5,
+			*repository.listAllFilter.UserID,
 		)
 	}
 }

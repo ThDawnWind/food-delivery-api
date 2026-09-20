@@ -1528,9 +1528,10 @@ func TestRepository_ListAll(t *testing.T) {
 
 	orders, err := repository.ListAll(
 		ctx,
-		"",
-		100,
-		0,
+		ListOrdersFilter{
+			Limit:  100,
+			Offset: 0,
+		},
 	)
 	if err != nil {
 		t.Fatalf(
@@ -1727,9 +1728,11 @@ func TestRepository_ListAll_FilterByStatus(t *testing.T) {
 
 	orders, err := repository.ListAll(
 		ctx,
-		"confirmed",
-		100,
-		0,
+		ListOrdersFilter{
+			Status: "confirmed",
+			Limit:  100,
+			Offset: 0,
+		},
 	)
 	if err != nil {
 		t.Fatalf(
@@ -1764,6 +1767,141 @@ func TestRepository_ListAll_FilterByStatus(t *testing.T) {
 		t.Fatalf(
 			"expected confirmed order %d to be returned",
 			confirmedOrderID,
+		)
+	}
+}
+
+func TestRepository_ListAll_FilterByUserID(t *testing.T) {
+	pool := newTestPool(t)
+	repository := NewRepository(pool)
+
+	ctx := context.Background()
+
+	suffix := time.Now().UnixNano()
+
+	var userID1 int64
+	err := pool.QueryRow(
+		ctx,
+		`
+	INSERT INTO users (
+		username,
+		email,
+		password_hash
+	)
+	VALUES ($1, $2, $3)
+	RETURNING id
+	`,
+		fmt.Sprintf("user1-%d", suffix),
+		fmt.Sprintf("user1-%d@example.com", suffix),
+		"hash",
+	).Scan(&userID1)
+	if err != nil {
+		t.Fatalf("failed to create first user: %v", err)
+	}
+
+	var userID2 int64
+	err = pool.QueryRow(
+		ctx,
+		`
+	INSERT INTO users (
+		username,
+		email,
+		password_hash
+	)
+	VALUES ($1, $2, $3)
+	RETURNING id
+	`,
+		fmt.Sprintf("user2-%d", suffix),
+		fmt.Sprintf("user2-%d@example.com", suffix),
+		"hash",
+	).Scan(&userID2)
+	if err != nil {
+		t.Fatalf("failed to create second user: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(
+			context.Background(),
+			`DELETE FROM users WHERE id IN ($1, $2)`,
+			userID1,
+			userID2,
+		)
+	})
+
+	order1, err := repository.Create(
+		ctx,
+		&Order{
+			UserID:          userID1,
+			Status:          StatusNew,
+			TotalPrice:      59900,
+			DeliveryAddress: "Address 1",
+			Items: []OrderItem{
+				{
+					ProductID:     1,
+					NameSnapshot:  "Test product",
+					PriceSnapshot: 59900,
+					Quantity:      1,
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("failed to create first order: %v", err)
+	}
+
+	_, err = repository.Create(
+		ctx,
+		&Order{
+			UserID:          userID2,
+			Status:          StatusNew,
+			TotalPrice:      59900,
+			DeliveryAddress: "Address 2",
+			Items: []OrderItem{
+				{
+					ProductID:     1,
+					NameSnapshot:  "Test product",
+					PriceSnapshot: 59900,
+					Quantity:      1,
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("failed to create second order: %v", err)
+	}
+
+	orders, err := repository.ListAll(
+		ctx,
+		ListOrdersFilter{
+			UserID: &userID1,
+			Limit:  100,
+			Offset: 0,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ListAll returned error: %v", err)
+	}
+
+	found := false
+
+	for _, order := range orders {
+		if order.UserID != userID1 {
+			t.Fatalf(
+				"expected only user_id %d, got order with user_id %d",
+				userID1,
+				order.UserID,
+			)
+		}
+
+		if order.ID == order1.ID {
+			found = true
+		}
+	}
+
+	if !found {
+		t.Fatalf(
+			"expected order %d to be returned",
+			order1.ID,
 		)
 	}
 }

@@ -15,7 +15,7 @@ type ServiceInterface interface {
 	Create(ctx context.Context, input *CreateOrder) (*Order, error)
 	GetByID(ctx context.Context, id int64) (*Order, error)
 	ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error)
-	ListAll(ctx context.Context, status string, limit int, offset int) ([]*Order, error)
+	ListAll(ctx context.Context, filter ListOrdersFilter) ([]*Order, error)
 	UpdateStatus(ctx context.Context, id int64, status Status) error
 }
 
@@ -353,6 +353,27 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 	limit := 20
 	offset := 0
 	status := r.URL.Query().Get("status")
+	var userID *int64
+
+	if value := r.URL.Query().Get("user_id"); value != "" {
+		parsedUserID, err := strconv.ParseInt(
+			value,
+			10,
+			64,
+		)
+		if err != nil || parsedUserID <= 0 {
+			writeJSON(
+				w,
+				http.StatusBadRequest,
+				map[string]string{
+					"error": "invalid user_id",
+				},
+			)
+			return
+		}
+
+		userID = &parsedUserID
+	}
 
 	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
 		parsedLimit, err := strconv.Atoi(rawLimit)
@@ -384,9 +405,12 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 
 	orders, err := h.service.ListAll(
 		r.Context(),
-		status,
-		limit,
-		offset,
+		ListOrdersFilter{
+			Status: status,
+			UserID: userID,
+			Limit:  limit,
+			Offset: offset,
+		},
 	)
 	if err != nil {
 		if errors.Is(err, ErrOrderValidation) {

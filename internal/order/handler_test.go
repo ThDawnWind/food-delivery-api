@@ -31,11 +31,10 @@ type fakeOrderService struct {
 	updateStatus Status
 	updateErr    error
 
-	listAllLimit  int
-	listAllStatus string
-	listAllOffset int
 	listAllOrders []*Order
 	listAllErr    error
+
+	listAllFilter ListOrdersFilter
 }
 
 func (f *fakeOrderService) Create(ctx context.Context, input *CreateOrder) (*Order, error) {
@@ -68,10 +67,8 @@ func (f *fakeOrderService) ListByUser(ctx context.Context, userID int64, limit i
 	return f.listOrders, nil
 }
 
-func (f *fakeOrderService) ListAll(ctx context.Context, status string, limit int, offset int) ([]*Order, error) {
-	f.listAllStatus = status
-	f.listAllLimit = limit
-	f.listAllOffset = offset
+func (f *fakeOrderService) ListAll(ctx context.Context, filter ListOrdersFilter) ([]*Order, error) {
+	f.listAllFilter = filter
 
 	if f.listAllErr != nil {
 		return nil, f.listAllErr
@@ -1151,19 +1148,19 @@ func TestHandler_ListAll_DefaultPagination(t *testing.T) {
 		)
 	}
 
-	if service.listAllLimit != 20 {
+	if service.listAllFilter.Limit != 20 {
 		t.Errorf(
 			"expected limit %d, got %d",
 			20,
-			service.listAllLimit,
+			service.listAllFilter.Limit,
 		)
 	}
 
-	if service.listAllOffset != 0 {
+	if service.listAllFilter.Offset != 0 {
 		t.Errorf(
 			"expected offset %d, got %d",
 			0,
-			service.listAllOffset,
+			service.listAllFilter.Offset,
 		)
 	}
 
@@ -1215,19 +1212,19 @@ func TestHandler_ListAll_CustomPagination(t *testing.T) {
 		)
 	}
 
-	if service.listAllLimit != 50 {
+	if service.listAllFilter.Limit != 50 {
 		t.Errorf(
 			"expected limit %d, got %d",
 			50,
-			service.listAllLimit,
+			service.listAllFilter.Limit,
 		)
 	}
 
-	if service.listAllOffset != 25 {
+	if service.listAllFilter.Offset != 25 {
 		t.Errorf(
 			"expected offset %d, got %d",
 			25,
-			service.listAllOffset,
+			service.listAllFilter.Offset,
 		)
 	}
 }
@@ -1379,5 +1376,72 @@ func TestHandler_ListAll_ServiceValidationError(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+func TestHandler_ListAll_FilterByUserID(t *testing.T) {
+	service := &fakeOrderService{
+		listAllOrders: []*Order{},
+	}
+
+	handler := NewHandler(service)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/admin/orders?user_id=5",
+		nil,
+	)
+
+	recorder := httptest.NewRecorder()
+
+	handler.ListAll(
+		recorder,
+		request,
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusOK,
+			recorder.Code,
+		)
+	}
+
+	if service.listAllFilter.UserID == nil {
+		t.Fatal("expected user ID filter")
+	}
+
+	if *service.listAllFilter.UserID != 5 {
+		t.Errorf(
+			"expected user ID %d, got %d",
+			5,
+			*service.listAllFilter.UserID,
+		)
+	}
+}
+
+func TestHandler_ListAll_InvalidUserID(t *testing.T) {
+	service := &fakeOrderService{}
+	handler := NewHandler(service)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/admin/orders?user_id=abc",
+		nil,
+	)
+
+	recorder := httptest.NewRecorder()
+
+	handler.ListAll(
+		recorder,
+		request,
+	)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			recorder.Code,
+		)
 	}
 }

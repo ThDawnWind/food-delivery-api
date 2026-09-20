@@ -19,7 +19,7 @@ type OrderRepository interface {
 	GetByID(ctx context.Context, id int64) (*Order, error)
 	ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error)
 	UpdateStatus(ctx context.Context, id int64, status Status) error
-	ListAll(ctx context.Context, status string, limit int, offset int) ([]*Order, error)
+	ListAll(ctx context.Context, filter ListOrdersFilter) ([]*Order, error)
 }
 
 type Service struct {
@@ -272,30 +272,37 @@ func (s *Service) UpdateStatus(ctx context.Context, id int64, status Status) err
 	return nil
 }
 
-func (s *Service) ListAll(ctx context.Context, status string, limit, offset int) ([]*Order, error) {
-	if limit <= 0 {
+func (s *Service) ListAll(ctx context.Context, filter ListOrdersFilter) ([]*Order, error) {
+	if filter.Limit <= 0 {
 		return nil, fmt.Errorf(
 			"%w: limit must be greater than zero",
 			ErrOrderValidation,
 		)
 	}
 
-	if limit > 100 {
+	if filter.Limit > 100 {
 		return nil, fmt.Errorf(
 			"%w: limit must not exceed 100",
 			ErrOrderValidation,
 		)
 	}
 
-	if offset < 0 {
+	if filter.Offset < 0 {
 		return nil, fmt.Errorf(
 			"%w: offset must not be negative",
 			ErrOrderValidation,
 		)
 	}
 
-	if status != "" {
-		switch Status(status) {
+	if filter.UserID != nil && *filter.UserID <= 0 {
+		return nil, fmt.Errorf(
+			"%w: invalid user id",
+			ErrOrderValidation,
+		)
+	}
+
+	if filter.Status != "" {
+		switch Status(filter.Status) {
 		case StatusNew,
 			StatusConfirmed,
 			StatusCooking,
@@ -314,9 +321,7 @@ func (s *Service) ListAll(ctx context.Context, status string, limit, offset int)
 
 	orders, err := s.repository.ListAll(
 		ctx,
-		status,
-		limit,
-		offset,
+		filter,
 	)
 	if err != nil {
 		return nil, fmt.Errorf(
