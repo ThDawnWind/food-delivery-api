@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/ThDawnWind/food-delivery-api/internal/auth"
 )
@@ -1443,5 +1444,124 @@ func TestHandler_ListAll_InvalidUserID(t *testing.T) {
 			http.StatusBadRequest,
 			recorder.Code,
 		)
+	}
+}
+
+func TestHandler_ListAll_FilterByDate(t *testing.T) {
+	service := &fakeOrderService{
+		listAllOrders: []*Order{},
+	}
+
+	handler := NewHandler(service)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/admin/orders?from=2026-09-01&to=2026-09-20",
+		nil,
+	)
+
+	recorder := httptest.NewRecorder()
+
+	handler.ListAll(
+		recorder,
+		request,
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusOK,
+			recorder.Code,
+		)
+	}
+
+	if service.listAllFilter.CreatedFrom == nil {
+		t.Fatal("expected created from filter")
+	}
+
+	if service.listAllFilter.CreatedTo == nil {
+		t.Fatal("expected created to filter")
+	}
+
+	expectedFrom := time.Date(
+		2026,
+		time.September,
+		1,
+		0,
+		0,
+		0,
+		0,
+		time.UTC,
+	)
+
+	if !service.listAllFilter.CreatedFrom.Equal(expectedFrom) {
+		t.Errorf(
+			"expected from %v, got %v",
+			expectedFrom,
+			*service.listAllFilter.CreatedFrom,
+		)
+	}
+
+	expectedTo := time.Date(
+		2026,
+		time.September,
+		20,
+		23,
+		59,
+		59,
+		999999999,
+		time.UTC,
+	)
+
+	if !service.listAllFilter.CreatedTo.Equal(expectedTo) {
+		t.Errorf(
+			"expected to %v, got %v",
+			expectedTo,
+			*service.listAllFilter.CreatedTo,
+		)
+	}
+}
+
+func TestHandler_ListAll_InvalidDate(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+	}{
+		{
+			name: "invalid from",
+			url:  "/admin/orders?from=banana",
+		},
+		{
+			name: "invalid to",
+			url:  "/admin/orders?to=banana",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := &fakeOrderService{}
+			handler := NewHandler(service)
+
+			request := httptest.NewRequest(
+				http.MethodGet,
+				tt.url,
+				nil,
+			)
+
+			recorder := httptest.NewRecorder()
+
+			handler.ListAll(
+				recorder,
+				request,
+			)
+
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf(
+					"expected status %d, got %d",
+					http.StatusBadRequest,
+					recorder.Code,
+				)
+			}
+		})
 	}
 }

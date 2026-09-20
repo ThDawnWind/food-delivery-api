@@ -1905,3 +1905,49 @@ func TestRepository_ListAll_FilterByUserID(t *testing.T) {
 		)
 	}
 }
+
+func TestRepository_ListAll_FilterByCreatedAt(t *testing.T) {
+	pool := newTestPool(t)
+	repository := NewRepository(pool)
+
+	ctx := context.Background()
+
+	from := time.Now().Add(-24 * time.Hour)
+	to := time.Now().Add(24 * time.Hour)
+
+	orders, err := repository.ListAll(
+		ctx,
+		ListOrdersFilter{
+			CreatedFrom: &from,
+			CreatedTo:   &to,
+			Limit:       100,
+			Offset:      0,
+		},
+	)
+	if err != nil {
+		t.Fatalf(
+			"ListAll returned error: %v",
+			err,
+		)
+	}
+
+	for _, order := range orders {
+		if order.CreatedAt.Before(from) {
+			t.Errorf(
+				"order %d created_at %v is before %v",
+				order.ID,
+				order.CreatedAt,
+				from,
+			)
+		}
+
+		if order.CreatedAt.After(to) {
+			t.Errorf(
+				"order %d created_at %v is after %v",
+				order.ID,
+				order.CreatedAt,
+				to,
+			)
+		}
+	}
+}

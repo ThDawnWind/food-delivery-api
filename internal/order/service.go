@@ -301,6 +301,15 @@ func (s *Service) ListAll(ctx context.Context, filter ListOrdersFilter) ([]*Orde
 		)
 	}
 
+	if filter.CreatedFrom != nil &&
+		filter.CreatedTo != nil &&
+		filter.CreatedFrom.After(*filter.CreatedTo) {
+		return nil, fmt.Errorf(
+			"%w: created_from must not be after created_to",
+			ErrOrderValidation,
+		)
+	}
+
 	if filter.Status != "" {
 		switch Status(filter.Status) {
 		case StatusNew,

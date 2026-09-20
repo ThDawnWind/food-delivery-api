@@ -404,23 +404,28 @@ func (r *Repository) ListAll(ctx context.Context, filter ListOrdersFilter) ([]*O
 	rows, err := r.db.Query(
 		ctx,
 		`
-		SELECT
-			id,
-			user_id,
-			status,
-			total_price,
-			delivery_address,
-			created_at,
-			updated_at
-		FROM orders
-		WHERE ($1 = '' OR status = $1)
+	SELECT
+		id,
+		user_id,
+		status,
+		total_price,
+		delivery_address,
+		created_at,
+		updated_at
+	FROM orders
+	WHERE
+		($1 = '' OR status = $1)
 		AND ($2::bigint IS NULL OR user_id = $2)
-		ORDER BY created_at DESC, id DESC
-		LIMIT $3
-		OFFSET $4
+		AND ($3::timestamptz IS NULL OR created_at >= $3)
+		AND ($4::timestamptz IS NULL OR created_at <= $4)
+	ORDER BY created_at DESC, id DESC
+	LIMIT $5
+	OFFSET $6
 		`,
 		filter.Status,
 		filter.UserID,
+		filter.CreatedFrom,
+		filter.CreatedTo,
 		filter.Limit,
 		filter.Offset,
 	)

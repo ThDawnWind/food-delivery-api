@@ -62,6 +62,10 @@ type CreateItem struct {
 type ListOrdersFilter struct {
 	Status string
 	UserID *int64
+
+	CreatedFrom *time.Time
+	CreatedTo   *time.Time
+
 	Limit  int
 	Offset int
 }

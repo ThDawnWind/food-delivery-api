@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/ThDawnWind/food-delivery-api/internal/auth"
 	"github.com/go-chi/chi/v5"
@@ -375,6 +376,49 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 		userID = &parsedUserID
 	}
 
+	var createdFrom *time.Time
+
+	if value := r.URL.Query().Get("from"); value != "" {
+		parsed, err := time.Parse(
+			"2006-01-02",
+			value,
+		)
+		if err != nil {
+			writeJSON(
+				w,
+				http.StatusBadRequest,
+				map[string]string{
+					"error": "invalid from date",
+				},
+			)
+			return
+		}
+
+		createdFrom = &parsed
+	}
+
+	var createdTo *time.Time
+
+	if value := r.URL.Query().Get("to"); value != "" {
+		parsed, err := time.Parse(
+			"2006-01-02",
+			value,
+		)
+		if err != nil {
+			writeJSON(
+				w,
+				http.StatusBadRequest,
+				map[string]string{
+					"error": "invalid to date",
+				},
+			)
+			return
+		}
+
+		endOfDay := parsed.Add(24*time.Hour - time.Nanosecond)
+		createdTo = &endOfDay
+	}
+
 	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
 		parsedLimit, err := strconv.Atoi(rawLimit)
 		if err != nil {
@@ -406,10 +450,12 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 	orders, err := h.service.ListAll(
 		r.Context(),
 		ListOrdersFilter{
-			Status: status,
-			UserID: userID,
-			Limit:  limit,
-			Offset: offset,
+			Status:      status,
+			UserID:      userID,
+			CreatedFrom: createdFrom,
+			CreatedTo:   createdTo,
+			Limit:       limit,
+			Offset:      offset,
 		},
 	)
 	if err != nil {

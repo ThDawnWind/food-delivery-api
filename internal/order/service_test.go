@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/ThDawnWind/food-delivery-api/internal/product"
 	"github.com/jackc/pgx/v5"
@@ -1167,6 +1168,27 @@ func TestService_ListAll(t *testing.T) {
 
 func TestService_ListAll_Validation(t *testing.T) {
 	invalidUserID := int64(0)
+	from := time.Date(
+		2026,
+		time.September,
+		20,
+		0,
+		0,
+		0,
+		0,
+		time.UTC,
+	)
+
+	to := time.Date(
+		2026,
+		time.September,
+		1,
+		0,
+		0,
+		0,
+		0,
+		time.UTC,
+	)
 
 	tests := []struct {
 		name   string
@@ -1203,6 +1225,15 @@ func TestService_ListAll_Validation(t *testing.T) {
 				UserID: &invalidUserID,
 				Limit:  20,
 				Offset: 0,
+			},
+		},
+		{
+			name: "created from after created to",
+			filter: ListOrdersFilter{
+				CreatedFrom: &from,
+				CreatedTo:   &to,
+				Limit:       20,
+				Offset:      0,
 			},
 		},
 	}
@@ -1380,6 +1411,78 @@ func TestService_ListAll_WithUserID(t *testing.T) {
 			"expected user ID %d, got %d",
 			5,
 			*repository.listAllFilter.UserID,
+		)
+	}
+}
+
+func TestService_ListAll_WithCreatedAtFilter(t *testing.T) {
+	from := time.Date(
+		2026,
+		time.September,
+		1,
+		0,
+		0,
+		0,
+		0,
+		time.UTC,
+	)
+
+	to := time.Date(
+		2026,
+		time.September,
+		20,
+		23,
+		59,
+		59,
+		0,
+		time.UTC,
+	)
+
+	repository := &fakeOrderRepository{
+		listAllOrders: []*Order{},
+	}
+
+	service := NewService(
+		nil,
+		repository,
+	)
+
+	_, err := service.ListAll(
+		context.Background(),
+		ListOrdersFilter{
+			CreatedFrom: &from,
+			CreatedTo:   &to,
+			Limit:       20,
+		},
+	)
+	if err != nil {
+		t.Fatalf(
+			"unexpected error: %v",
+			err,
+		)
+	}
+
+	if repository.listAllFilter.CreatedFrom == nil {
+		t.Fatal("expected created from filter")
+	}
+
+	if repository.listAllFilter.CreatedTo == nil {
+		t.Fatal("expected created to filter")
+	}
+
+	if !repository.listAllFilter.CreatedFrom.Equal(from) {
+		t.Errorf(
+			"expected created from %v, got %v",
+			from,
+			*repository.listAllFilter.CreatedFrom,
+		)
+	}
+
+	if !repository.listAllFilter.CreatedTo.Equal(to) {
+		t.Errorf(
+			"expected created to %v, got %v",
+			to,
+			*repository.listAllFilter.CreatedTo,
 		)
 	}
 }
