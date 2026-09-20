@@ -149,6 +149,10 @@ func main() {
 			"/orders",
 			orderHandler.ListAll,
 		)
+		r.Get(
+			"/orders/{id}",
+			orderHandler.AdminGetByID,
+		)
 	})
 
 	router.Group(func(r chi.Router) {

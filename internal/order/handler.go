@@ -445,3 +445,53 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 
 	_ = json.NewEncoder(w).Encode(data)
 }
+
+func (h *Handler) AdminGetByID(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(
+		chi.URLParam(r, "id"),
+		10,
+		64,
+	)
+	if err != nil || id <= 0 {
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid order id",
+			},
+		)
+		return
+	}
+
+	order, err := h.service.GetByID(
+		r.Context(),
+		id,
+	)
+	if err != nil {
+		if errors.Is(err, ErrOrderNotFound) {
+			writeJSON(
+				w,
+				http.StatusNotFound,
+				map[string]string{
+					"error": "order not found",
+				},
+			)
+			return
+		}
+
+		writeJSON(
+			w,
+			http.StatusInternalServerError,
+			map[string]string{
+				"error": "internal server error",
+			},
+		)
+		return
+	}
+
+	writeJSON(
+		w,
+		http.StatusOK,
+		order,
+	)
+}
