@@ -21,12 +21,25 @@ type ServiceInterface interface {
 }
 
 type Handler struct {
-	service ServiceInterface
+	service  ServiceInterface
+	location *time.Location
 }
 
 func NewHandler(service ServiceInterface) *Handler {
+	return NewHandlerWithLocation(
+		service,
+		time.UTC,
+	)
+}
+
+func NewHandlerWithLocation(service ServiceInterface, location *time.Location) *Handler {
+	if location == nil {
+		location = time.UTC
+	}
+
 	return &Handler{
-		service: service,
+		service:  service,
+		location: location,
 	}
 }
 
@@ -379,9 +392,10 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 	var createdFrom *time.Time
 
 	if value := r.URL.Query().Get("from"); value != "" {
-		parsed, err := time.Parse(
+		parsed, err := time.ParseInLocation(
 			"2006-01-02",
 			value,
+			h.location,
 		)
 		if err != nil {
 			writeJSON(
@@ -400,9 +414,10 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 	var createdTo *time.Time
 
 	if value := r.URL.Query().Get("to"); value != "" {
-		parsed, err := time.Parse(
+		parsed, err := time.ParseInLocation(
 			"2006-01-02",
 			value,
+			h.location,
 		)
 		if err != nil {
 			writeJSON(
@@ -415,7 +430,10 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		endOfDay := parsed.Add(24*time.Hour - time.Nanosecond)
+		endOfDay := parsed.
+			AddDate(0, 0, 1).
+			Add(-time.Nanosecond)
+
 		createdTo = &endOfDay
 	}
 

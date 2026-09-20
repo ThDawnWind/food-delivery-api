@@ -14,6 +14,7 @@ type Config struct {
 	HTTP     HTTPConfig
 	Database DatabaseConfig
 	JWT      *JWTConfig
+	Timezone string
 }
 
 type HTTPConfig struct {
@@ -128,6 +129,19 @@ func Load() (Config, error) {
 		)
 	}
 
+	timezone := os.Getenv("APP_TIMEZONE")
+	if timezone == "" {
+		timezone = "UTC"
+	}
+
+	if _, err := time.LoadLocation(timezone); err != nil {
+		return Config{}, fmt.Errorf(
+			"invalid APP_TIMEZONE %q: %w",
+			timezone,
+			err,
+		)
+	}
+
 	return Config{
 		Env: env,
 		HTTP: HTTPConfig{
@@ -143,5 +157,6 @@ func Load() (Config, error) {
 			Secret: jwtSecret,
 			TTL:    jwtTTL,
 		},
+		Timezone: timezone,
 	}, nil
 }

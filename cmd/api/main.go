@@ -52,6 +52,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error loading configuration: %v", err)
 	}
+
+	location, err := time.LoadLocation(
+		cfg.Timezone,
+	)
+	if err != nil {
+		log.Fatalf(
+			"failed to load timezone: %v",
+			err,
+		)
+	}
 	dbCtx, dbCancel := context.WithTimeout(
 		context.Background(),
 		5*time.Second,
@@ -100,7 +110,10 @@ func main() {
 		productService,
 		orderRepository,
 	)
-	orderHandler := order.NewHandler(orderService)
+	orderHandler := order.NewHandlerWithLocation(
+		orderService,
+		location,
+	)
 
 	addressRepository := address.NewRepository(dbPool)
 	addressService := address.NewService(addressRepository)

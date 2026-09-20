@@ -1565,3 +1565,80 @@ func TestHandler_ListAll_InvalidDate(t *testing.T) {
 		})
 	}
 }
+
+func TestHandler_ListAll_DateUsesLocation(t *testing.T) {
+	location := time.FixedZone(
+		"TEST",
+		3*60*60,
+	)
+
+	service := &fakeOrderService{
+		listAllOrders: []*Order{},
+	}
+
+	handler := NewHandlerWithLocation(
+		service,
+		location,
+	)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/admin/orders?from=2026-09-20&to=2026-09-20",
+		nil,
+	)
+
+	recorder := httptest.NewRecorder()
+
+	handler.ListAll(
+		recorder,
+		request,
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusOK,
+			recorder.Code,
+		)
+	}
+
+	expectedFrom := time.Date(
+		2026,
+		time.September,
+		20,
+		0,
+		0,
+		0,
+		0,
+		location,
+	)
+
+	if service.listAllFilter.CreatedFrom == nil {
+		t.Fatal(
+			"expected created from filter",
+		)
+	}
+
+	if !service.listAllFilter.CreatedFrom.Equal(
+		expectedFrom,
+	) {
+		t.Errorf(
+			"expected from %v, got %v",
+			expectedFrom,
+			*service.listAllFilter.CreatedFrom,
+		)
+	}
+
+	_, offset := service.
+		listAllFilter.
+		CreatedFrom.
+		Zone()
+
+	if offset != 3*60*60 {
+		t.Errorf(
+			"expected UTC offset %d, got %d",
+			3*60*60,
+			offset,
+		)
+	}
+}
