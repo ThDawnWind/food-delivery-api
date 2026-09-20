@@ -20,6 +20,7 @@ type OrderRepository interface {
 	ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error)
 	UpdateStatus(ctx context.Context, id int64, status Status) error
 	ListAll(ctx context.Context, filter ListOrdersFilter) ([]*Order, error)
+	CountAll(ctx context.Context, filter ListOrdersFilter) (int64, error)
 }
 
 type Service struct {
@@ -272,7 +273,7 @@ func (s *Service) UpdateStatus(ctx context.Context, id int64, status Status) err
 	return nil
 }
 
-func (s *Service) ListAll(ctx context.Context, filter ListOrdersFilter) ([]*Order, error) {
+func (s *Service) ListAll(ctx context.Context, filter ListOrdersFilter) (*ListOrdersResult, error) {
 	if filter.Limit <= 0 {
 		return nil, fmt.Errorf(
 			"%w: limit must be greater than zero",
@@ -339,5 +340,21 @@ func (s *Service) ListAll(ctx context.Context, filter ListOrdersFilter) ([]*Orde
 		)
 	}
 
-	return orders, nil
+	total, err := s.repository.CountAll(
+		ctx,
+		filter,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to count orders: %w",
+			err,
+		)
+	}
+
+	return &ListOrdersResult{
+		Items:  orders,
+		Total:  total,
+		Limit:  filter.Limit,
+		Offset: filter.Offset,
+	}, nil
 }

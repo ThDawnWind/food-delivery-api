@@ -70,6 +70,13 @@ type ListOrdersFilter struct {
 	Offset int
 }
 
+type ListOrdersResult struct {
+	Items  []*Order `json:"items"`
+	Total  int64    `json:"total"`
+	Limit  int      `json:"limit"`
+	Offset int      `json:"offset"`
+}
+
 var (
 	ErrOrderValidation = errors.New("order validation error")
 	ErrOrderNotFound   = errors.New("order not found")

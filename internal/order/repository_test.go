@@ -1951,3 +1951,71 @@ func TestRepository_ListAll_FilterByCreatedAt(t *testing.T) {
 		}
 	}
 }
+
+func TestRepository_CountAll(t *testing.T) {
+	pool := newTestPool(t)
+	repository := NewRepository(pool)
+
+	ctx := context.Background()
+
+	total, err := repository.CountAll(
+		ctx,
+		ListOrdersFilter{},
+	)
+	if err != nil {
+		t.Fatalf(
+			"CountAll returned error: %v",
+			err,
+		)
+	}
+
+	if total < 0 {
+		t.Fatalf(
+			"expected non-negative total, got %d",
+			total,
+		)
+	}
+}
+
+func TestRepository_CountAll_FilterByStatus(t *testing.T) {
+	pool := newTestPool(t)
+	repository := NewRepository(pool)
+
+	ctx := context.Background()
+
+	total, err := repository.CountAll(
+		ctx,
+		ListOrdersFilter{
+			Status: "cooking",
+		},
+	)
+	if err != nil {
+		t.Fatalf(
+			"CountAll returned error: %v",
+			err,
+		)
+	}
+
+	orders, err := repository.ListAll(
+		ctx,
+		ListOrdersFilter{
+			Status: "cooking",
+			Limit:  100,
+			Offset: 0,
+		},
+	)
+	if err != nil {
+		t.Fatalf(
+			"ListAll returned error: %v",
+			err,
+		)
+	}
+
+	if total != int64(len(orders)) {
+		t.Errorf(
+			"expected total %d, got %d",
+			len(orders),
+			total,
+		)
+	}
+}

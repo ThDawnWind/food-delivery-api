@@ -506,3 +506,32 @@ func (r *Repository) ListAll(ctx context.Context, filter ListOrdersFilter) ([]*O
 
 	return orders, nil
 }
+
+func (r *Repository) CountAll(ctx context.Context, filter ListOrdersFilter) (int64, error) {
+	var total int64
+
+	err := r.db.QueryRow(
+		ctx,
+		`
+		SELECT COUNT(*)
+		FROM orders
+		WHERE
+			($1 = '' OR status = $1)
+			AND ($2::bigint IS NULL OR user_id = $2)
+			AND ($3::timestamptz IS NULL OR created_at >= $3)
+			AND ($4::timestamptz IS NULL OR created_at <= $4)
+		`,
+		filter.Status,
+		filter.UserID,
+		filter.CreatedFrom,
+		filter.CreatedTo,
+	).Scan(&total)
+	if err != nil {
+		return 0, fmt.Errorf(
+			"failed to count orders: %w",
+			err,
+		)
+	}
+
+	return total, nil
+}

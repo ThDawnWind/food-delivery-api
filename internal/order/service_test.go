@@ -31,6 +31,10 @@ type fakeOrderRepository struct {
 	listAllErr    error
 
 	listAllFilter ListOrdersFilter
+
+	countAllTotal  int64
+	countAllFilter ListOrdersFilter
+	countAllErr    error
 }
 
 func (f *fakeProductReader) GetByID(ctx context.Context, id int64) (*product.Product, error) {
@@ -99,6 +103,16 @@ func (f *fakeOrderRepository) ListAll(ctx context.Context, filter ListOrdersFilt
 	}
 
 	return f.listAllOrders, nil
+}
+
+func (f *fakeOrderRepository) CountAll(ctx context.Context, filter ListOrdersFilter) (int64, error) {
+	f.countAllFilter = filter
+
+	if f.countAllErr != nil {
+		return 0, f.countAllErr
+	}
+
+	return f.countAllTotal, nil
 }
 
 func TestService_Create(t *testing.T) {
@@ -1112,14 +1126,15 @@ func TestService_ListAll(t *testing.T) {
 			{
 				ID:     1,
 				UserID: 10,
-				Status: "new",
+				Status: StatusNew,
 			},
 			{
 				ID:     2,
 				UserID: 20,
-				Status: "confirmed",
+				Status: StatusConfirmed,
 			},
 		},
+		countAllTotal: 42,
 	}
 
 	service := NewService(
@@ -1127,7 +1142,7 @@ func TestService_ListAll(t *testing.T) {
 		repository,
 	)
 
-	orders, err := service.ListAll(
+	result, err := service.ListAll(
 		context.Background(),
 		ListOrdersFilter{
 			Limit:  20,
@@ -1141,11 +1156,19 @@ func TestService_ListAll(t *testing.T) {
 		)
 	}
 
-	if len(orders) != 2 {
+	if len(result.Items) != 2 {
 		t.Fatalf(
 			"expected %d orders, got %d",
 			2,
-			len(orders),
+			len(result.Items),
+		)
+	}
+
+	if result.Total != 42 {
+		t.Errorf(
+			"expected total %d, got %d",
+			42,
+			result.Total,
 		)
 	}
 
@@ -1483,6 +1506,43 @@ func TestService_ListAll_WithCreatedAtFilter(t *testing.T) {
 			"expected created to %v, got %v",
 			to,
 			*repository.listAllFilter.CreatedTo,
+		)
+	}
+}
+
+func TestService_ListAll_CountError(t *testing.T) {
+	countErr := errors.New(
+		"database unavailable",
+	)
+
+	repository := &fakeOrderRepository{
+		listAllOrders: []*Order{},
+		countAllErr:   countErr,
+	}
+
+	service := NewService(
+		nil,
+		repository,
+	)
+
+	result, err := service.ListAll(
+		context.Background(),
+		ListOrdersFilter{
+			Limit: 20,
+		},
+	)
+
+	if result != nil {
+		t.Fatalf(
+			"expected nil result, got %+v",
+			result,
+		)
+	}
+
+	if !errors.Is(err, countErr) {
+		t.Fatalf(
+			"expected count error, got %v",
+			err,
 		)
 	}
 }

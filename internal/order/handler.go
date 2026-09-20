@@ -16,7 +16,7 @@ type ServiceInterface interface {
 	Create(ctx context.Context, input *CreateOrder) (*Order, error)
 	GetByID(ctx context.Context, id int64) (*Order, error)
 	ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error)
-	ListAll(ctx context.Context, filter ListOrdersFilter) ([]*Order, error)
+	ListAll(ctx context.Context, filter ListOrdersFilter) (*ListOrdersResult, error)
 	UpdateStatus(ctx context.Context, id int64, status Status) error
 }
 

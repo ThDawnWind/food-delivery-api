@@ -68,14 +68,19 @@ func (f *fakeOrderService) ListByUser(ctx context.Context, userID int64, limit i
 	return f.listOrders, nil
 }
 
-func (f *fakeOrderService) ListAll(ctx context.Context, filter ListOrdersFilter) ([]*Order, error) {
+func (f *fakeOrderService) ListAll(ctx context.Context, filter ListOrdersFilter) (*ListOrdersResult, error) {
 	f.listAllFilter = filter
 
 	if f.listAllErr != nil {
 		return nil, f.listAllErr
 	}
 
-	return f.listAllOrders, nil
+	return &ListOrdersResult{
+		Items:  f.listAllOrders,
+		Total:  int64(len(f.listAllOrders)),
+		Limit:  filter.Limit,
+		Offset: filter.Offset,
+	}, nil
 }
 
 func (f *fakeOrderService) UpdateStatus(ctx context.Context, id int64, status Status) error {
@@ -1165,7 +1170,7 @@ func TestHandler_ListAll_DefaultPagination(t *testing.T) {
 		)
 	}
 
-	var response []*Order
+	var response ListOrdersResult
 
 	if err := json.NewDecoder(
 		recorder.Body,
@@ -1176,11 +1181,35 @@ func TestHandler_ListAll_DefaultPagination(t *testing.T) {
 		)
 	}
 
-	if len(response) != 2 {
+	if len(response.Items) != 2 {
 		t.Fatalf(
 			"expected %d orders, got %d",
 			2,
-			len(response),
+			len(response.Items),
+		)
+	}
+
+	if response.Total != 2 {
+		t.Errorf(
+			"expected total %d, got %d",
+			2,
+			response.Total,
+		)
+	}
+
+	if response.Limit != 20 {
+		t.Errorf(
+			"expected limit %d, got %d",
+			20,
+			response.Limit,
+		)
+	}
+
+	if response.Offset != 0 {
+		t.Errorf(
+			"expected offset %d, got %d",
+			0,
+			response.Offset,
 		)
 	}
 }
