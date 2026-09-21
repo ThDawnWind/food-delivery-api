@@ -49,9 +49,9 @@ type OrderItems struct {
 }
 
 type CreateOrder struct {
-	UserID          int64        `json:"user_id"`
-	DeliveryAddress string       `json:"delivery_address"`
-	Items           []CreateItem `json:"items"`
+	UserID    int64        `json:"-"`
+	AddressID int64        `json:"address_id"`
+	Items     []CreateItem `json:"items"`
 }
 
 type CreateItem struct {

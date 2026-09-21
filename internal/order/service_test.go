@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ThDawnWind/food-delivery-api/internal/address"
 	"github.com/ThDawnWind/food-delivery-api/internal/product"
 	"github.com/jackc/pgx/v5"
 )
@@ -13,6 +14,11 @@ import (
 type fakeProductReader struct {
 	products map[int64]*product.Product
 	err      error
+}
+
+type fakeAddressReader struct {
+	address *address.Address
+	err     error
 }
 
 type fakeOrderRepository struct {
@@ -120,6 +126,20 @@ func (f *fakeOrderRepository) CountAll(ctx context.Context, filter ListOrdersFil
 	return f.countAllTotal, nil
 }
 
+func (f *fakeAddressReader) GetByID(ctx context.Context, addressID int64, userID int64) (*address.Address, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	if f.address == nil ||
+		f.address.ID != addressID ||
+		f.address.UserID != userID {
+		return nil, address.ErrAddressNotFound
+	}
+
+	return f.address, nil
+}
+
 func TestService_Create(t *testing.T) {
 	products := &fakeProductReader{
 		products: map[int64]*product.Product{
@@ -138,16 +158,36 @@ func TestService_Create(t *testing.T) {
 		},
 	}
 
+	apartment := "42"
+	entrance := "2"
+	floor := "5"
+	comment := "Call before delivery"
+
+	addresses := &fakeAddressReader{
+		address: &address.Address{
+			ID:              7,
+			UserID:          10,
+			City:            "Amsterdam",
+			Street:          "Test street",
+			HouseNumber:     "10",
+			ApartmentNumber: &apartment,
+			Entrance:        &entrance,
+			Floor:           &floor,
+			Comment:         &comment,
+		},
+	}
+
 	repository := &fakeOrderRepository{}
 
 	service := NewService(
 		products,
 		repository,
+		addresses,
 	)
 
 	input := &CreateOrder{
-		UserID:          10,
-		DeliveryAddress: "  Test street 1  ",
+		UserID:    10,
+		AddressID: 7,
 		Items: []CreateItem{
 			{
 				ProductID: 1,
@@ -193,10 +233,12 @@ func TestService_Create(t *testing.T) {
 		)
 	}
 
-	if order.DeliveryAddress != "Test street 1" {
+	expectedAddress := "Amsterdam, Test street, 10, apt. 42, entrance 2, floor 5, comment: Call before delivery"
+
+	if order.DeliveryAddress != expectedAddress {
 		t.Errorf(
-			"expected trimmed address %q, got %q",
-			"Test street 1",
+			"expected address %q, got %q",
+			expectedAddress,
 			order.DeliveryAddress,
 		)
 	}
@@ -312,8 +354,8 @@ func TestService_Create_Validation(t *testing.T) {
 		{
 			name: "invalid user id",
 			input: &CreateOrder{
-				UserID:          0,
-				DeliveryAddress: "Test street 1",
+				UserID:    0,
+				AddressID: 1,
 				Items: []CreateItem{
 					{
 						ProductID: 1,
@@ -323,10 +365,10 @@ func TestService_Create_Validation(t *testing.T) {
 			},
 		},
 		{
-			name: "empty delivery address",
+			name: "invalid user id",
 			input: &CreateOrder{
-				UserID:          1,
-				DeliveryAddress: "   ",
+				UserID:    0,
+				AddressID: 1,
 				Items: []CreateItem{
 					{
 						ProductID: 1,
@@ -338,16 +380,16 @@ func TestService_Create_Validation(t *testing.T) {
 		{
 			name: "empty items",
 			input: &CreateOrder{
-				UserID:          1,
-				DeliveryAddress: "Test street 1",
-				Items:           []CreateItem{},
+				UserID:    1,
+				AddressID: 1,
+				Items:     []CreateItem{},
 			},
 		},
 		{
 			name: "invalid product id",
 			input: &CreateOrder{
-				UserID:          1,
-				DeliveryAddress: "Test street 1",
+				UserID:    1,
+				AddressID: 1,
 				Items: []CreateItem{
 					{
 						ProductID: 0,
@@ -359,8 +401,8 @@ func TestService_Create_Validation(t *testing.T) {
 		{
 			name: "invalid quantity",
 			input: &CreateOrder{
-				UserID:          1,
-				DeliveryAddress: "Test street 1",
+				UserID:    1,
+				AddressID: 1,
 				Items: []CreateItem{
 					{
 						ProductID: 1,
@@ -372,8 +414,8 @@ func TestService_Create_Validation(t *testing.T) {
 		{
 			name: "duplicate product",
 			input: &CreateOrder{
-				UserID:          1,
-				DeliveryAddress: "Test street 1",
+				UserID:    1,
+				AddressID: 1,
 				Items: []CreateItem{
 					{
 						ProductID: 1,
@@ -403,9 +445,20 @@ func TestService_Create_Validation(t *testing.T) {
 
 			repository := &fakeOrderRepository{}
 
+			addresses := &fakeAddressReader{
+				address: &address.Address{
+					ID:          1,
+					UserID:      1,
+					City:        "Amsterdam",
+					Street:      "Test street",
+					HouseNumber: "1",
+				},
+			}
+
 			service := NewService(
 				products,
 				repository,
+				addresses,
 			)
 
 			order, err := service.Create(
@@ -450,14 +503,25 @@ func TestService_Create_InactiveProduct(t *testing.T) {
 
 	repository := &fakeOrderRepository{}
 
+	addresses := &fakeAddressReader{
+		address: &address.Address{
+			ID:          1,
+			UserID:      1,
+			City:        "Amsterdam",
+			Street:      "Test street",
+			HouseNumber: "1",
+		},
+	}
+
 	service := NewService(
 		products,
 		repository,
+		addresses,
 	)
 
 	input := &CreateOrder{
-		UserID:          1,
-		DeliveryAddress: "Test street 1",
+		UserID:    1,
+		AddressID: 1,
 		Items: []CreateItem{
 			{
 				ProductID: 1,
@@ -495,14 +559,25 @@ func TestService_Create_ProductReaderError(t *testing.T) {
 
 	repository := &fakeOrderRepository{}
 
+	addresses := &fakeAddressReader{
+		address: &address.Address{
+			ID:          1,
+			UserID:      1,
+			City:        "Amsterdam",
+			Street:      "Test street",
+			HouseNumber: "1",
+		},
+	}
+
 	service := NewService(
 		products,
 		repository,
+		addresses,
 	)
 
 	input := &CreateOrder{
-		UserID:          1,
-		DeliveryAddress: "Test street 1",
+		UserID:    1,
+		AddressID: 1,
 		Items: []CreateItem{
 			{
 				ProductID: 1,
@@ -544,14 +619,25 @@ func TestService_Create_ProductNotFound(t *testing.T) {
 
 	repository := &fakeOrderRepository{}
 
+	addresses := &fakeAddressReader{
+		address: &address.Address{
+			ID:          1,
+			UserID:      1,
+			City:        "Amsterdam",
+			Street:      "Test street",
+			HouseNumber: "1",
+		},
+	}
+
 	service := NewService(
 		products,
 		repository,
+		addresses,
 	)
 
 	input := &CreateOrder{
-		UserID:          1,
-		DeliveryAddress: "Test street 1",
+		UserID:    1,
+		AddressID: 1,
 		Items: []CreateItem{
 			{
 				ProductID: 999,
@@ -598,14 +684,25 @@ func TestService_Create_RepositoryError(t *testing.T) {
 		err: repositoryErr,
 	}
 
+	addresses := &fakeAddressReader{
+		address: &address.Address{
+			ID:          1,
+			UserID:      1,
+			City:        "Amsterdam",
+			Street:      "Test street",
+			HouseNumber: "1",
+		},
+	}
+
 	service := NewService(
 		products,
 		repository,
+		addresses,
 	)
 
 	input := &CreateOrder{
-		UserID:          1,
-		DeliveryAddress: "Test street 1",
+		UserID:    1,
+		AddressID: 1,
 		Items: []CreateItem{
 			{
 				ProductID: 1,
@@ -660,6 +757,7 @@ func TestService_GetByID(t *testing.T) {
 	service := NewService(
 		&fakeProductReader{},
 		repository,
+		nil,
 	)
 
 	order, err := service.GetByID(
@@ -703,6 +801,7 @@ func TestService_GetByID_InvalidID(t *testing.T) {
 	service := NewService(
 		&fakeProductReader{},
 		&fakeOrderRepository{},
+		nil,
 	)
 
 	order, err := service.GetByID(
@@ -729,6 +828,7 @@ func TestService_GetByID_NotFound(t *testing.T) {
 	service := NewService(
 		&fakeProductReader{},
 		&fakeOrderRepository{},
+		nil,
 	)
 
 	order, err := service.GetByID(
@@ -759,6 +859,7 @@ func TestService_GetByID_RepositoryError(t *testing.T) {
 		&fakeOrderRepository{
 			err: repositoryErr,
 		},
+		nil,
 	)
 
 	order, err := service.GetByID(
@@ -808,6 +909,7 @@ func TestService_ListByUser(t *testing.T) {
 	service := NewService(
 		&fakeProductReader{},
 		repository,
+		nil,
 	)
 
 	orders, err := service.ListByUser(
@@ -861,6 +963,7 @@ func TestService_ListByUser_DefaultLimit(t *testing.T) {
 	service := NewService(
 		&fakeProductReader{},
 		repository,
+		nil,
 	)
 
 	_, err := service.ListByUser(
@@ -890,6 +993,7 @@ func TestService_ListByUser_MaxLimit(t *testing.T) {
 	service := NewService(
 		&fakeProductReader{},
 		repository,
+		nil,
 	)
 
 	_, err := service.ListByUser(
@@ -939,6 +1043,7 @@ func TestService_ListByUser_Validation(t *testing.T) {
 			service := NewService(
 				&fakeProductReader{},
 				repository,
+				nil,
 			)
 
 			orders, err := service.ListByUser(
@@ -975,6 +1080,7 @@ func TestService_ListByUser_RepositoryError(t *testing.T) {
 	service := NewService(
 		&fakeProductReader{},
 		repository,
+		nil,
 	)
 
 	orders, err := service.ListByUser(
@@ -1011,6 +1117,7 @@ func TestService_UpdateStatus(t *testing.T) {
 	service := NewService(
 		&fakeProductReader{},
 		repository,
+		nil,
 	)
 
 	err := service.UpdateStatus(
@@ -1053,6 +1160,7 @@ func TestService_UpdateStatus_InvalidTransition(t *testing.T) {
 	service := NewService(
 		&fakeProductReader{},
 		repository,
+		nil,
 	)
 
 	err := service.UpdateStatus(
@@ -1081,6 +1189,7 @@ func TestService_UpdateStatus_InvalidID(t *testing.T) {
 	service := NewService(
 		&fakeProductReader{},
 		repository,
+		nil,
 	)
 
 	err := service.UpdateStatus(
@@ -1109,6 +1218,7 @@ func TestService_UpdateStatus_NotFound(t *testing.T) {
 	service := NewService(
 		&fakeProductReader{},
 		repository,
+		nil,
 	)
 
 	err := service.UpdateStatus(
@@ -1145,6 +1255,7 @@ func TestService_ListAll(t *testing.T) {
 	service := NewService(
 		nil,
 		repository,
+		nil,
 	)
 
 	result, err := service.ListAll(
@@ -1273,6 +1384,7 @@ func TestService_ListAll_Validation(t *testing.T) {
 			service := NewService(
 				nil,
 				repository,
+				nil,
 			)
 
 			orders, err := service.ListAll(
@@ -1309,6 +1421,7 @@ func TestService_ListAll_RepositoryError(t *testing.T) {
 	service := NewService(
 		nil,
 		repository,
+		nil,
 	)
 
 	orders, err := service.ListAll(
@@ -1340,6 +1453,7 @@ func TestService_ListAll_InvalidStatus(t *testing.T) {
 	service := NewService(
 		nil,
 		repository,
+		nil,
 	)
 
 	orders, err := service.ListAll(
@@ -1377,6 +1491,7 @@ func TestService_ListAll_WithStatus(t *testing.T) {
 	service := NewService(
 		nil,
 		repository,
+		nil,
 	)
 
 	_, err := service.ListAll(
@@ -1413,6 +1528,7 @@ func TestService_ListAll_WithUserID(t *testing.T) {
 	service := NewService(
 		nil,
 		repository,
+		nil,
 	)
 
 	_, err := service.ListAll(
@@ -1473,6 +1589,7 @@ func TestService_ListAll_WithCreatedAtFilter(t *testing.T) {
 	service := NewService(
 		nil,
 		repository,
+		nil,
 	)
 
 	_, err := service.ListAll(
@@ -1528,6 +1645,7 @@ func TestService_ListAll_CountError(t *testing.T) {
 	service := NewService(
 		nil,
 		repository,
+		nil,
 	)
 
 	result, err := service.ListAll(
@@ -1564,6 +1682,7 @@ func TestService_Cancel(t *testing.T) {
 	service := NewService(
 		&fakeProductReader{},
 		repository,
+		nil,
 	)
 
 	err := service.Cancel(
@@ -1607,6 +1726,7 @@ func TestService_Cancel_Confirmed(t *testing.T) {
 	service := NewService(
 		&fakeProductReader{},
 		repository,
+		nil,
 	)
 
 	err := service.Cancel(
@@ -1642,6 +1762,7 @@ func TestService_Cancel_OtherUserOrder(t *testing.T) {
 	service := NewService(
 		&fakeProductReader{},
 		repository,
+		nil,
 	)
 
 	err := service.Cancel(
@@ -1704,6 +1825,7 @@ func TestService_Cancel_InvalidStatus(t *testing.T) {
 			service := NewService(
 				&fakeProductReader{},
 				repository,
+				nil,
 			)
 
 			err := service.Cancel(
@@ -1756,6 +1878,7 @@ func TestService_Cancel_Validation(t *testing.T) {
 			service := NewService(
 				&fakeProductReader{},
 				repository,
+				nil,
 			)
 
 			err := service.Cancel(
@@ -1783,6 +1906,7 @@ func TestService_Cancel_NotFound(t *testing.T) {
 	service := NewService(
 		&fakeProductReader{},
 		repository,
+		nil,
 	)
 
 	err := service.Cancel(
@@ -1816,6 +1940,7 @@ func TestService_Cancel_UpdateError(t *testing.T) {
 	service := NewService(
 		&fakeProductReader{},
 		repository,
+		nil,
 	)
 
 	err := service.Cancel(
@@ -1828,6 +1953,65 @@ func TestService_Cancel_UpdateError(t *testing.T) {
 		t.Fatalf(
 			"expected update error, got %v",
 			err,
+		)
+	}
+}
+
+func TestService_Create_AddressNotFound(t *testing.T) {
+	products := &fakeProductReader{
+		products: map[int64]*product.Product{
+			1: {
+				ID:       1,
+				Name:     "Pepperoni",
+				Price:    59900,
+				IsActive: true,
+			},
+		},
+	}
+
+	repository := &fakeOrderRepository{}
+
+	addresses := &fakeAddressReader{
+		err: address.ErrAddressNotFound,
+	}
+
+	service := NewService(
+		products,
+		repository,
+		addresses,
+	)
+
+	order, err := service.Create(
+		context.Background(),
+		&CreateOrder{
+			UserID:    5,
+			AddressID: 999,
+			Items: []CreateItem{
+				{
+					ProductID: 1,
+					Quantity:  1,
+				},
+			},
+		},
+	)
+
+	if order != nil {
+		t.Fatalf(
+			"expected nil order, got %+v",
+			order,
+		)
+	}
+
+	if !errors.Is(err, ErrOrderValidation) {
+		t.Fatalf(
+			"expected ErrOrderValidation, got %v",
+			err,
+		)
+	}
+
+	if repository.order != nil {
+		t.Fatal(
+			"repository must not be called when address is unavailable",
 		)
 	}
 }

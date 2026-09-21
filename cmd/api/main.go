@@ -105,19 +105,20 @@ func main() {
 
 	authHandler := auth.NewHandler(authService)
 
+	addressRepository := address.NewRepository(dbPool)
+	addressService := address.NewService(addressRepository)
+	addressHandler := address.NewHandler(addressService)
+
 	orderRepository := order.NewRepository(dbPool)
 	orderService := order.NewService(
 		productService,
 		orderRepository,
+		addressService,
 	)
 	orderHandler := order.NewHandlerWithLocation(
 		orderService,
 		location,
 	)
-
-	addressRepository := address.NewRepository(dbPool)
-	addressService := address.NewService(addressRepository)
-	addressHandler := address.NewHandler(addressService)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()

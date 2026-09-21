@@ -45,8 +45,8 @@ func NewHandlerWithLocation(service ServiceInterface, location *time.Location) *
 }
 
 type createOrderRequest struct {
-	DeliveryAddress string                   `json:"delivery_address"`
-	Items           []createOrderItemRequest `json:"items"`
+	AddressID int64        `json:"address_id"`
+	Items     []CreateItem `json:"items"`
 }
 
 type createOrderItemRequest struct {
@@ -87,23 +87,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	input := &CreateOrder{
-		UserID:          userID,
-		DeliveryAddress: req.DeliveryAddress,
-		Items: make(
-			[]CreateItem,
-			0,
-			len(req.Items),
-		),
-	}
-
-	for _, item := range req.Items {
-		input.Items = append(
-			input.Items,
-			CreateItem{
-				ProductID: item.ProductID,
-				Quantity:  item.Quantity,
-			},
-		)
+		UserID:    userID,
+		AddressID: req.AddressID,
+		Items:     req.Items,
 	}
 
 	order, err := h.service.Create(

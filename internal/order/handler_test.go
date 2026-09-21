@@ -140,22 +140,20 @@ func TestHandler_Create(t *testing.T) {
 
 	handler := NewHandler(service)
 
-	body := []byte(`
-	{
-		"delivery_address": "Test street 1",
-		"items": [
-			{
-				"product_id": 1,
-				"quantity": 2
-			}
-		]
-	}
-	`)
+	body := `{
+	"address_id": 7,
+	"items": [
+		{
+			"product_id": 1,
+			"quantity": 2
+		}
+	]
+}`
 
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/",
-		bytes.NewReader(body),
+		bytes.NewReader([]byte(body)),
 	)
 
 	rec := httptest.NewRecorder()
@@ -197,14 +195,13 @@ func TestHandler_Create(t *testing.T) {
 		)
 	}
 
-	if service.createInput.DeliveryAddress != "Test street 1" {
+	if service.createInput.AddressID != 7 {
 		t.Errorf(
-			"expected address %q, got %q",
-			"Test street 1",
-			service.createInput.DeliveryAddress,
+			"expected address ID %d, got %d",
+			7,
+			service.createInput.AddressID,
 		)
 	}
-
 	if len(service.createInput.Items) != 1 {
 		t.Fatalf(
 			"expected %d item, got %d",

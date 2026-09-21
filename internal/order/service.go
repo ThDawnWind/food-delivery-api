@@ -6,12 +6,17 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ThDawnWind/food-delivery-api/internal/address"
 	"github.com/ThDawnWind/food-delivery-api/internal/product"
 	"github.com/jackc/pgx/v5"
 )
 
 type ProductReader interface {
 	GetByID(ctx context.Context, id int64) (*product.Product, error)
+}
+
+type AddressReader interface {
+	GetByID(ctx context.Context, addressID int64, userID int64) (*address.Address, error)
 }
 
 type OrderRepository interface {
@@ -26,12 +31,14 @@ type OrderRepository interface {
 type Service struct {
 	products   ProductReader
 	repository OrderRepository
+	addresses  AddressReader
 }
 
-func NewService(products ProductReader, repository OrderRepository) *Service {
+func NewService(products ProductReader, repository OrderRepository, addresses AddressReader) *Service {
 	return &Service{
 		products:   products,
 		repository: repository,
+		addresses:  addresses,
 	}
 }
 
@@ -50,14 +57,29 @@ func (s *Service) Create(ctx context.Context, input *CreateOrder) (*Order, error
 		)
 	}
 
-	input.DeliveryAddress = strings.TrimSpace(
-		input.DeliveryAddress,
-	)
-
-	if input.DeliveryAddress == "" {
+	if input.AddressID <= 0 {
 		return nil, fmt.Errorf(
-			"%w: delivery address is required",
+			"%w: address id must be greater than zero",
 			ErrOrderValidation,
+		)
+	}
+
+	addressData, err := s.addresses.GetByID(
+		ctx,
+		input.AddressID,
+		input.UserID,
+	)
+	if err != nil {
+		if errors.Is(err, address.ErrAddressNotFound) {
+			return nil, fmt.Errorf(
+				"%w: address not found",
+				ErrOrderValidation,
+			)
+		}
+
+		return nil, fmt.Errorf(
+			"failed to get address: %w",
+			err,
 		)
 	}
 
@@ -99,7 +121,7 @@ func (s *Service) Create(ctx context.Context, input *CreateOrder) (*Order, error
 	order := &Order{
 		UserID:          input.UserID,
 		Status:          StatusNew,
-		DeliveryAddress: input.DeliveryAddress,
+		DeliveryAddress: buildAddressSnapshot(addressData),
 		Items:           make([]OrderItem, 0, len(input.Items)),
 	}
 
@@ -420,4 +442,46 @@ func (s *Service) Cancel(ctx context.Context, orderID int64, userID int64) error
 	}
 
 	return nil
+}
+
+func buildAddressSnapshot(a *address.Address) string {
+	parts := []string{
+		a.City,
+		a.Street,
+		a.HouseNumber,
+	}
+
+	if a.ApartmentNumber != nil &&
+		strings.TrimSpace(*a.ApartmentNumber) != "" {
+		parts = append(
+			parts,
+			"apt. "+strings.TrimSpace(*a.ApartmentNumber),
+		)
+	}
+
+	if a.Entrance != nil &&
+		strings.TrimSpace(*a.Entrance) != "" {
+		parts = append(
+			parts,
+			"entrance "+strings.TrimSpace(*a.Entrance),
+		)
+	}
+
+	if a.Floor != nil &&
+		strings.TrimSpace(*a.Floor) != "" {
+		parts = append(
+			parts,
+			"floor "+strings.TrimSpace(*a.Floor),
+		)
+	}
+
+	if a.Comment != nil &&
+		strings.TrimSpace(*a.Comment) != "" {
+		parts = append(
+			parts,
+			"comment: "+strings.TrimSpace(*a.Comment),
+		)
+	}
+
+	return strings.Join(parts, ", ")
 }
