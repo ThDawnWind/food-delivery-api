@@ -31,7 +31,8 @@ type fakeOrderRepository struct {
 	offset int
 
 	updatedOrderID int64
-	updatedStatus  Status
+	updatedFrom    Status
+	updatedTo      Status
 	updateErr      error
 
 	listAllOrders []*Order
@@ -42,6 +43,10 @@ type fakeOrderRepository struct {
 	countAllTotal  int64
 	countAllFilter ListOrdersFilter
 	countAllErr    error
+
+	cancelOrderID int64
+	cancelUserID  int64
+	cancelErr     error
 }
 
 func (f *fakeProductReader) GetByID(ctx context.Context, id int64) (*product.Product, error) {
@@ -91,7 +96,7 @@ func (f *fakeOrderRepository) ListByUser(ctx context.Context, userID int64, limi
 	return f.orders, nil
 }
 
-func (f *fakeOrderRepository) UpdateStatus(ctx context.Context, id int64, status Status) error {
+func (f *fakeOrderRepository) UpdateStatus(ctx context.Context, id int64, from Status, to Status) error {
 	if f.updateErr != nil {
 		return f.updateErr
 	}
@@ -101,7 +106,8 @@ func (f *fakeOrderRepository) UpdateStatus(ctx context.Context, id int64, status
 	}
 
 	f.updatedOrderID = id
-	f.updatedStatus = status
+	f.updatedFrom = from
+	f.updatedTo = to
 
 	return nil
 }
@@ -138,6 +144,17 @@ func (f *fakeAddressReader) GetByID(ctx context.Context, addressID int64, userID
 	}
 
 	return f.address, nil
+}
+
+func (f *fakeOrderRepository) CancelByUser(ctx context.Context, orderID int64, userID int64) error {
+	if f.cancelErr != nil {
+		return f.cancelErr
+	}
+
+	f.cancelOrderID = orderID
+	f.cancelUserID = userID
+
+	return nil
 }
 
 func TestService_Create(t *testing.T) {
@@ -1139,12 +1156,19 @@ func TestService_UpdateStatus(t *testing.T) {
 			repository.updatedOrderID,
 		)
 	}
-
-	if repository.updatedStatus != StatusConfirmed {
+	if repository.updatedFrom != StatusNew {
 		t.Errorf(
-			"expected status %q, got %q",
+			"expected previous status %q, got %q",
+			StatusNew,
+			repository.updatedFrom,
+		)
+	}
+
+	if repository.updatedTo != StatusConfirmed {
+		t.Errorf(
+			"expected new status %q, got %q",
 			StatusConfirmed,
-			repository.updatedStatus,
+			repository.updatedTo,
 		)
 	}
 }
@@ -1671,13 +1695,7 @@ func TestService_ListAll_CountError(t *testing.T) {
 }
 
 func TestService_Cancel(t *testing.T) {
-	repository := &fakeOrderRepository{
-		order: &Order{
-			ID:     10,
-			UserID: 5,
-			Status: StatusNew,
-		},
-	}
+	repository := &fakeOrderRepository{}
 
 	service := NewService(
 		&fakeProductReader{},
@@ -1697,66 +1715,26 @@ func TestService_Cancel(t *testing.T) {
 		)
 	}
 
-	if repository.updatedOrderID != 10 {
+	if repository.cancelOrderID != 10 {
 		t.Errorf(
-			"expected order ID %d, got %d",
+			"expected cancelled order ID %d, got %d",
 			10,
-			repository.updatedOrderID,
+			repository.cancelOrderID,
 		)
 	}
 
-	if repository.updatedStatus != StatusCancelled {
+	if repository.cancelUserID != 5 {
 		t.Errorf(
-			"expected status %q, got %q",
-			StatusCancelled,
-			repository.updatedStatus,
-		)
-	}
-}
-
-func TestService_Cancel_Confirmed(t *testing.T) {
-	repository := &fakeOrderRepository{
-		order: &Order{
-			ID:     10,
-			UserID: 5,
-			Status: StatusConfirmed,
-		},
-	}
-
-	service := NewService(
-		&fakeProductReader{},
-		repository,
-		nil,
-	)
-
-	err := service.Cancel(
-		context.Background(),
-		10,
-		5,
-	)
-	if err != nil {
-		t.Fatalf(
-			"unexpected error: %v",
-			err,
-		)
-	}
-
-	if repository.updatedStatus != StatusCancelled {
-		t.Errorf(
-			"expected status %q, got %q",
-			StatusCancelled,
-			repository.updatedStatus,
+			"expected user ID %d, got %d",
+			5,
+			repository.cancelUserID,
 		)
 	}
 }
 
 func TestService_Cancel_OtherUserOrder(t *testing.T) {
 	repository := &fakeOrderRepository{
-		order: &Order{
-			ID:     10,
-			UserID: 99,
-			Status: StatusNew,
-		},
+		cancelErr: pgx.ErrNoRows,
 	}
 
 	service := NewService(
@@ -1768,7 +1746,7 @@ func TestService_Cancel_OtherUserOrder(t *testing.T) {
 	err := service.Cancel(
 		context.Background(),
 		10,
-		5,
+		999,
 	)
 
 	if !errors.Is(err, ErrOrderNotFound) {
@@ -1777,79 +1755,30 @@ func TestService_Cancel_OtherUserOrder(t *testing.T) {
 			err,
 		)
 	}
-
-	if repository.updatedOrderID != 0 {
-		t.Fatal(
-			"repository UpdateStatus must not be called for another user's order",
-		)
-	}
 }
 
 func TestService_Cancel_InvalidStatus(t *testing.T) {
-	tests := []struct {
-		name   string
-		status Status
-	}{
-		{
-			name:   "cooking",
-			status: StatusCooking,
-		},
-		{
-			name:   "ready",
-			status: StatusReady,
-		},
-		{
-			name:   "delivering",
-			status: StatusDelivering,
-		},
-		{
-			name:   "completed",
-			status: StatusCompleted,
-		},
-		{
-			name:   "already cancelled",
-			status: StatusCancelled,
-		},
+	repository := &fakeOrderRepository{
+		cancelErr: ErrOrderCannotCancel,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			repository := &fakeOrderRepository{
-				order: &Order{
-					ID:     10,
-					UserID: 5,
-					Status: tt.status,
-				},
-			}
+	service := NewService(
+		&fakeProductReader{},
+		repository,
+		nil,
+	)
 
-			service := NewService(
-				&fakeProductReader{},
-				repository,
-				nil,
-			)
+	err := service.Cancel(
+		context.Background(),
+		10,
+		5,
+	)
 
-			err := service.Cancel(
-				context.Background(),
-				10,
-				5,
-			)
-
-			if !errors.Is(
-				err,
-				ErrOrderValidation,
-			) {
-				t.Fatalf(
-					"expected ErrOrderValidation, got %v",
-					err,
-				)
-			}
-
-			if repository.updatedOrderID != 0 {
-				t.Fatal(
-					"repository UpdateStatus must not be called",
-				)
-			}
-		})
+	if !errors.Is(err, ErrOrderValidation) {
+		t.Fatalf(
+			"expected ErrOrderValidation, got %v",
+			err,
+		)
 	}
 }
 
@@ -1901,7 +1830,9 @@ func TestService_Cancel_Validation(t *testing.T) {
 }
 
 func TestService_Cancel_NotFound(t *testing.T) {
-	repository := &fakeOrderRepository{}
+	repository := &fakeOrderRepository{
+		cancelErr: pgx.ErrNoRows,
+	}
 
 	service := NewService(
 		&fakeProductReader{},
@@ -1922,19 +1853,13 @@ func TestService_Cancel_NotFound(t *testing.T) {
 		)
 	}
 }
-
-func TestService_Cancel_UpdateError(t *testing.T) {
-	updateErr := errors.New(
+func TestService_Cancel_RepositoryError(t *testing.T) {
+	repositoryErr := errors.New(
 		"database unavailable",
 	)
 
 	repository := &fakeOrderRepository{
-		order: &Order{
-			ID:     10,
-			UserID: 5,
-			Status: StatusNew,
-		},
-		updateErr: updateErr,
+		cancelErr: repositoryErr,
 	}
 
 	service := NewService(
@@ -1949,9 +1874,9 @@ func TestService_Cancel_UpdateError(t *testing.T) {
 		5,
 	)
 
-	if !errors.Is(err, updateErr) {
+	if !errors.Is(err, repositoryErr) {
 		t.Fatalf(
-			"expected update error, got %v",
+			"expected repository error, got %v",
 			err,
 		)
 	}

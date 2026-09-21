@@ -78,8 +78,9 @@ type ListOrdersResult struct {
 }
 
 var (
-	ErrOrderValidation = errors.New("order validation error")
-	ErrOrderNotFound   = errors.New("order not found")
+	ErrOrderValidation   = errors.New("order validation error")
+	ErrOrderNotFound     = errors.New("order not found")
+	ErrOrderCannotCancel = errors.New("order cannot be cancelled")
 )
 
 func CanTransitionStatus(from, to Status) bool {

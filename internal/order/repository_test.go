@@ -1237,6 +1237,7 @@ func TestRepository_UpdateStatus_NotFound(t *testing.T) {
 	err = repo.UpdateStatus(
 		ctx,
 		999999999,
+		StatusNew,
 		StatusConfirmed,
 	)
 
@@ -1342,6 +1343,7 @@ func TestRepository_UpdateStatus(t *testing.T) {
 	err = repo.UpdateStatus(
 		ctx,
 		orderID,
+		StatusNew,
 		StatusConfirmed,
 	)
 	if err != nil {
@@ -1388,6 +1390,120 @@ func TestRepository_UpdateStatus(t *testing.T) {
 	if updatedAt.Before(createdAt) {
 		t.Errorf(
 			"expected updated_at not to be before created_at",
+		)
+	}
+}
+
+func TestRepository_UpdateStatus_StatusChanged(t *testing.T) {
+	pool := newTestPool(t)
+
+	ctx := context.Background()
+
+	var userID int64
+
+	err := pool.QueryRow(
+		ctx,
+		`
+			INSERT INTO users (
+				username,
+				email,
+				password_hash,
+				role
+			)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id
+		`,
+		"status_conflict_user",
+		"status_conflict@example.com",
+		"test_password_hash",
+		"user",
+	).Scan(&userID)
+	if err != nil {
+		t.Fatalf(
+			"failed to insert test user: %v",
+			err,
+		)
+	}
+
+	var orderID int64
+
+	err = pool.QueryRow(
+		ctx,
+		`
+			INSERT INTO orders (
+				user_id,
+				status,
+				total_price,
+				delivery_address
+			)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id
+		`,
+		userID,
+		StatusCancelled,
+		1000,
+		"Test street 1",
+	).Scan(&orderID)
+	if err != nil {
+		t.Fatalf(
+			"failed to insert test order: %v",
+			err,
+		)
+	}
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(
+			context.Background(),
+			`DELETE FROM orders WHERE id = $1`,
+			orderID,
+		)
+
+		_, _ = pool.Exec(
+			context.Background(),
+			`DELETE FROM users WHERE id = $1`,
+			userID,
+		)
+	})
+
+	repository := NewRepository(pool)
+
+	err = repository.UpdateStatus(
+		ctx,
+		orderID,
+		StatusConfirmed,
+		StatusCooking,
+	)
+
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf(
+			"expected pgx.ErrNoRows, got %v",
+			err,
+		)
+	}
+
+	var status Status
+
+	err = pool.QueryRow(
+		ctx,
+		`
+			SELECT status
+			FROM orders
+			WHERE id = $1
+		`,
+		orderID,
+	).Scan(&status)
+	if err != nil {
+		t.Fatalf(
+			"failed to get order status: %v",
+			err,
+		)
+	}
+
+	if status != StatusCancelled {
+		t.Fatalf(
+			"expected status to remain %q, got %q",
+			StatusCancelled,
+			status,
 		)
 	}
 }
@@ -2016,6 +2132,405 @@ func TestRepository_CountAll_FilterByStatus(t *testing.T) {
 			"expected total %d, got %d",
 			len(orders),
 			total,
+		)
+	}
+}
+
+func TestRepository_CancelByUser(t *testing.T) {
+	pool := newTestPool(t)
+
+	ctx := context.Background()
+
+	var userID int64
+
+	err := pool.QueryRow(
+		ctx,
+		`
+		INSERT INTO users (
+			username,
+			email,
+			password_hash,
+			role
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+	`,
+		"cancel_test_user",
+		"cancel_test@example.com",
+		"test_password_hash",
+		"user",
+	).Scan(&userID)
+	if err != nil {
+		t.Fatalf(
+			"failed to insert test user: %v",
+			err,
+		)
+	}
+
+	var orderID int64
+
+	err = pool.QueryRow(
+		ctx,
+		`
+			INSERT INTO orders (
+				user_id,
+				status,
+				total_price,
+				delivery_address
+			)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id
+		`,
+		userID,
+		StatusNew,
+		1000,
+		"Test street 1",
+	).Scan(&orderID)
+	if err != nil {
+		t.Fatalf(
+			"failed to insert test order: %v",
+			err,
+		)
+	}
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(
+			context.Background(),
+			`DELETE FROM orders WHERE id = $1`,
+			orderID,
+		)
+
+		_, _ = pool.Exec(
+			context.Background(),
+			`DELETE FROM users WHERE id = $1`,
+			userID,
+		)
+	})
+	repository := NewRepository(pool)
+
+	err = repository.CancelByUser(
+		ctx,
+		orderID,
+		userID,
+	)
+	if err != nil {
+		t.Fatalf(
+			"unexpected error: %v",
+			err,
+		)
+	}
+
+	var status Status
+
+	err = pool.QueryRow(
+		ctx,
+		`
+			SELECT status
+			FROM orders
+			WHERE id = $1
+		`,
+		orderID,
+	).Scan(&status)
+	if err != nil {
+		t.Fatalf(
+			"failed to get order status: %v",
+			err,
+		)
+	}
+
+	if status != StatusCancelled {
+		t.Fatalf(
+			"expected status %q, got %q",
+			StatusCancelled,
+			status,
+		)
+	}
+}
+
+func TestRepository_CancelByUser_Confirmed(t *testing.T) {
+	pool := newTestPool(t)
+
+	ctx := context.Background()
+
+	var userID int64
+
+	err := pool.QueryRow(
+		ctx,
+		`
+		INSERT INTO users (
+			username,
+			email,
+			password_hash,
+			role
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+	`,
+		"cancel_test_user",
+		"cancel_test@example.com",
+		"test_password_hash",
+		"user",
+	).Scan(&userID)
+	if err != nil {
+		t.Fatalf(
+			"failed to insert test user: %v",
+			err,
+		)
+	}
+
+	var orderID int64
+
+	err = pool.QueryRow(
+		ctx,
+		`
+			INSERT INTO orders (
+				user_id,
+				status,
+				total_price,
+				delivery_address
+			)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id
+		`,
+		userID,
+		StatusNew,
+		1000,
+		"Test street 1",
+	).Scan(&orderID)
+	if err != nil {
+		t.Fatalf(
+			"failed to insert test order: %v",
+			err,
+		)
+	}
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(
+			context.Background(),
+			`DELETE FROM orders WHERE id = $1`,
+			orderID,
+		)
+
+		_, _ = pool.Exec(
+			context.Background(),
+			`DELETE FROM users WHERE id = $1`,
+			userID,
+		)
+	})
+
+	repository := NewRepository(pool)
+
+	err = repository.CancelByUser(
+		ctx,
+		orderID,
+		userID,
+	)
+	if err != nil {
+		t.Fatalf(
+			"unexpected error: %v",
+			err,
+		)
+	}
+}
+
+func TestRepository_CancelByUser_InvalidStatus(t *testing.T) {
+	pool := newTestPool(t)
+
+	ctx := context.Background()
+
+	var userID int64
+
+	err := pool.QueryRow(
+		ctx,
+		`
+		INSERT INTO users (
+			username,
+			email,
+			password_hash,
+			role
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+	`,
+		"cancel_test_user",
+		"cancel_test@example.com",
+		"test_password_hash",
+		"user",
+	).Scan(&userID)
+	if err != nil {
+		t.Fatalf(
+			"failed to insert test user: %v",
+			err,
+		)
+	}
+
+	var orderID int64
+
+	err = pool.QueryRow(
+		ctx,
+		`
+			INSERT INTO orders (
+				user_id,
+				status,
+				total_price,
+				delivery_address
+			)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id
+		`,
+		userID,
+		StatusCooking,
+		1000,
+		"Test street 1",
+	).Scan(&orderID)
+	if err != nil {
+		t.Fatalf(
+			"failed to insert test order: %v",
+			err,
+		)
+	}
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(
+			context.Background(),
+			`DELETE FROM orders WHERE id = $1`,
+			orderID,
+		)
+
+		_, _ = pool.Exec(
+			context.Background(),
+			`DELETE FROM users WHERE id = $1`,
+			userID,
+		)
+	})
+
+	repository := NewRepository(pool)
+
+	err = repository.CancelByUser(
+		ctx,
+		orderID,
+		userID,
+	)
+
+	if !errors.Is(
+		err,
+		ErrOrderCannotCancel,
+	) {
+		t.Fatalf(
+			"expected ErrOrderCannotCancel, got %v",
+			err,
+		)
+	}
+
+	var status Status
+
+	err = pool.QueryRow(
+		ctx,
+		`
+			SELECT status
+			FROM orders
+			WHERE id = $1
+		`,
+		orderID,
+	).Scan(&status)
+	if err != nil {
+		t.Fatalf(
+			"failed to get order status: %v",
+			err,
+		)
+	}
+
+	if status != StatusCooking {
+		t.Fatalf(
+			"expected status to remain %q, got %q",
+			StatusCooking,
+			status,
+		)
+	}
+}
+
+func TestRepository_CancelByUser_OtherUser(t *testing.T) {
+	pool := newTestPool(t)
+
+	ctx := context.Background()
+
+	var userID int64
+
+	err := pool.QueryRow(
+		ctx,
+		`
+		INSERT INTO users (
+			username,
+			email,
+			password_hash,
+			role
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+	`,
+		"cancel_test_user",
+		"cancel_test@example.com",
+		"test_password_hash",
+		"user",
+	).Scan(&userID)
+	if err != nil {
+		t.Fatalf(
+			"failed to insert test user: %v",
+			err,
+		)
+	}
+
+	var orderID int64
+
+	err = pool.QueryRow(
+		ctx,
+		`
+			INSERT INTO orders (
+				user_id,
+				status,
+				total_price,
+				delivery_address
+			)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id
+		`,
+		userID,
+		StatusNew,
+		1000,
+		"Test street 1",
+	).Scan(&orderID)
+	if err != nil {
+		t.Fatalf(
+			"failed to insert test order: %v",
+			err,
+		)
+	}
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(
+			context.Background(),
+			`DELETE FROM orders WHERE id = $1`,
+			orderID,
+		)
+
+		_, _ = pool.Exec(
+			context.Background(),
+			`DELETE FROM users WHERE id = $1`,
+			userID,
+		)
+	})
+	repository := NewRepository(pool)
+
+	err = repository.CancelByUser(
+		ctx,
+		orderID,
+		userID+999,
+	)
+
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf(
+			"expected pgx.ErrNoRows, got %v",
+			err,
 		)
 	}
 }

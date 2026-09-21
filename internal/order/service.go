@@ -23,9 +23,10 @@ type OrderRepository interface {
 	Create(ctx context.Context, order *Order) (*Order, error)
 	GetByID(ctx context.Context, id int64) (*Order, error)
 	ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error)
-	UpdateStatus(ctx context.Context, id int64, status Status) error
+	UpdateStatus(ctx context.Context, id int64, from Status, to Status) error
 	ListAll(ctx context.Context, filter ListOrdersFilter) ([]*Order, error)
 	CountAll(ctx context.Context, filter ListOrdersFilter) (int64, error)
+	CancelByUser(ctx context.Context, orderID int64, userID int64) error
 }
 
 type Service struct {
@@ -280,10 +281,14 @@ func (s *Service) UpdateStatus(ctx context.Context, id int64, status Status) err
 	if err := s.repository.UpdateStatus(
 		ctx,
 		id,
+		order.Status,
 		status,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrOrderNotFound
+			return fmt.Errorf(
+				"%w: order status has changed",
+				ErrOrderValidation,
+			)
 		}
 
 		return fmt.Errorf(
@@ -396,54 +401,32 @@ func (s *Service) Cancel(ctx context.Context, orderID int64, userID int64) error
 		)
 	}
 
-	order, err := s.repository.GetByID(
+	err := s.repository.CancelByUser(
 		ctx,
 		orderID,
+		userID,
 	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
 			return ErrOrderNotFound
+
+		case errors.Is(err, ErrOrderCannotCancel):
+			return fmt.Errorf(
+				"%w: order cannot be cancelled",
+				ErrOrderValidation,
+			)
+
+		default:
+			return fmt.Errorf(
+				"failed to cancel order: %w",
+				err,
+			)
 		}
-
-		return fmt.Errorf(
-			"failed to get order: %w",
-			err,
-		)
-	}
-
-	if order.UserID != userID {
-		return ErrOrderNotFound
-	}
-
-	switch order.Status {
-	case StatusNew, StatusConfirmed:
-
-	default:
-		return fmt.Errorf(
-			"%w: order cannot be cancelled in status %q",
-			ErrOrderValidation,
-			order.Status,
-		)
-	}
-
-	if err := s.repository.UpdateStatus(
-		ctx,
-		orderID,
-		StatusCancelled,
-	); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrOrderNotFound
-		}
-
-		return fmt.Errorf(
-			"failed to cancel order: %w",
-			err,
-		)
 	}
 
 	return nil
 }
-
 func buildAddressSnapshot(a *address.Address) string {
 	parts := []string{
 		a.City,

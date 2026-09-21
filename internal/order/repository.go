@@ -2,6 +2,7 @@ package order
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -374,18 +375,19 @@ func (r *Repository) listItemsByOrderIDs(ctx context.Context, orderIDs []int64) 
 	return itemsByOrderID, nil
 }
 
-func (r *Repository) UpdateStatus(ctx context.Context, id int64, status Status) error {
-	result, err := r.db.Exec(
+func (r *Repository) UpdateStatus(ctx context.Context, id int64, from Status, to Status) error {
+	commandTag, err := r.db.Exec(
 		ctx,
 		`
-				UPDATE orders
-				SET
-					status = $2,
-					updated_at = NOW()
-				WHERE id = $1
-				`,
+			UPDATE orders
+			SET status = $1,
+			    updated_at = NOW()
+			WHERE id = $2
+			  AND status = $3
+		`,
+		to,
 		id,
-		status,
+		from,
 	)
 	if err != nil {
 		return fmt.Errorf(
@@ -394,7 +396,7 @@ func (r *Repository) UpdateStatus(ctx context.Context, id int64, status Status) 
 		)
 	}
 
-	if result.RowsAffected() == 0 {
+	if commandTag.RowsAffected() == 0 {
 		return pgx.ErrNoRows
 	}
 	return nil
@@ -534,4 +536,84 @@ func (r *Repository) CountAll(ctx context.Context, filter ListOrdersFilter) (int
 	}
 
 	return total, nil
+}
+
+func (r *Repository) CancelByUser(ctx context.Context, orderID int64, userID int64) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to begin transaction: %w",
+			err,
+		)
+	}
+
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	var status Status
+
+	err = tx.QueryRow(
+		ctx,
+		`
+			SELECT status
+			FROM orders
+			WHERE id = $1
+			  AND user_id = $2
+			FOR UPDATE
+		`,
+		orderID,
+		userID,
+	).Scan(&status)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return pgx.ErrNoRows
+		}
+
+		return fmt.Errorf(
+			"failed to get order for cancellation: %w",
+			err,
+		)
+	}
+
+	switch status {
+	case StatusNew, StatusConfirmed:
+
+	default:
+		return ErrOrderCannotCancel
+	}
+
+	commandTag, err := tx.Exec(
+		ctx,
+		`
+			UPDATE orders
+			SET status = $1,
+			    updated_at = NOW()
+			WHERE id = $2
+			  AND user_id = $3
+		`,
+		StatusCancelled,
+		orderID,
+		userID,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to cancel order: %w",
+			err,
+		)
+	}
+
+	if commandTag.RowsAffected() != 1 {
+		return pgx.ErrNoRows
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf(
+			"failed to commit cancellation: %w",
+			err,
+		)
+	}
+
+	return nil
 }
