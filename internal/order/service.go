@@ -358,3 +358,66 @@ func (s *Service) ListAll(ctx context.Context, filter ListOrdersFilter) (*ListOr
 		Offset: filter.Offset,
 	}, nil
 }
+
+func (s *Service) Cancel(ctx context.Context, orderID int64, userID int64) error {
+	if orderID <= 0 {
+		return fmt.Errorf(
+			"%w: invalid order id",
+			ErrOrderValidation,
+		)
+	}
+
+	if userID <= 0 {
+		return fmt.Errorf(
+			"%w: invalid user id",
+			ErrOrderValidation,
+		)
+	}
+
+	order, err := s.repository.GetByID(
+		ctx,
+		orderID,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrOrderNotFound
+		}
+
+		return fmt.Errorf(
+			"failed to get order: %w",
+			err,
+		)
+	}
+
+	if order.UserID != userID {
+		return ErrOrderNotFound
+	}
+
+	switch order.Status {
+	case StatusNew, StatusConfirmed:
+
+	default:
+		return fmt.Errorf(
+			"%w: order cannot be cancelled in status %q",
+			ErrOrderValidation,
+			order.Status,
+		)
+	}
+
+	if err := s.repository.UpdateStatus(
+		ctx,
+		orderID,
+		StatusCancelled,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrOrderNotFound
+		}
+
+		return fmt.Errorf(
+			"failed to cancel order: %w",
+			err,
+		)
+	}
+
+	return nil
+}

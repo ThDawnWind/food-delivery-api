@@ -26,6 +26,7 @@ type fakeOrderRepository struct {
 
 	updatedOrderID int64
 	updatedStatus  Status
+	updateErr      error
 
 	listAllOrders []*Order
 	listAllErr    error
@@ -85,6 +86,10 @@ func (f *fakeOrderRepository) ListByUser(ctx context.Context, userID int64, limi
 }
 
 func (f *fakeOrderRepository) UpdateStatus(ctx context.Context, id int64, status Status) error {
+	if f.updateErr != nil {
+		return f.updateErr
+	}
+
 	if f.err != nil {
 		return f.err
 	}
@@ -1542,6 +1547,286 @@ func TestService_ListAll_CountError(t *testing.T) {
 	if !errors.Is(err, countErr) {
 		t.Fatalf(
 			"expected count error, got %v",
+			err,
+		)
+	}
+}
+
+func TestService_Cancel(t *testing.T) {
+	repository := &fakeOrderRepository{
+		order: &Order{
+			ID:     10,
+			UserID: 5,
+			Status: StatusNew,
+		},
+	}
+
+	service := NewService(
+		&fakeProductReader{},
+		repository,
+	)
+
+	err := service.Cancel(
+		context.Background(),
+		10,
+		5,
+	)
+	if err != nil {
+		t.Fatalf(
+			"unexpected error: %v",
+			err,
+		)
+	}
+
+	if repository.updatedOrderID != 10 {
+		t.Errorf(
+			"expected order ID %d, got %d",
+			10,
+			repository.updatedOrderID,
+		)
+	}
+
+	if repository.updatedStatus != StatusCancelled {
+		t.Errorf(
+			"expected status %q, got %q",
+			StatusCancelled,
+			repository.updatedStatus,
+		)
+	}
+}
+
+func TestService_Cancel_Confirmed(t *testing.T) {
+	repository := &fakeOrderRepository{
+		order: &Order{
+			ID:     10,
+			UserID: 5,
+			Status: StatusConfirmed,
+		},
+	}
+
+	service := NewService(
+		&fakeProductReader{},
+		repository,
+	)
+
+	err := service.Cancel(
+		context.Background(),
+		10,
+		5,
+	)
+	if err != nil {
+		t.Fatalf(
+			"unexpected error: %v",
+			err,
+		)
+	}
+
+	if repository.updatedStatus != StatusCancelled {
+		t.Errorf(
+			"expected status %q, got %q",
+			StatusCancelled,
+			repository.updatedStatus,
+		)
+	}
+}
+
+func TestService_Cancel_OtherUserOrder(t *testing.T) {
+	repository := &fakeOrderRepository{
+		order: &Order{
+			ID:     10,
+			UserID: 99,
+			Status: StatusNew,
+		},
+	}
+
+	service := NewService(
+		&fakeProductReader{},
+		repository,
+	)
+
+	err := service.Cancel(
+		context.Background(),
+		10,
+		5,
+	)
+
+	if !errors.Is(err, ErrOrderNotFound) {
+		t.Fatalf(
+			"expected ErrOrderNotFound, got %v",
+			err,
+		)
+	}
+
+	if repository.updatedOrderID != 0 {
+		t.Fatal(
+			"repository UpdateStatus must not be called for another user's order",
+		)
+	}
+}
+
+func TestService_Cancel_InvalidStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		status Status
+	}{
+		{
+			name:   "cooking",
+			status: StatusCooking,
+		},
+		{
+			name:   "ready",
+			status: StatusReady,
+		},
+		{
+			name:   "delivering",
+			status: StatusDelivering,
+		},
+		{
+			name:   "completed",
+			status: StatusCompleted,
+		},
+		{
+			name:   "already cancelled",
+			status: StatusCancelled,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repository := &fakeOrderRepository{
+				order: &Order{
+					ID:     10,
+					UserID: 5,
+					Status: tt.status,
+				},
+			}
+
+			service := NewService(
+				&fakeProductReader{},
+				repository,
+			)
+
+			err := service.Cancel(
+				context.Background(),
+				10,
+				5,
+			)
+
+			if !errors.Is(
+				err,
+				ErrOrderValidation,
+			) {
+				t.Fatalf(
+					"expected ErrOrderValidation, got %v",
+					err,
+				)
+			}
+
+			if repository.updatedOrderID != 0 {
+				t.Fatal(
+					"repository UpdateStatus must not be called",
+				)
+			}
+		})
+	}
+}
+
+func TestService_Cancel_Validation(t *testing.T) {
+	tests := []struct {
+		name    string
+		orderID int64
+		userID  int64
+	}{
+		{
+			name:    "invalid order id",
+			orderID: 0,
+			userID:  5,
+		},
+		{
+			name:    "invalid user id",
+			orderID: 10,
+			userID:  0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repository := &fakeOrderRepository{}
+
+			service := NewService(
+				&fakeProductReader{},
+				repository,
+			)
+
+			err := service.Cancel(
+				context.Background(),
+				tt.orderID,
+				tt.userID,
+			)
+
+			if !errors.Is(
+				err,
+				ErrOrderValidation,
+			) {
+				t.Fatalf(
+					"expected ErrOrderValidation, got %v",
+					err,
+				)
+			}
+		})
+	}
+}
+
+func TestService_Cancel_NotFound(t *testing.T) {
+	repository := &fakeOrderRepository{}
+
+	service := NewService(
+		&fakeProductReader{},
+		repository,
+	)
+
+	err := service.Cancel(
+		context.Background(),
+		999,
+		5,
+	)
+
+	if !errors.Is(err, ErrOrderNotFound) {
+		t.Fatalf(
+			"expected ErrOrderNotFound, got %v",
+			err,
+		)
+	}
+}
+
+func TestService_Cancel_UpdateError(t *testing.T) {
+	updateErr := errors.New(
+		"database unavailable",
+	)
+
+	repository := &fakeOrderRepository{
+		order: &Order{
+			ID:     10,
+			UserID: 5,
+			Status: StatusNew,
+		},
+		updateErr: updateErr,
+	}
+
+	service := NewService(
+		&fakeProductReader{},
+		repository,
+	)
+
+	err := service.Cancel(
+		context.Background(),
+		10,
+		5,
+	)
+
+	if !errors.Is(err, updateErr) {
+		t.Fatalf(
+			"expected update error, got %v",
 			err,
 		)
 	}

@@ -36,6 +36,10 @@ type fakeOrderService struct {
 	listAllErr    error
 
 	listAllFilter ListOrdersFilter
+
+	cancelOrderID int64
+	cancelUserID  int64
+	cancelErr     error
 }
 
 func (f *fakeOrderService) Create(ctx context.Context, input *CreateOrder) (*Order, error) {
@@ -87,6 +91,13 @@ func (f *fakeOrderService) UpdateStatus(ctx context.Context, id int64, status St
 	f.updateID = id
 	f.updateStatus = status
 	return f.updateErr
+}
+
+func (f *fakeOrderService) Cancel(ctx context.Context, orderID int64, userID int64) error {
+	f.cancelOrderID = orderID
+	f.cancelUserID = userID
+
+	return f.cancelErr
 }
 
 type fakeTokenParser struct {
@@ -1668,6 +1679,234 @@ func TestHandler_ListAll_DateUsesLocation(t *testing.T) {
 			"expected UTC offset %d, got %d",
 			3*60*60,
 			offset,
+		)
+	}
+}
+
+func TestHandler_Cancel(t *testing.T) {
+	service := &fakeOrderService{}
+
+	handler := NewHandler(service)
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/10/cancel",
+		nil,
+	)
+
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
+	rec := httptest.NewRecorder()
+
+	protected := authenticatedHandler(
+		handler.Routes(),
+		5,
+		"user",
+	)
+
+	protected.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusNoContent,
+			rec.Code,
+		)
+	}
+
+	if service.cancelOrderID != 10 {
+		t.Errorf(
+			"expected order ID %d, got %d",
+			10,
+			service.cancelOrderID,
+		)
+	}
+
+	if service.cancelUserID != 5 {
+		t.Errorf(
+			"expected user ID %d, got %d",
+			5,
+			service.cancelUserID,
+		)
+	}
+}
+
+func TestHandler_Cancel_InvalidID(t *testing.T) {
+	service := &fakeOrderService{}
+	handler := NewHandler(service)
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/abc/cancel",
+		nil,
+	)
+
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
+	rec := httptest.NewRecorder()
+
+	protected := authenticatedHandler(
+		handler.Routes(),
+		5,
+		"user",
+	)
+
+	protected.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			rec.Code,
+		)
+	}
+
+	if service.cancelOrderID != 0 {
+		t.Fatal(
+			"service must not be called for invalid order ID",
+		)
+	}
+}
+
+func TestHandler_Cancel_NotFound(t *testing.T) {
+	service := &fakeOrderService{
+		cancelErr: ErrOrderNotFound,
+	}
+
+	handler := NewHandler(service)
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/999/cancel",
+		nil,
+	)
+
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
+	rec := httptest.NewRecorder()
+
+	protected := authenticatedHandler(
+		handler.Routes(),
+		5,
+		"user",
+	)
+
+	protected.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusNotFound,
+			rec.Code,
+		)
+	}
+}
+
+func TestHandler_Cancel_ValidationError(t *testing.T) {
+	service := &fakeOrderService{
+		cancelErr: ErrOrderValidation,
+	}
+
+	handler := NewHandler(service)
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/10/cancel",
+		nil,
+	)
+
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
+	rec := httptest.NewRecorder()
+
+	protected := authenticatedHandler(
+		handler.Routes(),
+		5,
+		"user",
+	)
+
+	protected.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			rec.Code,
+		)
+	}
+}
+
+func TestHandler_Cancel_Unauthorized(t *testing.T) {
+	service := &fakeOrderService{}
+	handler := NewHandler(service)
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/10/cancel",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	handler.Routes().ServeHTTP(
+		rec,
+		req,
+	)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusUnauthorized,
+			rec.Code,
+		)
+	}
+}
+
+func TestHandler_Cancel_InternalError(t *testing.T) {
+	service := &fakeOrderService{
+		cancelErr: errors.New("database unavailable"),
+	}
+
+	handler := NewHandler(service)
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/10/cancel",
+		nil,
+	)
+
+	req.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
+	rec := httptest.NewRecorder()
+
+	protected := authenticatedHandler(
+		handler.Routes(),
+		5,
+		"user",
+	)
+
+	protected.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusInternalServerError,
+			rec.Code,
 		)
 	}
 }

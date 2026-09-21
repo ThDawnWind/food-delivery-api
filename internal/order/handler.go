@@ -17,6 +17,7 @@ type ServiceInterface interface {
 	GetByID(ctx context.Context, id int64) (*Order, error)
 	ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error)
 	ListAll(ctx context.Context, filter ListOrdersFilter) (*ListOrdersResult, error)
+	Cancel(ctx context.Context, orderID int64, userID int64) error
 	UpdateStatus(ctx context.Context, id int64, status Status) error
 }
 
@@ -506,23 +507,6 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) Routes() http.Handler {
-	router := chi.NewRouter()
-
-	router.Post("/", h.Create)
-	router.Get("/", h.ListByUser)
-	router.Get("/{id}", h.GetByID)
-
-	router.With(
-		auth.RequireRole("admin"),
-	).Patch(
-		"/{id}/status",
-		h.UpdateStatus,
-	)
-
-	return router
-}
-
 func writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set(
 		"Content-Type",
@@ -582,4 +566,94 @@ func (h *Handler) AdminGetByID(w http.ResponseWriter, r *http.Request) {
 		http.StatusOK,
 		order,
 	)
+}
+
+func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
+	orderID, err := strconv.ParseInt(
+		chi.URLParam(r, "id"),
+		10,
+		64,
+	)
+	if err != nil || orderID <= 0 {
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid order id",
+			},
+		)
+		return
+	}
+
+	userID, ok := auth.UserIDFromContext(
+		r.Context(),
+	)
+	if !ok {
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]string{
+				"error": "unauthorized",
+			},
+		)
+		return
+	}
+
+	err = h.service.Cancel(
+		r.Context(),
+		orderID,
+		userID,
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrOrderNotFound):
+			writeJSON(
+				w,
+				http.StatusNotFound,
+				map[string]string{
+					"error": "order not found",
+				},
+			)
+
+		case errors.Is(err, ErrOrderValidation):
+			writeJSON(
+				w,
+				http.StatusBadRequest,
+				map[string]string{
+					"error": err.Error(),
+				},
+			)
+
+		default:
+			writeJSON(
+				w,
+				http.StatusInternalServerError,
+				map[string]string{
+					"error": "internal server error",
+				},
+			)
+		}
+
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) Routes() http.Handler {
+	router := chi.NewRouter()
+
+	router.Post("/", h.Create)
+	router.Get("/", h.ListByUser)
+	router.Get("/{id}", h.GetByID)
+	router.Patch("/{id}/cancel", h.Cancel)
+
+	router.With(
+		auth.RequireRole("admin"),
+	).Patch(
+		"/{id}/status",
+		h.UpdateStatus,
+	)
+
+	return router
 }
