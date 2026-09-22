@@ -1,0 +1,1918 @@
+openapi: 3.1.0
+
+info:
+  title: Food Delivery API
+  version: 1.0.0
+  description: REST API for a food delivery service.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Categories
+  - name: Products
+  - name: Addresses
+  - name: Orders
+  - name: Admin
+
+paths:
+  /api/v1/auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Register a new user
+      description: Creates a new user account with the user role.
+      operationId: registerUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            example:
+              username: john
+              email: john@example.com
+              password: password123
+      responses:
+        "201":
+          description: User successfully registered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Invalid request body or validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: User already exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: user already exists
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: internal server error
+
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Log in
+      description: Authenticates a user and returns a JWT access token.
+      operationId: loginUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            example:
+              email: john@example.com
+              password: password123
+      responses:
+        "200":
+          description: Authentication successful.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          description: Invalid request body or validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid email or password.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: invalid credentials
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: internal server error
+
+  /api/v1/categories:
+    get:
+      tags:
+        - Categories
+      summary: List categories
+      operationId: listCategories
+      security: []
+      responses:
+        "200":
+          description: Category list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: internal server error
+
+    post:
+      tags:
+        - Categories
+      summary: Create a category
+      description: Creates a new category. Requires the admin role.
+      operationId: createCategory
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryRequest"
+            example:
+              name: Pizza
+              slug: pizza
+      responses:
+        "201":
+          description: Category successfully created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "400":
+          description: Invalid request body or category data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalidBody:
+                  value:
+                    error: invalid request body
+                invalidData:
+                  value:
+                    error: invalid category data
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Admin role is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: internal server error
+
+  /api/v1/categories/{id}:
+    parameters:
+      - $ref: "#/components/parameters/CategoryId"
+
+    get:
+      tags:
+        - Categories
+      summary: Get category by ID
+      operationId: getCategoryById
+      security: []
+      responses:
+        "200":
+          description: Category found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "400":
+          description: Invalid category ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: invalid category id
+        "404":
+          description: Category not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: category not found
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: internal server error
+
+    put:
+      tags:
+        - Categories
+      summary: Update a category
+      description: Replaces category name and slug. Requires the admin role.
+      operationId: updateCategory
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCategoryRequest"
+            example:
+              name: Italian Pizza
+              slug: italian-pizza
+      responses:
+        "204":
+          description: Category successfully updated.
+        "400":
+          description: Invalid category ID, request body, or category data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Admin role is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Category not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: category not found
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags:
+        - Categories
+      summary: Delete a category
+      description: Deletes a category. Requires the admin role.
+      operationId: deleteCategory
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Category successfully deleted.
+        "400":
+          description: Invalid category ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: invalid category id
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Admin role is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Category not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: category not found
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/products:
+    get:
+      tags:
+        - Products
+      summary: List products
+      operationId: listProducts
+      security: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: category_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          description: Values less than or equal to zero are replaced with the default limit.
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Product list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+        "400":
+          description: Invalid filter parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      tags:
+        - Products
+      summary: Create a product
+      description: Creates a product. Requires the admin role.
+      operationId: createProduct
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductRequest"
+      responses:
+        "201":
+          description: Product successfully created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          description: Invalid request body or product data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Admin role is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/products/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ProductId"
+
+    get:
+      tags:
+        - Products
+      summary: Get product by ID
+      operationId: getProductById
+      security: []
+      responses:
+        "200":
+          description: Product found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          description: Invalid product ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Product not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: product not found
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    put:
+      tags:
+        - Products
+      summary: Update a product
+      description: Replaces editable product data. Requires the admin role.
+      operationId: updateProduct
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductRequest"
+      responses:
+        "200":
+          description: Product successfully updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          description: Invalid product ID, request body, or product data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Admin role is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Product not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags:
+        - Products
+      summary: Deactivate a product
+      description: Soft-deactivates a product instead of physically deleting it. Requires the admin role.
+      operationId: deactivateProduct
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Product successfully deactivated.
+        "400":
+          description: Invalid product ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Admin role is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Product not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+
+  /api/v1/addresses:
+    post:
+      tags:
+        - Addresses
+      summary: Create an address
+      description: Creates a saved delivery address for the authenticated user.
+      operationId: createAddress
+      security:
+        - BearerAuth: []
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAddressRequest"
+            example:
+              label: Home
+              city: Amsterdam
+              street: Damrak
+              house_number: "10"
+              apartment_number: "42"
+              entrance: "2"
+              floor: "5"
+              comment: Call before delivery
+
+      responses:
+        "201":
+          description: Address successfully created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Address"
+
+        "400":
+          description: Invalid request body or address data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: unauthorized
+
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    get:
+      tags:
+        - Addresses
+      summary: List user addresses
+      description: Returns saved addresses belonging to the authenticated user.
+      operationId: listUserAddresses
+      security:
+        - BearerAuth: []
+
+      responses:
+        "200":
+          description: Address list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Address"
+
+        "400":
+          description: Invalid address data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/addresses/{id}:
+    parameters:
+      - $ref: "#/components/parameters/AddressId"
+
+    get:
+      tags:
+        - Addresses
+      summary: Get address by ID
+      description: Returns an address belonging to the authenticated user.
+      operationId: getAddressById
+      security:
+        - BearerAuth: []
+
+      responses:
+        "200":
+          description: Address found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Address"
+
+        "400":
+          description: Invalid address ID or address data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "404":
+          description: Address not found or does not belong to the authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: address not found
+
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      tags:
+        - Addresses
+      summary: Update an address
+      description: Partially updates an address belonging to the authenticated user.
+      operationId: updateAddress
+      security:
+        - BearerAuth: []
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAddressRequest"
+            example:
+              label: Office
+              comment: Leave at reception
+
+      responses:
+        "200":
+          description: Address successfully updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Address"
+
+        "400":
+          description: Invalid address ID, request body, or address data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "404":
+          description: Address not found or does not belong to the authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: address not found
+
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags:
+        - Addresses
+      summary: Delete an address
+      description: Deletes an address belonging to the authenticated user.
+      operationId: deleteAddress
+      security:
+        - BearerAuth: []
+
+      responses:
+        "204":
+          description: Address successfully deleted.
+
+        "400":
+          description: Invalid address ID or address data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "404":
+          description: Address not found or does not belong to the authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: address not found
+
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      operationId: healthCheck
+      security: []
+      responses:
+        "200":
+          description: API is healthy.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: OK
+
+  /api/v1/orders:
+    post:
+      tags:
+        - Orders
+      summary: Create an order
+      description: Creates an order for the authenticated user using one of their saved delivery addresses.
+      operationId: createOrder
+      security:
+        - BearerAuth: []
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+            example:
+              address_id: 1
+              items:
+                - product_id: 10
+                  quantity: 2
+                - product_id: 15
+                  quantity: 1
+
+      responses:
+        "201":
+          description: Order successfully created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+        "400":
+          description: Invalid request body, address, product, or order data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: unauthorized
+
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    get:
+      tags:
+        - Orders
+      summary: List user orders
+      description: Returns orders belonging to the authenticated user.
+      operationId: listUserOrders
+      security:
+        - BearerAuth: []
+
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          description: Values less than or equal to zero are replaced with the default limit.
+
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+
+      responses:
+        "200":
+          description: User order list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+
+        "400":
+          description: Invalid pagination parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/orders/{id}:
+    parameters:
+      - $ref: "#/components/parameters/OrderId"
+
+    get:
+      tags:
+        - Orders
+      summary: Get user order by ID
+      description: Returns an order only if it belongs to the authenticated user.
+      operationId: getUserOrderById
+      security:
+        - BearerAuth: []
+
+      responses:
+        "200":
+          description: Order found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+        "400":
+          description: Invalid order ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: invalid order id
+
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "404":
+          description: Order not found or does not belong to the authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: order not found
+
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/orders/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/OrderId"
+
+    patch:
+      tags:
+        - Orders
+      summary: Cancel an order
+      description: Cancels an order belonging to the authenticated user when its current status permits cancellation.
+      operationId: cancelOrder
+      security:
+        - BearerAuth: []
+
+      responses:
+        "204":
+          description: Order successfully cancelled.
+
+        "400":
+          description: Invalid order ID or the order cannot be cancelled in its current state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "404":
+          description: Order not found or does not belong to the authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: order not found
+
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/orders:
+    get:
+      tags:
+        - Admin
+      summary: List all orders
+      description: Returns a filtered and paginated order list. Requires the admin role.
+      operationId: adminListOrders
+      security:
+        - BearerAuth: []
+
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/OrderStatus"
+
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+
+        - name: from
+          in: query
+          required: false
+          description: Start date in YYYY-MM-DD format using the configured application timezone.
+          schema:
+            type: string
+            format: date
+          example: "2026-09-01"
+
+        - name: to
+          in: query
+          required: false
+          description: End date in YYYY-MM-DD format using the configured application timezone. The full day is included.
+          schema:
+            type: string
+            format: date
+          example: "2026-09-30"
+
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+
+      responses:
+        "200":
+          description: Filtered order list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderList"
+
+        "400":
+          description: Invalid filter or pagination parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "403":
+          description: Admin role is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/orders/{id}:
+    parameters:
+      - $ref: "#/components/parameters/OrderId"
+
+    get:
+      tags:
+        - Admin
+      summary: Get order by ID
+      description: Returns any order by ID. Requires the admin role.
+      operationId: adminGetOrderById
+      security:
+        - BearerAuth: []
+
+      responses:
+        "200":
+          description: Order found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+        "400":
+          description: Invalid order ID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "403":
+          description: Admin role is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "404":
+          description: Order not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: order not found
+
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/orders/{id}/status:
+    parameters:
+      - $ref: "#/components/parameters/OrderId"
+
+    patch:
+      tags:
+        - Admin
+      summary: Update order status
+      description: Changes an order status according to the allowed lifecycle transitions. Requires the admin role.
+      operationId: adminUpdateOrderStatus
+      security:
+        - BearerAuth: []
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrderStatusRequest"
+            example:
+              status: confirmed
+
+      responses:
+        "204":
+          description: Order status successfully updated.
+
+        "400":
+          description: Invalid order ID, request body, status, or status transition.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "401":
+          description: Authentication is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "403":
+          description: Admin role is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "404":
+          description: Order not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: order not found
+
+        "500":
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    CategoryId:
+      name: id
+      in: path
+      required: true
+      description: Category identifier.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 1
+
+    ProductId:
+      name: id
+      in: path
+      required: true
+      description: Product identifier.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 1
+
+
+    AddressId:
+      name: id
+      in: path
+      required: true
+      description: Address identifier.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 1
+
+    OrderId:
+      name: id
+      in: path
+      required: true
+      description: Order identifier.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 1
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+
+    RegisterRequest:
+      type: object
+      required:
+        - username
+        - email
+        - password
+      properties:
+        username:
+          type: string
+          description: User name. Leading and trailing whitespace is removed.
+          example: john
+        email:
+          type: string
+          description: User email. Leading and trailing whitespace is removed.
+          example: john@example.com
+        password:
+          type: string
+          minLength: 8
+          writeOnly: true
+          description: Password must contain at least 8 characters.
+          example: password123
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          description: User email.
+          example: john@example.com
+        password:
+          type: string
+          writeOnly: true
+          example: password123
+
+    UserRole:
+      type: string
+      enum:
+        - user
+        - admin
+      example: user
+
+    User:
+      type: object
+      required:
+        - id
+        - username
+        - email
+        - role
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        username:
+          type: string
+          example: john
+        email:
+          type: string
+          example: john@example.com
+        role:
+          $ref: "#/components/schemas/UserRole"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    LoginResponse:
+      type: object
+      required:
+        - access_token
+        - user
+      properties:
+        access_token:
+          type: string
+          description: JWT access token.
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        user:
+          $ref: "#/components/schemas/User"
+
+    Category:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Pizza
+        slug:
+          type: string
+          example: pizza
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateCategoryRequest:
+      type: object
+      required:
+        - name
+        - slug
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Category name. Leading and trailing whitespace is ignored.
+          example: Pizza
+        slug:
+          type: string
+          minLength: 1
+          description: Category slug. Leading and trailing whitespace is ignored.
+          example: pizza
+
+    UpdateCategoryRequest:
+      type: object
+      required:
+        - name
+        - slug
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: Italian Pizza
+        slug:
+          type: string
+          minLength: 1
+          example: italian-pizza
+
+    ProductImageRequest:
+      type: object
+      properties:
+        url:
+          type: string
+        sort_order:
+          type: integer
+        is_primary:
+          type: boolean
+
+    ProductImage:
+      type: object
+      required:
+        - id
+        - product_id
+        - url
+        - sort_order
+        - is_primary
+        - created_at
+      properties:
+        id:
+          type: integer
+          format: int64
+        product_id:
+          type: integer
+          format: int64
+        url:
+          type: string
+        sort_order:
+          type: integer
+        is_primary:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    CreateProductRequest:
+      type: object
+      required:
+        - name
+        - price
+        - weight
+        - category_id
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: Margherita Pizza
+        description:
+          type:
+            - string
+            - "null"
+          example: Tomato sauce, mozzarella and basil
+        price:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Price in the smallest currency unit.
+          example: 74900
+        weight:
+          type: integer
+          minimum: 1
+          example: 500
+        category_id:
+          type: integer
+          format: int64
+          minimum: 1
+        is_active:
+          type: boolean
+          default: true
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductImageRequest"
+
+    UpdateProductRequest:
+      type: object
+      required:
+        - name
+        - price
+        - weight
+        - category_id
+        - is_active
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type:
+            - string
+            - "null"
+        price:
+          type: integer
+          format: int64
+          minimum: 1
+        weight:
+          type: integer
+          minimum: 1
+        category_id:
+          type: integer
+          format: int64
+          minimum: 1
+        is_active:
+          type: boolean
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductImageRequest"
+
+    Product:
+      type: object
+      required:
+        - id
+        - name
+        - price
+        - weight
+        - category_id
+        - is_active
+        - images
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type:
+            - string
+            - "null"
+        price:
+          type: integer
+          format: int64
+        weight:
+          type: integer
+        category_id:
+          type: integer
+          format: int64
+        is_active:
+          type: boolean
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductImage"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateAddressRequest:
+      type: object
+      required:
+        - city
+        - street
+        - house_number
+      properties:
+        label:
+          type:
+            - string
+            - "null"
+          example: Home
+        city:
+          type: string
+          minLength: 1
+          example: Amsterdam
+        street:
+          type: string
+          minLength: 1
+          example: Damrak
+        house_number:
+          type: string
+          minLength: 1
+          example: "10"
+        apartment_number:
+          type:
+            - string
+            - "null"
+          example: "42"
+        entrance:
+          type:
+            - string
+            - "null"
+          example: "2"
+        floor:
+          type:
+            - string
+            - "null"
+          example: "5"
+        comment:
+          type:
+            - string
+            - "null"
+          example: Call before delivery
+
+    UpdateAddressRequest:
+      type: object
+      properties:
+        label:
+          type:
+            - string
+            - "null"
+        city:
+          type:
+            - string
+            - "null"
+          minLength: 1
+        street:
+          type:
+            - string
+            - "null"
+          minLength: 1
+        house_number:
+          type:
+            - string
+            - "null"
+          minLength: 1
+        apartment_number:
+          type:
+            - string
+            - "null"
+        entrance:
+          type:
+            - string
+            - "null"
+        floor:
+          type:
+            - string
+            - "null"
+        comment:
+          type:
+            - string
+            - "null"
+
+    Address:
+      type: object
+      required:
+        - id
+        - user_id
+        - city
+        - street
+        - house_number
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        user_id:
+          type: integer
+          format: int64
+          example: 5
+        label:
+          type:
+            - string
+            - "null"
+          example: Home
+        city:
+          type: string
+          example: Amsterdam
+        street:
+          type: string
+          example: Damrak
+        house_number:
+          type: string
+          example: "10"
+        apartment_number:
+          type:
+            - string
+            - "null"
+          example: "42"
+        entrance:
+          type:
+            - string
+            - "null"
+        floor:
+          type:
+            - string
+            - "null"
+        comment:
+          type:
+            - string
+            - "null"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    OrderStatus:
+      type: string
+      enum:
+        - new
+        - confirmed
+        - cooking
+        - ready
+        - delivering
+        - completed
+        - cancelled
+      example: new
+
+    CreateOrderItem:
+      type: object
+      required:
+        - product_id
+        - quantity
+      properties:
+        product_id:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 10
+        quantity:
+          type: integer
+          minimum: 1
+          example: 2
+
+    CreateOrderRequest:
+      type: object
+      required:
+        - address_id
+        - items
+      properties:
+        address_id:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 1
+        items:
+          type: array
+          minItems: 1
+          description: Product IDs must be unique within the order.
+          items:
+            $ref: "#/components/schemas/CreateOrderItem"
+
+    UpdateOrderStatusRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+
+    OrderItem:
+      type: object
+      required:
+        - id
+        - order_id
+        - product_id
+        - name_snapshot
+        - price_snapshot
+        - quantity
+        - created_at
+      properties:
+        id:
+          type: integer
+          format: int64
+        order_id:
+          type: integer
+          format: int64
+        product_id:
+          type: integer
+          format: int64
+        name_snapshot:
+          type: string
+        price_snapshot:
+          type: integer
+          format: int64
+        quantity:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+
+    Order:
+      type: object
+      required:
+        - id
+        - user_id
+        - status
+        - total_price
+        - delivery_address
+        - items
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        user_id:
+          type: integer
+          format: int64
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        total_price:
+          type: integer
+          format: int64
+        delivery_address:
+          type: string
+          description: Delivery address snapshot captured when the order was created.
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItem"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    OrderList:
+      type: object
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Order"
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        offset:
+          type: integer
+          minimum: 0
+

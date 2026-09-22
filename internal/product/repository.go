@@ -434,8 +434,6 @@ func (r *Repository) Update(ctx context.Context, product *Product) (*Product, er
 	return product, nil
 }
 
-
-
 func (r *Repository) Deactivate(ctx context.Context, id int64) error {
 	var productID int64
 

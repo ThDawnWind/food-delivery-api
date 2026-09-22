@@ -972,4 +972,3 @@ func TestHandler_List_ValidationError(t *testing.T) {
 		)
 	}
 }
-

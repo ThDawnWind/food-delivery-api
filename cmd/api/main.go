@@ -18,6 +18,7 @@ import (
 	"github.com/ThDawnWind/food-delivery-api/internal/order"
 	"github.com/ThDawnWind/food-delivery-api/internal/product"
 	"github.com/ThDawnWind/food-delivery-api/internal/user"
+	"github.com/ThDawnWind/food-delivery-api/openapi"
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
 )
@@ -127,6 +128,9 @@ func main() {
 	router.Get("/health", healthHandler)
 	router.Get("/slow", slowHandler)
 
+	router.Get("/openapi.yaml", openapi.SpecHandler)
+	router.Get("/docs", openapi.DocsHandler)
+
 	router.Route("/api/v1/categories", func(r chi.Router) {
 		r.Get("/", categoryHandler.List)
 		r.Get("/{id}", categoryHandler.GetByID)
@@ -150,7 +154,7 @@ func main() {
 			r.Use(auth.RequireRole("admin"))
 
 			r.Post("/", productHandler.Create)
-			r.Patch("/{id}", productHandler.Update)
+			r.Put("/{id}", productHandler.Update)
 			r.Delete("/{id}", productHandler.Delete)
 		})
 	})
