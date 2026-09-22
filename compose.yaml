@@ -13,14 +13,67 @@ services:
 
     volumes:
       - postgres-data:/var/lib/postgresql
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U food_delivery -d food_delivery"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    image: food-delivery-api:local
+    container_name: food-delivery-migrate
+
+    env_file:
+      - .env
+
+    environment:
+      DATABASE_URL: postgres://food_delivery:food_delivery@postgres:5432/food_delivery?sslmode=disable
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    command: ["./migrate", "up"]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    image: food-delivery-api:local
+    container_name: food-delivery-api
+
+    env_file:
+      - .env
+
+    environment:
+      DATABASE_URL: postgres://food_delivery:food_delivery@postgres:5432/food_delivery?sslmode=disable
+      HTTP_PORT: 8080
+
+    ports:
+      - "8080:8080"
+
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   postgres-test:
     image: postgres:18.6-alpine
     container_name: food-delivery-postgres-test
-    profiles: ["test"]
+
+    profiles:
+      - test
+
     environment:
       POSTGRES_DB: food_delivery_test
       POSTGRES_USER: food_delivery
       POSTGRES_PASSWORD: food_delivery
+
     ports:
       - "55432:5432"
 
