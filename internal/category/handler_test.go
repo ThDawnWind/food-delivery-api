@@ -48,6 +48,30 @@ func (f *fakeService) Delete(ctx context.Context, id int64) error {
 	return f.err
 }
 
+func assertErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, expectedStatus int, expectedMessage string) {
+	t.Helper()
+
+	if rec.Code != expectedStatus {
+		t.Fatalf("expected status %d, got %d", expectedStatus, rec.Code)
+	}
+
+	if contentType := rec.Header().Get("Content-Type"); contentType != "application/json" {
+		t.Fatalf("expected Content-Type %q, got %q", "application/json", contentType)
+	}
+
+	var response struct {
+		Error string `json:"error"`
+	}
+
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if response.Error != expectedMessage {
+		t.Fatalf("expected error %q, got %q", expectedMessage, response.Error)
+	}
+}
+
 func TestHandler_List(t *testing.T) {
 	service := &fakeService{
 		categories: []Category{
@@ -130,11 +154,8 @@ func TestHandler_List(t *testing.T) {
 }
 
 func TestHandler_List_ServiceError(t *testing.T) {
-	expectedErr := errors.New("service failure")
-	expectedBody := "internal server error\n"
-
 	service := &fakeService{
-		err: expectedErr,
+		err: errors.New("service failure"),
 	}
 
 	handler := NewHandler(service)
@@ -149,23 +170,8 @@ func TestHandler_List_ServiceError(t *testing.T) {
 
 	handler.List(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf(
-			"expected status %d, got %d",
-			http.StatusInternalServerError,
-			rec.Code,
-		)
-	}
-
-	if rec.Body.String() != expectedBody {
-		t.Errorf(
-			"expected body %q, got %q",
-			expectedBody,
-			rec.Body.String(),
-		)
-	}
+	assertErrorResponse(t, rec, http.StatusInternalServerError, "internal server error")
 }
-
 func TestHandler_GetByID(t *testing.T) {
 	service := &fakeService{
 		category: &Category{
@@ -247,25 +253,8 @@ func TestHandler_GetByID_InvalidID(t *testing.T) {
 
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf(
-			"expected status %d, got %d",
-			http.StatusBadRequest,
-			rec.Code,
-		)
-	}
-
-	expectedBody := "invalid category id\n"
-
-	if rec.Body.String() != expectedBody {
-		t.Errorf(
-			"expected body %q, got %q",
-			expectedBody,
-			rec.Body.String(),
-		)
-	}
+	assertErrorResponse(t, rec, http.StatusBadRequest, "invalid category id")
 }
-
 func TestHandler_GetByID_NotFound(t *testing.T) {
 	service := &fakeService{
 		err: ErrCategoryNotFound,
@@ -286,25 +275,8 @@ func TestHandler_GetByID_NotFound(t *testing.T) {
 
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf(
-			"expected status %d, got %d",
-			http.StatusNotFound,
-			rec.Code,
-		)
-	}
-
-	expectedBody := "category not found\n"
-
-	if rec.Body.String() != expectedBody {
-		t.Errorf(
-			"expected body %q, got %q",
-			expectedBody,
-			rec.Body.String(),
-		)
-	}
+	assertErrorResponse(t, rec, http.StatusNotFound, "category not found")
 }
-
 func TestHandler_GetByID_ServiceError(t *testing.T) {
 	service := &fakeService{
 		err: errors.New("service failure"),
@@ -325,25 +297,8 @@ func TestHandler_GetByID_ServiceError(t *testing.T) {
 
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf(
-			"expected status %d, got %d",
-			http.StatusInternalServerError,
-			rec.Code,
-		)
-	}
-
-	expectedBody := "internal server error\n"
-
-	if rec.Body.String() != expectedBody {
-		t.Errorf(
-			"expected body %q, got %q",
-			expectedBody,
-			rec.Body.String(),
-		)
-	}
+	assertErrorResponse(t, rec, http.StatusInternalServerError, "internal server error")
 }
-
 func TestHandler_Create(t *testing.T) {
 	service := &fakeService{
 		category: &Category{
@@ -455,25 +410,8 @@ func TestHandler_Create_InvalidJSON(t *testing.T) {
 
 	handler.Create(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf(
-			"expected status %d, got %d",
-			http.StatusBadRequest,
-			rec.Code,
-		)
-	}
-
-	expectedBody := "invalid request body\n"
-
-	if rec.Body.String() != expectedBody {
-		t.Errorf(
-			"expected body %q, got %q",
-			expectedBody,
-			rec.Body.String(),
-		)
-	}
+	assertErrorResponse(t, rec, http.StatusBadRequest, "invalid request body")
 }
-
 func TestHandler_Create_ValidationError(t *testing.T) {
 	service := &fakeService{
 		err: ErrCategoryValidation,
@@ -496,25 +434,8 @@ func TestHandler_Create_ValidationError(t *testing.T) {
 
 	handler.Create(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf(
-			"expected status %d, got %d",
-			http.StatusBadRequest,
-			rec.Code,
-		)
-	}
-
-	expectedBody := "invalid category data\n"
-
-	if rec.Body.String() != expectedBody {
-		t.Errorf(
-			"expected body %q, got %q",
-			expectedBody,
-			rec.Body.String(),
-		)
-	}
+	assertErrorResponse(t, rec, http.StatusBadRequest, "invalid category data")
 }
-
 func TestHandler_Create_ServiceError(t *testing.T) {
 	service := &fakeService{
 		err: errors.New("service failure"),
@@ -537,25 +458,8 @@ func TestHandler_Create_ServiceError(t *testing.T) {
 
 	handler.Create(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf(
-			"expected status %d, got %d",
-			http.StatusInternalServerError,
-			rec.Code,
-		)
-	}
-
-	expectedBody := "internal server error\n"
-
-	if rec.Body.String() != expectedBody {
-		t.Errorf(
-			"expected body %q, got %q",
-			expectedBody,
-			rec.Body.String(),
-		)
-	}
+	assertErrorResponse(t, rec, http.StatusInternalServerError, "internal server error")
 }
-
 func TestHandler_Update(t *testing.T) {
 	service := &fakeService{}
 	handler := NewHandler(service)
@@ -637,25 +541,8 @@ func TestHandler_Update_InvalidID(t *testing.T) {
 
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf(
-			"expected status %d, got %d",
-			http.StatusBadRequest,
-			rec.Code,
-		)
-	}
-
-	expectedBody := "invalid category id\n"
-
-	if rec.Body.String() != expectedBody {
-		t.Errorf(
-			"expected body %q, got %q",
-			expectedBody,
-			rec.Body.String(),
-		)
-	}
+	assertErrorResponse(t, rec, http.StatusBadRequest, "invalid category id")
 }
-
 func TestHandler_Update_InvalidJSON(t *testing.T) {
 	service := &fakeService{}
 	handler := NewHandler(service)
@@ -678,25 +565,8 @@ func TestHandler_Update_InvalidJSON(t *testing.T) {
 
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf(
-			"expected status %d, got %d",
-			http.StatusBadRequest,
-			rec.Code,
-		)
-	}
-
-	expectedBody := "invalid request body\n"
-
-	if rec.Body.String() != expectedBody {
-		t.Errorf(
-			"expected body %q, got %q",
-			expectedBody,
-			rec.Body.String(),
-		)
-	}
+	assertErrorResponse(t, rec, http.StatusBadRequest, "invalid request body")
 }
-
 func TestHandler_Update_NotFound(t *testing.T) {
 	service := &fakeService{
 		err: ErrCategoryNotFound,
@@ -722,15 +592,8 @@ func TestHandler_Update_NotFound(t *testing.T) {
 
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf(
-			"expected status %d, got %d",
-			http.StatusNotFound,
-			rec.Code,
-		)
-	}
+	assertErrorResponse(t, rec, http.StatusNotFound, "category not found")
 }
-
 func TestHandler_Update_ServiceError(t *testing.T) {
 	service := &fakeService{
 		err: errors.New("service failure"),
@@ -756,15 +619,8 @@ func TestHandler_Update_ServiceError(t *testing.T) {
 
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf(
-			"expected status %d, got %d",
-			http.StatusInternalServerError,
-			rec.Code,
-		)
-	}
+	assertErrorResponse(t, rec, http.StatusInternalServerError, "internal server error")
 }
-
 func TestHandler_Delete(t *testing.T) {
 	service := &fakeService{}
 	handler := NewHandler(service)
@@ -808,25 +664,8 @@ func TestHandler_Delete_InvalidID(t *testing.T) {
 
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf(
-			"expected status %d, got %d",
-			http.StatusBadRequest,
-			rec.Code,
-		)
-	}
-
-	expectedBody := "invalid category id\n"
-
-	if rec.Body.String() != expectedBody {
-		t.Errorf(
-			"expected body %q, got %q",
-			expectedBody,
-			rec.Body.String(),
-		)
-	}
+	assertErrorResponse(t, rec, http.StatusBadRequest, "invalid category id")
 }
-
 func TestHandler_Delete_NotFound(t *testing.T) {
 	service := &fakeService{
 		err: ErrCategoryNotFound,
@@ -847,15 +686,8 @@ func TestHandler_Delete_NotFound(t *testing.T) {
 
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf(
-			"expected status %d, got %d",
-			http.StatusNotFound,
-			rec.Code,
-		)
-	}
+	assertErrorResponse(t, rec, http.StatusNotFound, "category not found")
 }
-
 func TestHandler_Delete_ServiceError(t *testing.T) {
 	service := &fakeService{
 		err: errors.New("service failure"),
@@ -876,11 +708,5 @@ func TestHandler_Delete_ServiceError(t *testing.T) {
 
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf(
-			"expected status %d, got %d",
-			http.StatusInternalServerError,
-			rec.Code,
-		)
-	}
+	assertErrorResponse(t, rec, http.StatusInternalServerError, "internal server error")
 }

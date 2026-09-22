@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/ThDawnWind/food-delivery-api/internal/auth"
+	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -68,10 +69,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 	)
 	if !ok || userID <= 0 {
-		http.Error(
+		httpx.WriteError(
 			w,
-			`{"error":"unauthorized"}`,
 			http.StatusUnauthorized,
+			"unauthorized",
 		)
 		return
 	}
@@ -81,10 +82,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(
 		&request,
 	); err != nil {
-		http.Error(
+		httpx.WriteError(
 			w,
-			`{"error":"invalid request body"}`,
 			http.StatusBadRequest,
+			"invalid request body",
 		)
 		return
 	}
@@ -108,33 +109,27 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			err,
 			ErrAddressValidation,
 		) {
-			http.Error(
+			httpx.WriteError(
 				w,
-				`{"error":"invalid address data"}`,
 				http.StatusBadRequest,
+				"invalid address data",
 			)
 			return
 		}
 
-		http.Error(
+		httpx.WriteError(
 			w,
-			`{"error":"internal server error"}`,
 			http.StatusInternalServerError,
+			"internal server error",
 		)
 		return
 	}
 
-	w.Header().Set(
-		"Content-Type",
-		"application/json",
-	)
-	w.WriteHeader(http.StatusCreated)
-
-	if err := json.NewEncoder(w).Encode(
+	httpx.WriteJSON(
+		w,
+		http.StatusCreated,
 		address,
-	); err != nil {
-		return
-	}
+	)
 }
 
 func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
@@ -142,10 +137,10 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 	)
 	if !ok || userID <= 0 {
-		http.Error(
+		httpx.WriteError(
 			w,
-			`{"error":"unauthorized"}`,
 			http.StatusUnauthorized,
+			"unauthorized",
 		)
 		return
 	}
@@ -159,32 +154,27 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 			err,
 			ErrAddressValidation,
 		) {
-			http.Error(
+			httpx.WriteError(
 				w,
-				`{"error":"invalid address data"}`,
 				http.StatusBadRequest,
+				"invalid address data",
 			)
 			return
 		}
 
-		http.Error(
+		httpx.WriteError(
 			w,
-			`{"error":"internal server error"}`,
 			http.StatusInternalServerError,
+			"internal server error",
 		)
 		return
 	}
 
-	w.Header().Set(
-		"Content-Type",
-		"application/json",
-	)
-
-	if err := json.NewEncoder(w).Encode(
+	httpx.WriteJSON(
+		w,
+		http.StatusOK,
 		addresses,
-	); err != nil {
-		return
-	}
+	)
 }
 
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
@@ -194,10 +184,10 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 		64,
 	)
 	if err != nil || addressID <= 0 {
-		http.Error(
+		httpx.WriteError(
 			w,
-			`{"error":"invalid address id"}`,
 			http.StatusBadRequest,
+			"invalid address id",
 		)
 		return
 	}
@@ -206,10 +196,10 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 	)
 	if !ok || userID <= 0 {
-		http.Error(
+		httpx.WriteError(
 			w,
-			`{"error":"unauthorized"}`,
 			http.StatusUnauthorized,
+			"unauthorized",
 		)
 		return
 	}
@@ -225,43 +215,38 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 			err,
 			ErrAddressValidation,
 		):
-			http.Error(
+			httpx.WriteError(
 				w,
-				`{"error":"invalid address data"}`,
 				http.StatusBadRequest,
+				"invalid address data",
 			)
 
 		case errors.Is(
 			err,
 			ErrAddressNotFound,
 		):
-			http.Error(
+			httpx.WriteError(
 				w,
-				`{"error":"address not found"}`,
 				http.StatusNotFound,
+				"address not found",
 			)
 
 		default:
-			http.Error(
+			httpx.WriteError(
 				w,
-				`{"error":"internal server error"}`,
 				http.StatusInternalServerError,
+				"internal server error",
 			)
 		}
 
 		return
 	}
 
-	w.Header().Set(
-		"Content-Type",
-		"application/json",
-	)
-
-	if err := json.NewEncoder(w).Encode(
+	httpx.WriteJSON(
+		w,
+		http.StatusOK,
 		address,
-	); err != nil {
-		return
-	}
+	)
 }
 
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
@@ -271,10 +256,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		64,
 	)
 	if err != nil || addressID <= 0 {
-		http.Error(
+		httpx.WriteError(
 			w,
-			`{"error":"invalid address id"}`,
 			http.StatusBadRequest,
+			"invalid address id",
 		)
 		return
 	}
@@ -283,10 +268,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 	)
 	if !ok || userID <= 0 {
-		http.Error(
+		httpx.WriteError(
 			w,
-			`{"error":"unauthorized"}`,
 			http.StatusUnauthorized,
+			"unauthorized",
 		)
 		return
 	}
@@ -296,10 +281,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(
 		&request,
 	); err != nil {
-		http.Error(
+		httpx.WriteError(
 			w,
-			`{"error":"invalid request body"}`,
 			http.StatusBadRequest,
+			"invalid request body",
 		)
 		return
 	}
@@ -322,40 +307,35 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrAddressValidation):
-			http.Error(
+			httpx.WriteError(
 				w,
-				`{"error":"invalid address data"}`,
 				http.StatusBadRequest,
+				"invalid address data",
 			)
 
 		case errors.Is(err, ErrAddressNotFound):
-			http.Error(
+			httpx.WriteError(
 				w,
-				`{"error":"address not found"}`,
 				http.StatusNotFound,
+				"address not found",
 			)
 
 		default:
-			http.Error(
+			httpx.WriteError(
 				w,
-				`{"error":"internal server error"}`,
 				http.StatusInternalServerError,
+				"internal server error",
 			)
 		}
 
 		return
 	}
 
-	w.Header().Set(
-		"Content-Type",
-		"application/json",
-	)
-
-	if err := json.NewEncoder(w).Encode(
+	httpx.WriteJSON(
+		w,
+		http.StatusOK,
 		address,
-	); err != nil {
-		return
-	}
+	)
 }
 
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -365,10 +345,10 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		64,
 	)
 	if err != nil || addressID <= 0 {
-		http.Error(
+		httpx.WriteError(
 			w,
-			`{"error":"invalid address id"}`,
 			http.StatusBadRequest,
+			"invalid address id",
 		)
 		return
 	}
@@ -377,10 +357,10 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 	)
 	if !ok || userID <= 0 {
-		http.Error(
+		httpx.WriteError(
 			w,
-			`{"error":"unauthorized"}`,
 			http.StatusUnauthorized,
+			"unauthorized",
 		)
 		return
 	}
@@ -393,24 +373,24 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrAddressValidation):
-			http.Error(
+			httpx.WriteError(
 				w,
-				`{"error":"invalid address data"}`,
 				http.StatusBadRequest,
+				"invalid address data",
 			)
 
 		case errors.Is(err, ErrAddressNotFound):
-			http.Error(
+			httpx.WriteError(
 				w,
-				`{"error":"address not found"}`,
 				http.StatusNotFound,
+				"address not found",
 			)
 
 		default:
-			http.Error(
+			httpx.WriteError(
 				w,
-				`{"error":"internal server error"}`,
 				http.StatusInternalServerError,
+				"internal server error",
 			)
 		}
 

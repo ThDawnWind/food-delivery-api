@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"strings"
+
+	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
 )
 
 type contextKey string
@@ -26,25 +28,24 @@ func Middleware(tokens TokenParser) func(http.Handler) http.Handler {
 				)
 
 				if authHeader == "" {
-					writeJSON(
+					httpx.WriteError(
 						w,
 						http.StatusUnauthorized,
-						map[string]string{
-							"error": "authorization header is required",
-						},
+						"authorization header is required",
 					)
 					return
 				}
 
 				const prefix = "Bearer "
 
-				if !strings.HasPrefix(authHeader, prefix) {
-					writeJSON(
+				if !strings.HasPrefix(
+					authHeader,
+					prefix,
+				) {
+					httpx.WriteError(
 						w,
 						http.StatusUnauthorized,
-						map[string]string{
-							"error": "invalid authorization header",
-						},
+						"invalid authorization header",
 					)
 					return
 				}
@@ -57,12 +58,10 @@ func Middleware(tokens TokenParser) func(http.Handler) http.Handler {
 				)
 
 				if tokenString == "" {
-					writeJSON(
+					httpx.WriteError(
 						w,
 						http.StatusUnauthorized,
-						map[string]string{
-							"error": "invalid authorization token",
-						},
+						"invalid authorization token",
 					)
 					return
 				}
@@ -71,12 +70,10 @@ func Middleware(tokens TokenParser) func(http.Handler) http.Handler {
 					tokenString,
 				)
 				if err != nil {
-					writeJSON(
+					httpx.WriteError(
 						w,
 						http.StatusUnauthorized,
-						map[string]string{
-							"error": "invalid authorization token",
-						},
+						"invalid authorization token",
 					)
 					return
 				}
@@ -120,30 +117,34 @@ func RoleFromContext(ctx context.Context) (string, bool) {
 
 func RequireRole(requiredRole string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(
-			w http.ResponseWriter,
-			r *http.Request,
-		) {
-			role, ok := RoleFromContext(r.Context())
-			if !ok {
-				http.Error(
-					w,
-					`{"error":"unauthorized"}`,
-					http.StatusUnauthorized,
+		return http.HandlerFunc(
+			func(
+				w http.ResponseWriter,
+				r *http.Request,
+			) {
+				role, ok := RoleFromContext(
+					r.Context(),
 				)
-				return
-			}
+				if !ok {
+					httpx.WriteError(
+						w,
+						http.StatusUnauthorized,
+						"unauthorized",
+					)
+					return
+				}
 
-			if role != requiredRole {
-				http.Error(
-					w,
-					`{"error":"forbidden"}`,
-					http.StatusForbidden,
-				)
-				return
-			}
+				if role != requiredRole {
+					httpx.WriteError(
+						w,
+						http.StatusForbidden,
+						"forbidden",
+					)
+					return
+				}
 
-			next.ServeHTTP(w, r)
-		})
+				next.ServeHTTP(w, r)
+			},
+		)
 	}
 }

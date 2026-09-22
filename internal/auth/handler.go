@@ -6,14 +6,20 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
 	"github.com/ThDawnWind/food-delivery-api/internal/user"
-
 	"github.com/go-chi/chi/v5"
 )
 
 type ServiceInterface interface {
-	Register(ctx context.Context, input *user.RegisterUser) (*user.User, error)
-	Login(ctx context.Context, input *user.LoginUser) (*LoginResult, error)
+	Register(ctx context.Context,
+		input *user.RegisterUser,
+	) (*user.User, error)
+
+	Login(
+		ctx context.Context,
+		input *user.LoginUser,
+	) (*LoginResult, error)
 }
 
 type Handler struct {
@@ -49,13 +55,13 @@ func (h *Handler) Routes() http.Handler {
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(
+	if err := json.NewDecoder(r.Body).Decode(
+		&req,
+	); err != nil {
+		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
-			map[string]string{
-				"error": "invalid request body",
-			},
+			"invalid request body",
 		)
 		return
 	}
@@ -70,38 +76,38 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		switch {
-		case errors.Is(err, user.ErrUserValidation):
-			writeJSON(
+		case errors.Is(
+			err,
+			user.ErrUserValidation,
+		):
+			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
-				map[string]string{
-					"error": err.Error(),
-				},
+				err.Error(),
 			)
 
-		case errors.Is(err, user.ErrUserConflict):
-			writeJSON(
+		case errors.Is(
+			err,
+			user.ErrUserConflict,
+		):
+			httpx.WriteError(
 				w,
 				http.StatusConflict,
-				map[string]string{
-					"error": "user already exists",
-				},
+				"user already exists",
 			)
 
 		default:
-			writeJSON(
+			httpx.WriteError(
 				w,
 				http.StatusInternalServerError,
-				map[string]string{
-					"error": "internal server error",
-				},
+				"internal server error",
 			)
 		}
 
 		return
 	}
 
-	writeJSON(
+	httpx.WriteJSON(
 		w,
 		http.StatusCreated,
 		userData,
@@ -111,13 +117,13 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(
+	if err := json.NewDecoder(r.Body).Decode(
+		&req,
+	); err != nil {
+		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
-			map[string]string{
-				"error": "invalid request body",
-			},
+			"invalid request body",
 		)
 		return
 	}
@@ -131,48 +137,40 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		switch {
-		case errors.Is(err, user.ErrUserValidation):
-			writeJSON(
+		case errors.Is(
+			err,
+			user.ErrUserValidation,
+		):
+			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
-				map[string]string{
-					"error": err.Error(),
-				},
+				err.Error(),
 			)
-		case errors.Is(err, user.ErrInvalidCredentials):
-			writeJSON(
+
+		case errors.Is(
+			err,
+			user.ErrInvalidCredentials,
+		):
+			httpx.WriteError(
 				w,
 				http.StatusUnauthorized,
-				map[string]string{
-					"error": "invalid credentials",
-				},
+				"invalid credentials",
 			)
+
 		default:
-			writeJSON(
+			httpx.WriteError(
 				w,
 				http.StatusInternalServerError,
-				map[string]string{
-					"error": "internal server error",
-				},
+				"internal server error",
 			)
 		}
+
 		return
 	}
 
-	writeJSON(
+	httpx.WriteJSON(
 		w,
 		http.StatusOK,
 		res,
 	)
-}
-
-func writeJSON(w http.ResponseWriter, status int, data any) {
-	w.Header().Set(
-		"Content-Type",
-		"application/json",
-	)
-
-	w.WriteHeader(status)
-
-	_ = json.NewEncoder(w).Encode(data)
 }

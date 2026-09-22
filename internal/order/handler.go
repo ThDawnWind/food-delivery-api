@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ThDawnWind/food-delivery-api/internal/auth"
+	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -62,7 +63,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createOrderRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(
+		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
 			"invalid request body",
@@ -74,7 +75,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 	)
 	if !ok || userID <= 0 {
-		writeError(
+		httpx.WriteError(
 			w,
 			http.StatusUnauthorized,
 			"unauthorized",
@@ -94,7 +95,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, ErrOrderValidation) {
-			writeJSON(
+			httpx.WriteJSON(
 				w,
 				http.StatusBadRequest,
 				map[string]string{
@@ -104,7 +105,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		writeError(
+		httpx.WriteError(
 			w,
 			http.StatusInternalServerError,
 			"internal server error",
@@ -112,7 +113,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(
+	httpx.WriteJSON(
 		w,
 		http.StatusCreated,
 		order,
@@ -124,7 +125,7 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 	id, err := strconv.ParseInt(idParam, 10, 64)
 	if err != nil || id <= 0 {
-		writeError(
+		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
 			"invalid order id",
@@ -136,7 +137,7 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 	)
 	if !ok || userID <= 0 {
-		writeError(
+		httpx.WriteError(
 			w,
 			http.StatusUnauthorized,
 			"unauthorized",
@@ -147,7 +148,7 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	order, err := h.service.GetByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrOrderNotFound) {
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusNotFound,
 				"order not found",
@@ -155,7 +156,7 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		writeError(
+		httpx.WriteError(
 			w,
 			http.StatusInternalServerError,
 			"internal server error",
@@ -164,7 +165,7 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if order.UserID != userID {
-		writeError(
+		httpx.WriteError(
 			w,
 			http.StatusNotFound,
 			"order not found",
@@ -172,7 +173,7 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(
+	httpx.WriteJSON(
 		w,
 		http.StatusOK,
 		order,
@@ -184,7 +185,7 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 	)
 	if !ok || userID <= 0 {
-		writeError(
+		httpx.WriteError(
 			w,
 			http.StatusUnauthorized,
 			"unauthorized",
@@ -197,7 +198,7 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 	if value := r.URL.Query().Get("limit"); value != "" {
 		parrsedlimit, err := strconv.Atoi(value)
 		if err != nil {
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
 				"invalid limit",
@@ -213,7 +214,7 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 	if value := r.URL.Query().Get("offset"); value != "" {
 		parsedOffset, err := strconv.Atoi(value)
 		if err != nil {
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
 				"invalid offset",
@@ -232,7 +233,7 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, ErrOrderValidation) {
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
 				err.Error(),
@@ -240,7 +241,7 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		writeError(
+		httpx.WriteError(
 			w,
 			http.StatusInternalServerError,
 			"internal server error",
@@ -248,7 +249,7 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(
+	httpx.WriteJSON(
 		w,
 		http.StatusOK,
 		orders,
@@ -262,7 +263,7 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		64,
 	)
 	if err != nil || id <= 0 {
-		writeError(
+		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
 			"invalid order id",
@@ -273,7 +274,7 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	var req updateOrderStatusRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(
+		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
 			"invalid request body",
@@ -289,19 +290,19 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrOrderValidation):
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
 				err.Error(),
 			)
 		case errors.Is(err, ErrOrderNotFound):
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusNotFound,
 				"order not found",
 			)
 		default:
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusInternalServerError,
 				"internal server error",
@@ -327,7 +328,7 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 			64,
 		)
 		if err != nil || parsedUserID <= 0 {
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
 				"invalid user_id",
@@ -347,7 +348,7 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 			h.location,
 		)
 		if err != nil {
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
 				"invalid from date",
@@ -367,7 +368,7 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 			h.location,
 		)
 		if err != nil {
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
 				"invalid to date",
@@ -385,7 +386,7 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
 		parsedLimit, err := strconv.Atoi(rawLimit)
 		if err != nil {
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
 				"invalid limit",
@@ -399,7 +400,7 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 	if rawOffset := r.URL.Query().Get("offset"); rawOffset != "" {
 		parsedOffset, err := strconv.Atoi(rawOffset)
 		if err != nil {
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
 				"invalid offset",
@@ -423,7 +424,7 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, ErrOrderValidation) {
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
 				err.Error(),
@@ -431,7 +432,7 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		writeError(
+		httpx.WriteError(
 			w,
 			http.StatusInternalServerError,
 			"nternal server error",
@@ -439,31 +440,10 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(
+	httpx.WriteJSON(
 		w,
 		http.StatusOK,
 		orders,
-	)
-}
-
-func writeJSON(w http.ResponseWriter, status int, data any) {
-	w.Header().Set(
-		"Content-Type",
-		"application/json",
-	)
-
-	w.WriteHeader(status)
-
-	_ = json.NewEncoder(w).Encode(data)
-}
-
-func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(
-		w,
-		status,
-		map[string]string{
-			"error": message,
-		},
 	)
 }
 
@@ -474,7 +454,7 @@ func (h *Handler) AdminGetByID(w http.ResponseWriter, r *http.Request) {
 		64,
 	)
 	if err != nil || id <= 0 {
-		writeError(
+		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
 			"invalid order id",
@@ -488,7 +468,7 @@ func (h *Handler) AdminGetByID(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, ErrOrderNotFound) {
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusNotFound,
 				"order not found",
@@ -496,7 +476,7 @@ func (h *Handler) AdminGetByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		writeError(
+		httpx.WriteError(
 			w,
 			http.StatusInternalServerError,
 			"nternal server error",
@@ -504,7 +484,7 @@ func (h *Handler) AdminGetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(
+	httpx.WriteJSON(
 		w,
 		http.StatusOK,
 		order,
@@ -518,7 +498,7 @@ func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
 		64,
 	)
 	if err != nil || orderID <= 0 {
-		writeError(
+		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
 			"invalid order id",
@@ -530,7 +510,7 @@ func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 	)
 	if !ok {
-		writeError(
+		httpx.WriteError(
 			w,
 			http.StatusUnauthorized,
 			"unauthorized",
@@ -546,21 +526,21 @@ func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrOrderNotFound):
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusNotFound,
 				"order not found",
 			)
 
 		case errors.Is(err, ErrOrderValidation):
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
 				err.Error(),
 			)
 
 		default:
-			writeError(
+			httpx.WriteError(
 				w,
 				http.StatusInternalServerError,
 				"internal server error",

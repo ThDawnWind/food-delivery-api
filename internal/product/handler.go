@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -68,10 +69,10 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 			64,
 		)
 		if err != nil {
-			http.Error(
+			httpx.WriteError(
 				w,
-				"invalid category_id",
 				http.StatusBadRequest,
+				"invalid category_id",
 			)
 			return
 		}
@@ -82,10 +83,10 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	if rawLimit := query.Get("limit"); rawLimit != "" {
 		limit, err := strconv.Atoi(rawLimit)
 		if err != nil {
-			http.Error(
+			httpx.WriteError(
 				w,
-				"invalid limit",
 				http.StatusBadRequest,
+				"invalid limit",
 			)
 			return
 		}
@@ -96,10 +97,10 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	if rawOffset := query.Get("offset"); rawOffset != "" {
 		offset, err := strconv.Atoi(rawOffset)
 		if err != nil {
-			http.Error(
+			httpx.WriteError(
 				w,
-				"invalid offset",
 				http.StatusBadRequest,
+				"invalid offset",
 			)
 			return
 		}
@@ -113,31 +114,27 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, ErrProductValidation) {
-			http.Error(
+			httpx.WriteError(
 				w,
-				err.Error(),
 				http.StatusBadRequest,
+				err.Error(),
 			)
 			return
 		}
-		http.Error(
+
+		httpx.WriteError(
 			w,
-			"internal server error",
 			http.StatusInternalServerError,
+			"internal server error",
 		)
 		return
 	}
 
-	w.Header().Set(
-		"Content-Type",
-		"application/json",
+	httpx.WriteJSON(
+		w,
+		http.StatusOK,
+		products,
 	)
-
-	w.WriteHeader(http.StatusOK)
-
-	if err := json.NewEncoder(w).Encode(products); err != nil {
-		return
-	}
 }
 
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
@@ -147,68 +144,60 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 		64,
 	)
 	if err != nil || id <= 0 {
-		http.Error(
+		httpx.WriteError(
 			w,
-			"invalid product id",
 			http.StatusBadRequest,
+			"invalid product id",
 		)
 		return
 	}
 
-	product, err := h.service.GetByID(
+	productData, err := h.service.GetByID(
 		r.Context(),
 		id,
 	)
 	if err != nil {
-		if errors.Is(err, ErrProductNotFound) {
-			http.Error(
+		switch {
+		case errors.Is(err, ErrProductNotFound):
+			httpx.WriteError(
 				w,
-				"product not found",
 				http.StatusNotFound,
+				"product not found",
 			)
-			return
-		}
 
-		if errors.Is(err, ErrProductValidation) {
-			http.Error(
+		case errors.Is(err, ErrProductValidation):
+			httpx.WriteError(
 				w,
-				"invalid product id",
 				http.StatusBadRequest,
+				"invalid product id",
 			)
-			return
+
+		default:
+			httpx.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"internal server error",
+			)
 		}
 
-		http.Error(
-			w,
-			"internal server error",
-			http.StatusInternalServerError,
-		)
 		return
 	}
 
-	w.Header().Set(
-		"Content-Type",
-		"application/json",
+	httpx.WriteJSON(
+		w,
+		http.StatusOK,
+		productData,
 	)
-
-	w.WriteHeader(http.StatusOK)
-
-	if err := json.NewEncoder(w).Encode(product); err != nil {
-		return
-	}
 }
 
-func (h *Handler) Create(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createProductRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(
+		httpx.WriteError(
 			w,
-			"invalid request body",
 			http.StatusBadRequest,
+			"invalid request body",
 		)
 		return
 	}
@@ -219,17 +208,24 @@ func (h *Handler) Create(
 		isActive = *req.IsActive
 	}
 
-	images := make([]ProductImage, 0, len(req.Images))
+	images := make(
+		[]ProductImage,
+		0,
+		len(req.Images),
+	)
 
 	for _, image := range req.Images {
-		images = append(images, ProductImage{
-			URL:       image.URL,
-			SortOrder: image.SortOrder,
-			IsPrimary: image.IsPrimary,
-		})
+		images = append(
+			images,
+			ProductImage{
+				URL:       image.URL,
+				SortOrder: image.SortOrder,
+				IsPrimary: image.IsPrimary,
+			},
+		)
 	}
 
-	product := &Product{
+	productData := &Product{
 		Name:        req.Name,
 		Description: req.Description,
 		Price:       req.Price,
@@ -241,52 +237,44 @@ func (h *Handler) Create(
 
 	createdProduct, err := h.service.Create(
 		r.Context(),
-		product,
+		productData,
 	)
 	if err != nil {
 		if errors.Is(err, ErrProductValidation) {
-			http.Error(
+			httpx.WriteError(
 				w,
-				err.Error(),
 				http.StatusBadRequest,
+				err.Error(),
 			)
 			return
 		}
 
-		http.Error(
+		httpx.WriteError(
 			w,
-			"internal server error",
 			http.StatusInternalServerError,
+			"internal server error",
 		)
 		return
 	}
 
-	w.Header().Set(
-		"Content-Type",
-		"application/json",
+	httpx.WriteJSON(
+		w,
+		http.StatusCreated,
+		createdProduct,
 	)
-
-	w.WriteHeader(http.StatusCreated)
-
-	if err := json.NewEncoder(w).Encode(createdProduct); err != nil {
-		return
-	}
 }
 
-func (h *Handler) Update(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(
 		chi.URLParam(r, "id"),
 		10,
 		64,
 	)
 	if err != nil || id <= 0 {
-		http.Error(
+		httpx.WriteError(
 			w,
-			"invalid product id",
 			http.StatusBadRequest,
+			"invalid product id",
 		)
 		return
 	}
@@ -294,34 +282,41 @@ func (h *Handler) Update(
 	var req updateProductRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(
+		httpx.WriteError(
 			w,
-			"invalid request body",
 			http.StatusBadRequest,
+			"invalid request body",
 		)
 		return
 	}
 
 	if req.IsActive == nil {
-		http.Error(
+		httpx.WriteError(
 			w,
-			"is_active is required",
 			http.StatusBadRequest,
+			"is_active is required",
 		)
 		return
 	}
 
-	images := make([]ProductImage, 0, len(req.Images))
+	images := make(
+		[]ProductImage,
+		0,
+		len(req.Images),
+	)
 
 	for _, image := range req.Images {
-		images = append(images, ProductImage{
-			URL:       image.URL,
-			SortOrder: image.SortOrder,
-			IsPrimary: image.IsPrimary,
-		})
+		images = append(
+			images,
+			ProductImage{
+				URL:       image.URL,
+				SortOrder: image.SortOrder,
+				IsPrimary: image.IsPrimary,
+			},
+		)
 	}
 
-	product := &Product{
+	productData := &Product{
 		ID:          id,
 		Name:        req.Name,
 		Description: req.Description,
@@ -334,61 +329,53 @@ func (h *Handler) Update(
 
 	updatedProduct, err := h.service.Update(
 		r.Context(),
-		product,
+		productData,
 	)
 	if err != nil {
-		if errors.Is(err, ErrProductValidation) {
-			http.Error(
+		switch {
+		case errors.Is(err, ErrProductValidation):
+			httpx.WriteError(
 				w,
-				err.Error(),
 				http.StatusBadRequest,
+				err.Error(),
 			)
-			return
-		}
 
-		if errors.Is(err, ErrProductNotFound) {
-			http.Error(
+		case errors.Is(err, ErrProductNotFound):
+			httpx.WriteError(
 				w,
-				"product not found",
 				http.StatusNotFound,
+				"product not found",
 			)
-			return
+
+		default:
+			httpx.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"internal server error",
+			)
 		}
 
-		http.Error(
-			w,
-			"internal server error",
-			http.StatusInternalServerError,
-		)
 		return
 	}
 
-	w.Header().Set(
-		"Content-Type",
-		"application/json",
+	httpx.WriteJSON(
+		w,
+		http.StatusOK,
+		updatedProduct,
 	)
-
-	w.WriteHeader(http.StatusOK)
-
-	if err := json.NewEncoder(w).Encode(updatedProduct); err != nil {
-		return
-	}
 }
 
-func (h *Handler) Delete(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(
 		chi.URLParam(r, "id"),
 		10,
 		64,
 	)
 	if err != nil || id <= 0 {
-		http.Error(
+		httpx.WriteError(
 			w,
-			"invalid product id",
 			http.StatusBadRequest,
+			"invalid product id",
 		)
 		return
 	}
@@ -398,29 +385,29 @@ func (h *Handler) Delete(
 		id,
 	)
 	if err != nil {
-		if errors.Is(err, ErrProductValidation) {
-			http.Error(
+		switch {
+		case errors.Is(err, ErrProductValidation):
+			httpx.WriteError(
 				w,
-				"invalid product id",
 				http.StatusBadRequest,
+				"invalid product id",
 			)
-			return
-		}
 
-		if errors.Is(err, ErrProductNotFound) {
-			http.Error(
+		case errors.Is(err, ErrProductNotFound):
+			httpx.WriteError(
 				w,
-				"product not found",
 				http.StatusNotFound,
+				"product not found",
 			)
-			return
+
+		default:
+			httpx.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"internal server error",
+			)
 		}
 
-		http.Error(
-			w,
-			"internal server error",
-			http.StatusInternalServerError,
-		)
 		return
 	}
 

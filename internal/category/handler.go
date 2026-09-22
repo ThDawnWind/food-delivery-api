@@ -7,13 +7,14 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
 	"github.com/go-chi/chi/v5"
 )
 
 type ServiceInterface interface {
 	GetByID(ctx context.Context, id int64) (*Category, error)
 	List(ctx context.Context) ([]Category, error)
-	Create(ctx context.Context, name, slug string) (*Category, error)
+	Create(ctx context.Context, name string, slug string) (*Category, error)
 	Update(ctx context.Context, category *Category) error
 	Delete(ctx context.Context, id int64) error
 }
@@ -39,76 +40,89 @@ type updateCategoryRequest struct {
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	categories, err := h.service.List(r.Context())
+	categories, err := h.service.List(
+		r.Context(),
+	)
 	if err != nil {
-		http.Error(
+		httpx.WriteError(
 			w,
-			"internal server error",
 			http.StatusInternalServerError,
+			"internal server error",
 		)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-
-	err = json.NewEncoder(w).Encode(categories)
-	if err != nil {
-		return
-	}
+	httpx.WriteJSON(
+		w,
+		http.StatusOK,
+		categories,
+	)
 }
 
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
-	idParam := chi.URLParam(r, "id")
+	idParam := chi.URLParam(
+		r,
+		"id",
+	)
 
-	id, err := strconv.ParseInt(idParam, 10, 64)
+	id, err := strconv.ParseInt(
+		idParam,
+		10,
+		64,
+	)
 	if err != nil || id <= 0 {
-		http.Error(
+		httpx.WriteError(
 			w,
-			"invalid category id",
 			http.StatusBadRequest,
+			"invalid category id",
 		)
-
 		return
 	}
 
-	category, err := h.service.GetByID(r.Context(), id)
+	category, err := h.service.GetByID(
+		r.Context(),
+		id,
+	)
 	if err != nil {
-		if errors.Is(err, ErrCategoryNotFound) {
-			http.Error(
+		if errors.Is(
+			err,
+			ErrCategoryNotFound,
+		) {
+			httpx.WriteError(
 				w,
-				"category not found",
 				http.StatusNotFound,
+				"category not found",
 			)
 			return
 		}
 
-		http.Error(
+		httpx.WriteError(
 			w,
-			"internal server error",
 			http.StatusInternalServerError,
+			"internal server error",
 		)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-
-	err = json.NewEncoder(w).Encode(category)
-	if err != nil {
-		return
-	}
+	httpx.WriteJSON(
+		w,
+		http.StatusOK,
+		category,
+	)
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createCategoryRequest
 
-	err := json.NewDecoder(r.Body).Decode(&req)
+	err := json.NewDecoder(
+		r.Body,
+	).Decode(&req)
 	if err != nil {
-		http.Error(
+		httpx.WriteError(
 			w,
-			"invalid request body",
 			http.StatusBadRequest,
+			"invalid request body",
 		)
-
 		return
 	}
 
@@ -118,53 +132,63 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		req.Slug,
 	)
 	if err != nil {
-		if errors.Is(err, ErrCategoryValidation) {
-			http.Error(
+		if errors.Is(
+			err,
+			ErrCategoryValidation,
+		) {
+			httpx.WriteError(
 				w,
-				"invalid category data",
 				http.StatusBadRequest,
+				"invalid category data",
 			)
 			return
 		}
 
-		http.Error(
+		httpx.WriteError(
 			w,
-			"internal server error",
 			http.StatusInternalServerError,
+			"internal server error",
 		)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-
-	err = json.NewEncoder(w).Encode(category)
-	if err != nil {
-		return
-	}
+	httpx.WriteJSON(
+		w,
+		http.StatusCreated,
+		category,
+	)
 }
 
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
-	idParam := chi.URLParam(r, "id")
+	idParam := chi.URLParam(
+		r,
+		"id",
+	)
 
-	id, err := strconv.ParseInt(idParam, 10, 64)
+	id, err := strconv.ParseInt(
+		idParam,
+		10,
+		64,
+	)
 	if err != nil || id <= 0 {
-		http.Error(
+		httpx.WriteError(
 			w,
-			"invalid category id",
 			http.StatusBadRequest,
+			"invalid category id",
 		)
 		return
 	}
 
 	var req updateCategoryRequest
 
-	err = json.NewDecoder(r.Body).Decode(&req)
+	err = json.NewDecoder(
+		r.Body,
+	).Decode(&req)
 	if err != nil {
-		http.Error(
+		httpx.WriteError(
 			w,
-			"invalid request body",
 			http.StatusBadRequest,
+			"invalid request body",
 		)
 		return
 	}
@@ -175,71 +199,94 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		Slug: req.Slug,
 	}
 
-	err = h.service.Update(r.Context(), category)
+	err = h.service.Update(
+		r.Context(),
+		category,
+	)
 	if err != nil {
-		if errors.Is(err, ErrCategoryValidation) {
-			http.Error(
+		switch {
+		case errors.Is(
+			err,
+			ErrCategoryValidation,
+		):
+			httpx.WriteError(
 				w,
-				"invalid category data",
 				http.StatusBadRequest,
+				"invalid category data",
 			)
-			return
-		}
 
-		if errors.Is(err, ErrCategoryNotFound) {
-			http.Error(
+		case errors.Is(
+			err,
+			ErrCategoryNotFound,
+		):
+			httpx.WriteError(
 				w,
-				"category not found",
 				http.StatusNotFound,
+				"category not found",
 			)
-			return
+
+		default:
+			httpx.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"internal server error",
+			)
 		}
 
-		http.Error(
-			w,
-			"Internal server error",
-			http.StatusInternalServerError,
-		)
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(
+		http.StatusNoContent,
+	)
 }
 
-func (h *Handler) Delete(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	idParam := chi.URLParam(r, "id")
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	idParam := chi.URLParam(
+		r,
+		"id",
+	)
 
-	id, err := strconv.ParseInt(idParam, 10, 64)
+	id, err := strconv.ParseInt(
+		idParam,
+		10,
+		64,
+	)
 	if err != nil || id <= 0 {
-		http.Error(
+		httpx.WriteError(
 			w,
-			"invalid category id",
 			http.StatusBadRequest,
+			"invalid category id",
 		)
 		return
 	}
 
-	err = h.service.Delete(r.Context(), id)
+	err = h.service.Delete(
+		r.Context(),
+		id,
+	)
 	if err != nil {
-		if errors.Is(err, ErrCategoryNotFound) {
-			http.Error(
+		if errors.Is(
+			err,
+			ErrCategoryNotFound,
+		) {
+			httpx.WriteError(
 				w,
-				"category not found",
 				http.StatusNotFound,
+				"category not found",
 			)
 			return
 		}
 
-		http.Error(
+		httpx.WriteError(
 			w,
-			"internal server error",
 			http.StatusInternalServerError,
+			"internal server error",
 		)
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(
+		http.StatusNoContent,
+	)
 }
