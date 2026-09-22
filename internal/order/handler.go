@@ -50,11 +50,6 @@ type createOrderRequest struct {
 	Items     []CreateItem `json:"items"`
 }
 
-type createOrderItemRequest struct {
-	ProductID int64 `json:"product_id"`
-	Quantity  int   `json:"quantity"`
-}
-
 type updateOrderStatusRequest struct {
 	Status Status `json:"status"`
 }
@@ -196,7 +191,7 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 	limit := 0
 
 	if value := r.URL.Query().Get("limit"); value != "" {
-		parrsedlimit, err := strconv.Atoi(value)
+		parsedlimit, err := strconv.Atoi(value)
 		if err != nil {
 			httpx.WriteError(
 				w,
@@ -206,7 +201,7 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		limit = parrsedlimit
+		limit = parsedlimit
 	}
 
 	offset := 0
@@ -435,7 +430,7 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(
 			w,
 			http.StatusInternalServerError,
-			"nternal server error",
+			"internal server error",
 		)
 		return
 	}
