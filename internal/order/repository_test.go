@@ -1703,11 +1703,8 @@ func TestRepository_ListAll(t *testing.T) {
 func newTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	if err := godotenv.Load("../../.env.test"); err != nil {
-		t.Fatalf(
-			"failed to load .env.test: %v",
-			err,
-		)
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		_ = godotenv.Load("../../.env.test")
 	}
 
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
