@@ -12,6 +12,7 @@ func TestLoadConfig(t *testing.T) {
 	t.Setenv("HTTP_WRITE_TIMEOUT", "10s")
 	t.Setenv("HTTP_IDLE_TIMEOUT", "60s")
 	t.Setenv("DATABASE_URL", "postgres://user:password@localhost:5432/dbname")
+	t.Setenv("JWT_SECRET", "this-is-a-test-secret-key-with-32-characters")
 
 	expectedDatabaseURL := "postgres://user:password@localhost:5432/dbname"
 
@@ -38,9 +39,28 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.Database.URL != expectedDatabaseURL {
 		t.Errorf("Expected Database URL to be '%s', got %s", expectedDatabaseURL, cfg.Database.URL)
 	}
+	if cfg.JWT == nil {
+		t.Fatal("expected JWT config, got nil")
+	}
+
+	if cfg.JWT.Secret != "this-is-a-test-secret-key-with-32-characters" {
+		t.Errorf(
+			"unexpected JWT secret: %q",
+			cfg.JWT.Secret,
+		)
+	}
+
+	if cfg.JWT.TTL != 24*time.Hour {
+		t.Errorf(
+			"expected JWT TTL %v, got %v",
+			24*time.Hour,
+			cfg.JWT.TTL,
+		)
+	}
 }
 
 func TestLoadConfigInvalidPort(t *testing.T) {
+	setRequiredEnv(t)
 	tests := []struct {
 		name string
 		port string
@@ -67,6 +87,7 @@ func TestLoadConfigInvalidPort(t *testing.T) {
 }
 
 func TestLoadConfigInvalidTimeout(t *testing.T) {
+	setRequiredEnv(t)
 	tests := []struct {
 		name  string
 		env   string
@@ -101,6 +122,7 @@ func TestLoadConfigInvalidTimeout(t *testing.T) {
 }
 
 func TestLoadConfigEmptyDatabaseURL(t *testing.T) {
+	setRequiredEnv(t)
 	t.Setenv("DATABASE_URL", "")
 
 	_, err := Load()
@@ -108,4 +130,63 @@ func TestLoadConfigEmptyDatabaseURL(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Expected error for empty DATABASE_URL, got nil")
 	}
+}
+
+func TestLoadConfigInvalidJWTSecret(t *testing.T) {
+	t.Setenv(
+		"DATABASE_URL",
+		"postgres://test:test@localhost:5432/test",
+	)
+
+	t.Setenv(
+		"JWT_SECRET",
+		"short",
+	)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestLoadConfigInvalidJWTTTL(t *testing.T) {
+	setRequiredEnv(t)
+
+	t.Setenv(
+		"JWT_TTL",
+		"invalid",
+	)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestLoadConfigNegativeJWTTTL(t *testing.T) {
+	setRequiredEnv(t)
+
+	t.Setenv(
+		"JWT_TTL",
+		"-1h",
+	)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func setRequiredEnv(t *testing.T) {
+	t.Helper()
+
+	t.Setenv(
+		"DATABASE_URL",
+		"postgres://test:test@localhost:5432/test",
+	)
+
+	t.Setenv(
+		"JWT_SECRET",
+		"this-is-a-test-secret-key-with-32-characters",
+	)
 }
