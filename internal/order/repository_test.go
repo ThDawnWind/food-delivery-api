@@ -1889,21 +1889,21 @@ func TestRepository_ListAll_FilterByUserID(t *testing.T) {
 	repository := NewRepository(pool)
 
 	ctx := context.Background()
-
 	suffix := time.Now().UnixNano()
 
 	var userID1 int64
+
 	err := pool.QueryRow(
 		ctx,
 		`
-	INSERT INTO users (
-		username,
-		email,
-		password_hash
-	)
-	VALUES ($1, $2, $3)
-	RETURNING id
-	`,
+		INSERT INTO users (
+			username,
+			email,
+			password_hash
+		)
+		VALUES ($1, $2, $3)
+		RETURNING id
+		`,
 		fmt.Sprintf("user1-%d", suffix),
 		fmt.Sprintf("user1-%d@example.com", suffix),
 		"hash",
@@ -1913,17 +1913,18 @@ func TestRepository_ListAll_FilterByUserID(t *testing.T) {
 	}
 
 	var userID2 int64
+
 	err = pool.QueryRow(
 		ctx,
 		`
-	INSERT INTO users (
-		username,
-		email,
-		password_hash
-	)
-	VALUES ($1, $2, $3)
-	RETURNING id
-	`,
+		INSERT INTO users (
+			username,
+			email,
+			password_hash
+		)
+		VALUES ($1, $2, $3)
+		RETURNING id
+		`,
 		fmt.Sprintf("user2-%d", suffix),
 		fmt.Sprintf("user2-%d@example.com", suffix),
 		"hash",
@@ -1935,50 +1936,61 @@ func TestRepository_ListAll_FilterByUserID(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.Exec(
 			context.Background(),
+			`DELETE FROM orders WHERE user_id IN ($1, $2)`,
+			userID1,
+			userID2,
+		)
+
+		_, _ = pool.Exec(
+			context.Background(),
 			`DELETE FROM users WHERE id IN ($1, $2)`,
 			userID1,
 			userID2,
 		)
 	})
 
-	order1, err := repository.Create(
+	var orderID1 int64
+
+	err = pool.QueryRow(
 		ctx,
-		&Order{
-			UserID:          userID1,
-			Status:          StatusNew,
-			TotalPrice:      59900,
-			DeliveryAddress: "Address 1",
-			Items: []OrderItem{
-				{
-					ProductID:     1,
-					NameSnapshot:  "Test product",
-					PriceSnapshot: 59900,
-					Quantity:      1,
-				},
-			},
-		},
-	)
+		`
+		INSERT INTO orders (
+			user_id,
+			status,
+			total_price,
+			delivery_address
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+		`,
+		userID1,
+		StatusNew,
+		59900,
+		"Address 1",
+	).Scan(&orderID1)
 	if err != nil {
 		t.Fatalf("failed to create first order: %v", err)
 	}
 
-	_, err = repository.Create(
+	var orderID2 int64
+
+	err = pool.QueryRow(
 		ctx,
-		&Order{
-			UserID:          userID2,
-			Status:          StatusNew,
-			TotalPrice:      59900,
-			DeliveryAddress: "Address 2",
-			Items: []OrderItem{
-				{
-					ProductID:     1,
-					NameSnapshot:  "Test product",
-					PriceSnapshot: 59900,
-					Quantity:      1,
-				},
-			},
-		},
-	)
+		`
+		INSERT INTO orders (
+			user_id,
+			status,
+			total_price,
+			delivery_address
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+		`,
+		userID2,
+		StatusNew,
+		59900,
+		"Address 2",
+	).Scan(&orderID2)
 	if err != nil {
 		t.Fatalf("failed to create second order: %v", err)
 	}
@@ -2006,7 +2018,7 @@ func TestRepository_ListAll_FilterByUserID(t *testing.T) {
 			)
 		}
 
-		if order.ID == order1.ID {
+		if order.ID == orderID1 {
 			found = true
 		}
 	}
@@ -2014,11 +2026,10 @@ func TestRepository_ListAll_FilterByUserID(t *testing.T) {
 	if !found {
 		t.Fatalf(
 			"expected order %d to be returned",
-			order1.ID,
+			orderID1,
 		)
 	}
 }
-
 func TestRepository_ListAll_FilterByCreatedAt(t *testing.T) {
 	pool := newTestPool(t)
 	repository := NewRepository(pool)
