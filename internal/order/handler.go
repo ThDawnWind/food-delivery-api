@@ -561,12 +561,5 @@ func (h *Handler) Routes() http.Handler {
 	router.Get("/{id}", h.GetByID)
 	router.Patch("/{id}/cancel", h.Cancel)
 
-	router.With(
-		auth.RequireRole("admin"),
-	).Patch(
-		"/{id}/status",
-		h.UpdateStatus,
-	)
-
 	return router
 }

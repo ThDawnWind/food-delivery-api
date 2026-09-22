@@ -159,14 +159,9 @@ func main() {
 		r.Use(auth.Middleware(tokenManager))
 		r.Use(auth.RequireRole("admin"))
 
-		r.Get(
-			"/orders",
-			orderHandler.ListAll,
-		)
-		r.Get(
-			"/orders/{id}",
-			orderHandler.AdminGetByID,
-		)
+		r.Get("/orders", orderHandler.ListAll)
+		r.Get("/orders/{id}", orderHandler.AdminGetByID)
+		r.Patch("/orders/{id}/status", orderHandler.UpdateStatus)
 	})
 
 	router.Group(func(r chi.Router) {
