@@ -62,12 +62,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createOrderRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(
+		writeError(
 			w,
 			http.StatusBadRequest,
-			map[string]string{
-				"error": "invalid request body",
-			},
+			"invalid request body",
 		)
 		return
 	}
@@ -76,12 +74,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 	)
 	if !ok || userID <= 0 {
-		writeJSON(
+		writeError(
 			w,
 			http.StatusUnauthorized,
-			map[string]string{
-				"error": "unauthorized",
-			},
+			"unauthorized",
 		)
 		return
 	}
@@ -108,12 +104,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		writeJSON(
+		writeError(
 			w,
 			http.StatusInternalServerError,
-			map[string]string{
-				"error": "internal server error",
-			},
+			"internal server error",
 		)
 		return
 	}
@@ -130,12 +124,10 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 	id, err := strconv.ParseInt(idParam, 10, 64)
 	if err != nil || id <= 0 {
-		writeJSON(
+		writeError(
 			w,
 			http.StatusBadRequest,
-			map[string]string{
-				"error": "invalid order id",
-			},
+			"invalid order id",
 		)
 		return
 	}
@@ -144,12 +136,10 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 	)
 	if !ok || userID <= 0 {
-		writeJSON(
+		writeError(
 			w,
 			http.StatusUnauthorized,
-			map[string]string{
-				"error": "unauthorized",
-			},
+			"unauthorized",
 		)
 		return
 	}
@@ -157,33 +147,27 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	order, err := h.service.GetByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrOrderNotFound) {
-			writeJSON(
+			writeError(
 				w,
 				http.StatusNotFound,
-				map[string]string{
-					"error": "order not found",
-				},
+				"order not found",
 			)
 			return
 		}
 
-		writeJSON(
+		writeError(
 			w,
 			http.StatusInternalServerError,
-			map[string]string{
-				"error": "internal server error",
-			},
+			"internal server error",
 		)
 		return
 	}
 
 	if order.UserID != userID {
-		writeJSON(
+		writeError(
 			w,
 			http.StatusNotFound,
-			map[string]string{
-				"error": "order not found",
-			},
+			"order not found",
 		)
 		return
 	}
@@ -200,12 +184,10 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 	)
 	if !ok || userID <= 0 {
-		writeJSON(
+		writeError(
 			w,
 			http.StatusUnauthorized,
-			map[string]string{
-				"error": "unauthorized",
-			},
+			"unauthorized",
 		)
 		return
 	}
@@ -215,12 +197,10 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 	if value := r.URL.Query().Get("limit"); value != "" {
 		parrsedlimit, err := strconv.Atoi(value)
 		if err != nil {
-			writeJSON(
+			writeError(
 				w,
 				http.StatusBadRequest,
-				map[string]string{
-					"error": "invalid limit",
-				},
+				"invalid limit",
 			)
 			return
 		}
@@ -233,12 +213,10 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 	if value := r.URL.Query().Get("offset"); value != "" {
 		parsedOffset, err := strconv.Atoi(value)
 		if err != nil {
-			writeJSON(
+			writeError(
 				w,
 				http.StatusBadRequest,
-				map[string]string{
-					"error": "invalid offset",
-				},
+				"invalid offset",
 			)
 			return
 		}
@@ -254,22 +232,18 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, ErrOrderValidation) {
-			writeJSON(
+			writeError(
 				w,
 				http.StatusBadRequest,
-				map[string]string{
-					"error": err.Error(),
-				},
+				err.Error(),
 			)
 			return
 		}
 
-		writeJSON(
+		writeError(
 			w,
 			http.StatusInternalServerError,
-			map[string]string{
-				"error": "internal server error",
-			},
+			"internal server error",
 		)
 		return
 	}
@@ -288,12 +262,10 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		64,
 	)
 	if err != nil || id <= 0 {
-		writeJSON(
+		writeError(
 			w,
 			http.StatusBadRequest,
-			map[string]string{
-				"error": "invalid order id",
-			},
+			"invalid order id",
 		)
 		return
 	}
@@ -301,12 +273,10 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	var req updateOrderStatusRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(
+		writeError(
 			w,
 			http.StatusBadRequest,
-			map[string]string{
-				"error": "invalid request body",
-			},
+			"invalid request body",
 		)
 		return
 	}
@@ -319,28 +289,22 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrOrderValidation):
-			writeJSON(
+			writeError(
 				w,
 				http.StatusBadRequest,
-				map[string]string{
-					"error": err.Error(),
-				},
+				err.Error(),
 			)
 		case errors.Is(err, ErrOrderNotFound):
-			writeJSON(
+			writeError(
 				w,
 				http.StatusNotFound,
-				map[string]string{
-					"error": "order not found",
-				},
+				"order not found",
 			)
 		default:
-			writeJSON(
+			writeError(
 				w,
 				http.StatusInternalServerError,
-				map[string]string{
-					"error": "internal server error",
-				},
+				"internal server error",
 			)
 		}
 
@@ -363,12 +327,10 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 			64,
 		)
 		if err != nil || parsedUserID <= 0 {
-			writeJSON(
+			writeError(
 				w,
 				http.StatusBadRequest,
-				map[string]string{
-					"error": "invalid user_id",
-				},
+				"invalid user_id",
 			)
 			return
 		}
@@ -385,12 +347,10 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 			h.location,
 		)
 		if err != nil {
-			writeJSON(
+			writeError(
 				w,
 				http.StatusBadRequest,
-				map[string]string{
-					"error": "invalid from date",
-				},
+				"invalid from date",
 			)
 			return
 		}
@@ -407,12 +367,10 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 			h.location,
 		)
 		if err != nil {
-			writeJSON(
+			writeError(
 				w,
 				http.StatusBadRequest,
-				map[string]string{
-					"error": "invalid to date",
-				},
+				"invalid to date",
 			)
 			return
 		}
@@ -427,10 +385,10 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
 		parsedLimit, err := strconv.Atoi(rawLimit)
 		if err != nil {
-			http.Error(
+			writeError(
 				w,
-				"invalid limit",
 				http.StatusBadRequest,
+				"invalid limit",
 			)
 			return
 		}
@@ -441,10 +399,10 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 	if rawOffset := r.URL.Query().Get("offset"); rawOffset != "" {
 		parsedOffset, err := strconv.Atoi(rawOffset)
 		if err != nil {
-			http.Error(
+			writeError(
 				w,
-				"invalid offset",
 				http.StatusBadRequest,
+				"invalid offset",
 			)
 			return
 		}
@@ -465,32 +423,27 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, ErrOrderValidation) {
-			http.Error(
+			writeError(
 				w,
-				err.Error(),
 				http.StatusBadRequest,
+				err.Error(),
 			)
 			return
 		}
 
-		http.Error(
+		writeError(
 			w,
-			"internal server error",
 			http.StatusInternalServerError,
+			"nternal server error",
 		)
 		return
 	}
 
-	w.Header().Set(
-		"Content-Type",
-		"application/json",
-	)
-
-	if err := json.NewEncoder(w).Encode(
+	writeJSON(
+		w,
+		http.StatusOK,
 		orders,
-	); err != nil {
-		return
-	}
+	)
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {
@@ -504,6 +457,16 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 	_ = json.NewEncoder(w).Encode(data)
 }
 
+func writeError(w http.ResponseWriter, status int, message string) {
+	writeJSON(
+		w,
+		status,
+		map[string]string{
+			"error": message,
+		},
+	)
+}
+
 func (h *Handler) AdminGetByID(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(
 		chi.URLParam(r, "id"),
@@ -511,12 +474,10 @@ func (h *Handler) AdminGetByID(w http.ResponseWriter, r *http.Request) {
 		64,
 	)
 	if err != nil || id <= 0 {
-		writeJSON(
+		writeError(
 			w,
 			http.StatusBadRequest,
-			map[string]string{
-				"error": "invalid order id",
-			},
+			"invalid order id",
 		)
 		return
 	}
@@ -527,22 +488,18 @@ func (h *Handler) AdminGetByID(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, ErrOrderNotFound) {
-			writeJSON(
+			writeError(
 				w,
 				http.StatusNotFound,
-				map[string]string{
-					"error": "order not found",
-				},
+				"order not found",
 			)
 			return
 		}
 
-		writeJSON(
+		writeError(
 			w,
 			http.StatusInternalServerError,
-			map[string]string{
-				"error": "internal server error",
-			},
+			"nternal server error",
 		)
 		return
 	}
@@ -561,12 +518,10 @@ func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
 		64,
 	)
 	if err != nil || orderID <= 0 {
-		writeJSON(
+		writeError(
 			w,
 			http.StatusBadRequest,
-			map[string]string{
-				"error": "invalid order id",
-			},
+			"invalid order id",
 		)
 		return
 	}
@@ -575,12 +530,10 @@ func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 	)
 	if !ok {
-		writeJSON(
+		writeError(
 			w,
 			http.StatusUnauthorized,
-			map[string]string{
-				"error": "unauthorized",
-			},
+			"unauthorized",
 		)
 		return
 	}
@@ -593,30 +546,24 @@ func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrOrderNotFound):
-			writeJSON(
+			writeError(
 				w,
 				http.StatusNotFound,
-				map[string]string{
-					"error": "order not found",
-				},
+				"order not found",
 			)
 
 		case errors.Is(err, ErrOrderValidation):
-			writeJSON(
+			writeError(
 				w,
 				http.StatusBadRequest,
-				map[string]string{
-					"error": err.Error(),
-				},
+				err.Error(),
 			)
 
 		default:
-			writeJSON(
+			writeError(
 				w,
 				http.StatusInternalServerError,
-				map[string]string{
-					"error": "internal server error",
-				},
+				"internal server error",
 			)
 		}
 

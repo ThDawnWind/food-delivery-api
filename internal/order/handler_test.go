@@ -1129,12 +1129,12 @@ func TestHandler_ListAll_DefaultPagination(t *testing.T) {
 			{
 				ID:     1,
 				UserID: 10,
-				Status: "new",
+				Status: StatusNew,
 			},
 			{
 				ID:     2,
 				UserID: 20,
-				Status: "confirmed",
+				Status: StatusConfirmed,
 			},
 		},
 	}
@@ -1175,6 +1175,18 @@ func TestHandler_ListAll_DefaultPagination(t *testing.T) {
 			"expected offset %d, got %d",
 			0,
 			service.listAllFilter.Offset,
+		)
+	}
+
+	contentType := recorder.Header().Get(
+		"Content-Type",
+	)
+
+	if contentType != "application/json" {
+		t.Fatalf(
+			"expected Content-Type %q, got %q",
+			"application/json",
+			contentType,
 		)
 	}
 
