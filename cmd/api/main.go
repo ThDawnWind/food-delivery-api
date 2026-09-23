@@ -131,7 +131,7 @@ func main() {
 	authHandler := auth.NewHandler(authService)
 
 	authRateLimiter := httpx.NewIPRateLimiter(
-		rate.Every(time.Second),
+		rate.Every(12*time.Second),
 		5,
 		15*time.Minute,
 	)
@@ -174,7 +174,12 @@ func main() {
 
 		r.Group(func(r chi.Router) {
 			r.Use(auth.Middleware(tokenManager))
-			r.Use(auth.RequireRole("admin"))
+			r.Use(
+				auth.RequireRole(
+					userService,
+					user.RoleAdmin,
+				),
+			)
 
 			r.Post("/", categoryHandler.Create)
 			r.Put("/{id}", categoryHandler.Update)
@@ -188,7 +193,12 @@ func main() {
 
 		r.Group(func(r chi.Router) {
 			r.Use(auth.Middleware(tokenManager))
-			r.Use(auth.RequireRole("admin"))
+			r.Use(
+				auth.RequireRole(
+					userService,
+					user.RoleAdmin,
+				),
+			)
 
 			r.Post("/", productHandler.Create)
 			r.Put("/{id}", productHandler.Update)
@@ -198,7 +208,12 @@ func main() {
 
 	router.Route("/api/v1/admin", func(r chi.Router) {
 		r.Use(auth.Middleware(tokenManager))
-		r.Use(auth.RequireRole("admin"))
+		r.Use(
+			auth.RequireRole(
+				userService,
+				user.RoleAdmin,
+			),
+		)
 
 		r.Get("/orders", orderHandler.ListAll)
 		r.Get("/orders/{id}", orderHandler.AdminGetByID)

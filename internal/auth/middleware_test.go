@@ -1,9 +1,13 @@
 package auth
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/ThDawnWind/food-delivery-api/internal/user"
 )
 
 type fakeTokenParser struct {
@@ -11,6 +15,13 @@ type fakeTokenParser struct {
 	err    error
 
 	token string
+}
+
+type fakeUserProvider struct {
+	user *user.User
+	err  error
+
+	userID int64
 }
 
 func (f *fakeTokenParser) Parse(tokenString string) (*Claims, error) {
@@ -21,6 +32,16 @@ func (f *fakeTokenParser) Parse(tokenString string) (*Claims, error) {
 	}
 
 	return f.claims, nil
+}
+
+func (f *fakeUserProvider) GetByID(ctx context.Context, id int64) (*user.User, error) {
+	f.userID = id
+
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	return f.user, nil
 }
 
 func TestMiddleware_MissingAuthorizationHeader(t *testing.T) {
@@ -225,7 +246,7 @@ func TestMiddleware_ValidToken(t *testing.T) {
 	}
 }
 
-func TestRequireRole(t *testing.T) {
+func TestRequireRole_UsesCurrentRoleFromDatabase(t *testing.T) {
 	handler := http.HandlerFunc(func(
 		w http.ResponseWriter,
 		r *http.Request,
@@ -236,12 +257,22 @@ func TestRequireRole(t *testing.T) {
 	parser := &fakeTokenParser{
 		claims: &Claims{
 			UserID: 10,
-			Role:   "admin",
+			Role:   "user",
+		},
+	}
+
+	users := &fakeUserProvider{
+		user: &user.User{
+			ID:   10,
+			Role: user.RoleAdmin,
 		},
 	}
 
 	protected := Middleware(parser)(
-		RequireRole("admin")(handler),
+		RequireRole(
+			users,
+			user.RoleAdmin,
+		)(handler),
 	)
 
 	request := httptest.NewRequest(
@@ -269,25 +300,43 @@ func TestRequireRole(t *testing.T) {
 			recorder.Code,
 		)
 	}
+
+	if users.userID != 10 {
+		t.Errorf(
+			"expected user ID %d, got %d",
+			10,
+			users.userID,
+		)
+	}
 }
 
-func TestRequireRole_Forbidden(t *testing.T) {
+func TestRequireRole_RejectsStaleAdminRole(t *testing.T) {
 	handler := http.HandlerFunc(func(
 		w http.ResponseWriter,
 		r *http.Request,
 	) {
-		w.WriteHeader(http.StatusOK)
+		t.Fatal("next handler must not be called")
 	})
 
 	parser := &fakeTokenParser{
 		claims: &Claims{
 			UserID: 10,
-			Role:   "user",
+			Role:   "admin",
+		},
+	}
+
+	users := &fakeUserProvider{
+		user: &user.User{
+			ID:   10,
+			Role: user.RoleUser,
 		},
 	}
 
 	protected := Middleware(parser)(
-		RequireRole("admin")(handler),
+		RequireRole(
+			users,
+			user.RoleAdmin,
+		)(handler),
 	)
 
 	request := httptest.NewRequest(
@@ -322,8 +371,10 @@ func TestRequireRole_Unauthorized(t *testing.T) {
 		w http.ResponseWriter,
 		r *http.Request,
 	) {
-		w.WriteHeader(http.StatusOK)
+		t.Fatal("next handler must not be called")
 	})
+
+	users := &fakeUserProvider{}
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -333,9 +384,10 @@ func TestRequireRole_Unauthorized(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 
-	RequireRole("admin")(
-		handler,
-	).ServeHTTP(
+	RequireRole(
+		users,
+		user.RoleAdmin,
+	)(handler).ServeHTTP(
 		recorder,
 		request,
 	)
@@ -344,6 +396,112 @@ func TestRequireRole_Unauthorized(t *testing.T) {
 		t.Fatalf(
 			"expected status %d, got %d",
 			http.StatusUnauthorized,
+			recorder.Code,
+		)
+	}
+}
+
+func TestRequireRole_UserNotFound(t *testing.T) {
+	handler := http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		t.Fatal("next handler must not be called")
+	})
+
+	parser := &fakeTokenParser{
+		claims: &Claims{
+			UserID: 10,
+			Role:   "admin",
+		},
+	}
+
+	users := &fakeUserProvider{
+		err: user.ErrUserNotFound,
+	}
+
+	protected := Middleware(parser)(
+		RequireRole(
+			users,
+			user.RoleAdmin,
+		)(handler),
+	)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/",
+		nil,
+	)
+
+	request.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
+	recorder := httptest.NewRecorder()
+
+	protected.ServeHTTP(
+		recorder,
+		request,
+	)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusUnauthorized,
+			recorder.Code,
+		)
+	}
+}
+
+func TestRequireRole_UserProviderError(t *testing.T) {
+	handler := http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		t.Fatal("next handler must not be called")
+	})
+
+	parser := &fakeTokenParser{
+		claims: &Claims{
+			UserID: 10,
+			Role:   "admin",
+		},
+	}
+
+	users := &fakeUserProvider{
+		err: errors.New("database error"),
+	}
+
+	protected := Middleware(parser)(
+		RequireRole(
+			users,
+			user.RoleAdmin,
+		)(handler),
+	)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/",
+		nil,
+	)
+
+	request.Header.Set(
+		"Authorization",
+		"Bearer test-token",
+	)
+
+	recorder := httptest.NewRecorder()
+
+	protected.ServeHTTP(
+		recorder,
+		request,
+	)
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusInternalServerError,
 			recorder.Code,
 		)
 	}
