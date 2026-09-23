@@ -2,7 +2,6 @@ package product
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -193,7 +192,7 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createProductRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
 		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
@@ -281,7 +280,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	var req updateProductRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
 		httpx.WriteError(
 			w,
 			http.StatusBadRequest,

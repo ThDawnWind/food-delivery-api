@@ -354,7 +354,7 @@ func TestHandler_Create_InternalError(t *testing.T) {
 
 	body := []byte(`
 	{
-		"delivery_address": "Test street 1",
+		"address_id": 1,
 		"items": [
 			{
 				"product_id": 1,

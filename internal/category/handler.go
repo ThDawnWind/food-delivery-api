@@ -2,7 +2,6 @@ package category
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -114,9 +113,11 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createCategoryRequest
 
-	err := json.NewDecoder(
-		r.Body,
-	).Decode(&req)
+	err := httpx.DecodeJSON(
+		w,
+		r,
+		&req,
+	)
 	if err != nil {
 		httpx.WriteError(
 			w,
@@ -181,9 +182,11 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	var req updateCategoryRequest
 
-	err = json.NewDecoder(
-		r.Body,
-	).Decode(&req)
+	err = httpx.DecodeJSON(
+		w,
+		r,
+		&req,
+	)
 	if err != nil {
 		httpx.WriteError(
 			w,

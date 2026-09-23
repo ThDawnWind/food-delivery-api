@@ -2,7 +2,6 @@ package order
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -57,7 +56,7 @@ type updateOrderStatusRequest struct {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createOrderRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
 		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
@@ -268,7 +267,7 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 
 	var req updateOrderStatusRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
 		httpx.WriteError(
 			w,
 			http.StatusBadRequest,

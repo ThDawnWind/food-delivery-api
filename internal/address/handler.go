@@ -79,7 +79,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var request createAddressRequest
 
-	if err := json.NewDecoder(r.Body).Decode(
+	if err := httpx.DecodeJSON(
+		w,
+		r,
 		&request,
 	); err != nil {
 		httpx.WriteError(

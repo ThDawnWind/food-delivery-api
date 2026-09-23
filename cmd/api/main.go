@@ -21,6 +21,7 @@ import (
 	"github.com/ThDawnWind/food-delivery-api/internal/user"
 	"github.com/ThDawnWind/food-delivery-api/openapi"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
 )
 
@@ -150,6 +151,9 @@ func main() {
 	defer stop()
 
 	router := chi.NewRouter()
+	router.Use(middleware.RequestID)
+	router.Use(middleware.Logger)
+	router.Use(middleware.Recoverer)
 	router.Get("/health", healthHandler)
 	router.Get("/ready", readinessHandler(dbPool))
 
