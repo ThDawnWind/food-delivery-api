@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -165,6 +166,14 @@ func TestService_Register_Validation(t *testing.T) {
 				Username: "alex",
 				Email:    "alex@example.com",
 				Password: "1234567",
+			},
+		},
+		{
+			name: "password too long",
+			input: &RegisterUser{
+				Username: "alex",
+				Email:    "alex@example.com",
+				Password: strings.Repeat("a", 73),
 			},
 		},
 	}
@@ -582,5 +591,26 @@ func TestService_Login_RepositoryError(t *testing.T) {
 			"expected repository error, got %v",
 			err,
 		)
+	}
+}
+
+func TestService_Register_MaxPasswordLength(t *testing.T) {
+	repository := &fakeRepository{}
+	service := NewService(repository)
+
+	user, err := service.Register(
+		context.Background(),
+		&RegisterUser{
+			Username: "alex",
+			Email:    "alex@example.com",
+			Password: strings.Repeat("a", 72),
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if user == nil {
+		t.Fatal("expected user, got nil")
 	}
 }

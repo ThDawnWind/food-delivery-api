@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -25,6 +26,11 @@ func NewService(repository RepositoryInterface) *Service {
 		repository: repository,
 	}
 }
+
+const (
+	minPasswordCharacters = 8
+	maxPasswordBytes      = 72
+)
 
 func (s *Service) Register(ctx context.Context, input *RegisterUser) (*User, error) {
 	if input == nil {
@@ -59,13 +65,21 @@ func (s *Service) Register(ctx context.Context, input *RegisterUser) (*User, err
 		)
 	}
 
-	if len(password) < 8 {
+	if utf8.RuneCountInString(password) < minPasswordCharacters {
 		return nil, fmt.Errorf(
-			"%w: password must be at least 8 characters",
+			"%w: password must be at least %d characters",
 			ErrUserValidation,
+			minPasswordCharacters,
 		)
 	}
 
+	if len(password) > maxPasswordBytes {
+		return nil, fmt.Errorf(
+			"%w: password must not exceed %d bytes",
+			ErrUserValidation,
+			maxPasswordBytes,
+		)
+	}
 	hash, err := bcrypt.GenerateFromPassword(
 		[]byte(password),
 		bcrypt.DefaultCost,
