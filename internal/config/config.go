@@ -39,6 +39,8 @@ type JWTConfig struct {
 	TTL    time.Duration
 }
 
+const insecureExampleJWTSecret = "replace-with-a-long-random-secret"
+
 func Load() (Config, error) {
 	env, exists := os.LookupEnv("APP_ENV")
 	if !exists {
@@ -181,6 +183,13 @@ func Load() (Config, error) {
 	if len(jwtSecret) < 32 {
 		return Config{}, errors.New(
 			"JWT_SECRET must be at least 32 characters",
+		)
+	}
+
+	if env == "production" &&
+		jwtSecret == insecureExampleJWTSecret {
+		return Config{}, errors.New(
+			"JWT_SECRET must be changed from the example value in production",
 		)
 	}
 

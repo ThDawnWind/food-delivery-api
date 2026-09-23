@@ -178,18 +178,18 @@ func (s *Service) Login(ctx context.Context, input *LoginUser) (*User, error) {
 	email := strings.TrimSpace(input.Email)
 
 	if email == "" {
-	return nil, fmt.Errorf(
-		"%w: email is required",
-		ErrUserValidation,
-	)
-}
+		return nil, fmt.Errorf(
+			"%w: email is required",
+			ErrUserValidation,
+		)
+	}
 
-if input.Password == "" {
-	return nil, fmt.Errorf(
-		"%w: password is required",
-		ErrUserValidation,
-	)
-}
+	if input.Password == "" {
+		return nil, fmt.Errorf(
+			"%w: password is required",
+			ErrUserValidation,
+		)
+	}
 
 	if utf8.RuneCountInString(email) > maxEmailCharacters {
 		return nil, ErrInvalidCredentials

@@ -379,3 +379,53 @@ func TestLoadConfigMinConnsGreaterThanMaxConns(t *testing.T) {
 		t.Fatal("expected error when DB_MIN_CONNS is greater than DB_MAX_CONNS")
 	}
 }
+
+func TestLoadConfigRejectsExampleJWTSecretInProduction(t *testing.T) {
+	setRequiredEnv(t)
+
+	t.Setenv(
+		"APP_ENV",
+		"production",
+	)
+
+	t.Setenv(
+		"JWT_SECRET",
+		insecureExampleJWTSecret,
+	)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal(
+			"expected error for example JWT secret in production",
+		)
+	}
+}
+
+func TestLoadConfigAllowsCustomJWTSecretInProduction(t *testing.T) {
+	setRequiredEnv(t)
+
+	t.Setenv(
+		"APP_ENV",
+		"production",
+	)
+
+	t.Setenv(
+		"JWT_SECRET",
+		"gN7vP2xQ9mK4sR8wT3yL6cF1hJ5dB0zA",
+	)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf(
+			"expected no error, got %v",
+			err,
+		)
+	}
+
+	if cfg.Env != "production" {
+		t.Errorf(
+			"expected production environment, got %q",
+			cfg.Env,
+		)
+	}
+}

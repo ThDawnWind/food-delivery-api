@@ -701,11 +701,11 @@ func TestService_Login_InvalidCredentialsFormat(t *testing.T) {
 				)
 			}
 
-if repository.getByEmailInput != "" {
-	t.Fatal(
-		"repository must not be called on invalid credentials",
-	)
-}
+			if repository.getByEmailInput != "" {
+				t.Fatal(
+					"repository must not be called on invalid credentials",
+				)
+			}
 		})
 	}
 }
