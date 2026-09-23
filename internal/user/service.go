@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/mail"
 	"strings"
 	"unicode/utf8"
 
@@ -28,6 +29,9 @@ func NewService(repository RepositoryInterface) *Service {
 }
 
 const (
+	maxUsernameCharacters = 50
+	maxEmailCharacters    = 100
+
 	minPasswordCharacters = 8
 	maxPasswordBytes      = 72
 )
@@ -51,9 +55,35 @@ func (s *Service) Register(ctx context.Context, input *RegisterUser) (*User, err
 		)
 	}
 
+	if utf8.RuneCountInString(username) > maxUsernameCharacters {
+		return nil, fmt.Errorf(
+			"%w: username must not exceed %d characters",
+			ErrUserValidation,
+			maxUsernameCharacters,
+		)
+	}
+
 	if email == "" {
 		return nil, fmt.Errorf(
 			"%w: email is required",
+			ErrUserValidation,
+		)
+	}
+
+	if utf8.RuneCountInString(email) > maxEmailCharacters {
+		return nil, fmt.Errorf(
+			"%w: email must not exceed %d characters",
+			ErrUserValidation,
+			maxEmailCharacters,
+		)
+	}
+
+	parsedEmail, err := mail.ParseAddress(email)
+	if err != nil ||
+		parsedEmail.Name != "" ||
+		parsedEmail.Address != email {
+		return nil, fmt.Errorf(
+			"%w: invalid email",
 			ErrUserValidation,
 		)
 	}
@@ -148,17 +178,32 @@ func (s *Service) Login(ctx context.Context, input *LoginUser) (*User, error) {
 	email := strings.TrimSpace(input.Email)
 
 	if email == "" {
-		return nil, fmt.Errorf(
-			"%w: email is required",
-			ErrUserValidation,
-		)
+	return nil, fmt.Errorf(
+		"%w: email is required",
+		ErrUserValidation,
+	)
+}
+
+if input.Password == "" {
+	return nil, fmt.Errorf(
+		"%w: password is required",
+		ErrUserValidation,
+	)
+}
+
+	if utf8.RuneCountInString(email) > maxEmailCharacters {
+		return nil, ErrInvalidCredentials
 	}
 
-	if input.Password == "" {
-		return nil, fmt.Errorf(
-			"%w: password is required",
-			ErrUserValidation,
-		)
+	parsedEmail, err := mail.ParseAddress(email)
+	if err != nil ||
+		parsedEmail.Name != "" ||
+		parsedEmail.Address != email {
+		return nil, ErrInvalidCredentials
+	}
+
+	if len(input.Password) > maxPasswordBytes {
+		return nil, ErrInvalidCredentials
 	}
 
 	user, err := s.repository.GetByEmail(
