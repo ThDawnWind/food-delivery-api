@@ -16,6 +16,7 @@ import (
 	"github.com/ThDawnWind/food-delivery-api/internal/category"
 	"github.com/ThDawnWind/food-delivery-api/internal/config"
 	"github.com/ThDawnWind/food-delivery-api/internal/database"
+	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
 	"github.com/ThDawnWind/food-delivery-api/internal/order"
 	"github.com/ThDawnWind/food-delivery-api/internal/product"
 	"github.com/ThDawnWind/food-delivery-api/internal/user"
@@ -23,6 +24,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
+	"golang.org/x/time/rate"
 )
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -128,6 +130,12 @@ func main() {
 
 	authHandler := auth.NewHandler(authService)
 
+	authRateLimiter := httpx.NewIPRateLimiter(
+		rate.Every(time.Second),
+		5,
+		15*time.Minute,
+	)
+
 	addressRepository := address.NewRepository(dbPool)
 	addressService := address.NewService(addressRepository)
 	addressHandler := address.NewHandler(addressService)
@@ -211,10 +219,14 @@ func main() {
 		)
 	})
 
-	router.Mount(
-		"/api/v1/auth",
-		authHandler.Routes(),
-	)
+	router.Group(func(r chi.Router) {
+		r.Use(authRateLimiter.Middleware)
+
+		r.Mount(
+			"/api/v1/auth",
+			authHandler.Routes(),
+		)
+	})
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.HTTP.Port),
