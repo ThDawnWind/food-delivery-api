@@ -2,7 +2,6 @@ package order
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -57,7 +56,7 @@ type updateOrderStatusRequest struct {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createOrderRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
 		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
@@ -191,7 +190,7 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 	limit := 0
 
 	if value := r.URL.Query().Get("limit"); value != "" {
-		parsedlimit, err := strconv.Atoi(value)
+		parsedLimit, err := strconv.Atoi(value)
 		if err != nil {
 			httpx.WriteError(
 				w,
@@ -201,7 +200,7 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		limit = parsedlimit
+		limit = parsedLimit
 	}
 
 	offset := 0
@@ -268,7 +267,7 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 
 	var req updateOrderStatusRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
 		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
@@ -474,7 +473,7 @@ func (h *Handler) AdminGetByID(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(
 			w,
 			http.StatusInternalServerError,
-			"nternal server error",
+			"internal server error",
 		)
 		return
 	}
@@ -504,7 +503,7 @@ func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.UserIDFromContext(
 		r.Context(),
 	)
-	if !ok {
+	if !ok || userID <= 0 {
 		httpx.WriteError(
 			w,
 			http.StatusUnauthorized,

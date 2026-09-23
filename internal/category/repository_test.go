@@ -20,7 +20,12 @@ func TestRepository_GetByID(t *testing.T) {
 		t.Skip("TEST_DATABASE_URL environment variable is not set")
 	}
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -68,7 +73,12 @@ func TestRepository_GetByID_NotFound(t *testing.T) {
 		t.Skip("TEST_DATABASE_URL environment variable is not set")
 	}
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -95,7 +105,12 @@ func TestRepository_List(t *testing.T) {
 		t.Skip("TEST_DATABASE_URL environment variable is not set")
 	}
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -186,7 +201,12 @@ func TestRepository_Create(t *testing.T) {
 		t.Skip("TEST_DATABASE_URL environment variable is not set")
 	}
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -248,7 +268,12 @@ func TestRepository_Update(t *testing.T) {
 		t.Skip("TEST_DATABASE_URL environment variable is not set")
 	}
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -324,7 +349,12 @@ func TestRepository_Update_NotFound(t *testing.T) {
 		t.Skip("TEST_DATABASE_URL environment variable is not set")
 	}
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -352,7 +382,12 @@ func TestRepository_Delete(t *testing.T) {
 		t.Skip("TEST_DATABASE_URL environment variable is not set")
 	}
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -393,7 +428,12 @@ func TestRepository_Delete_NotFound(t *testing.T) {
 		t.Skip("TEST_DATABASE_URL environment variable is not set")
 	}
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}

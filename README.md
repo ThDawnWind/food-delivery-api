@@ -25,6 +25,13 @@ The project is designed as a practical backend application with authentication, 
 * Docker Compose development environment
 * Graceful HTTP server shutdown
 * HTTP server timeouts
+* Readiness checks with PostgreSQL connectivity
+* Configurable PostgreSQL connection pool
+* Strict JSON request decoding and request size limits
+* Request ID, request logging, and panic recovery middleware
+* OpenAPI 3.1 specification
+* Scalar API documentation
+* GitHub Actions CI pipeline
 
 ## Tech Stack
 
@@ -65,6 +72,13 @@ Responsibilities are separated between layers:
 
 ```text
 food-delivery-api/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+│
+├── openapi/
+│   ├── embed.go
+│   └── openapi.yaml
 ├── cmd/
 │   ├── api/
 │   │   └── main.go
@@ -87,7 +101,7 @@ food-delivery-api/
 │   └── openapi.yaml
 │
 ├── Dockerfile
-├── compose.yml
+├── compose.yaml
 ├── .env.example
 ├── go.mod
 ├── go.sum
@@ -133,6 +147,12 @@ HTTP_IDLE_TIMEOUT=60s
 DATABASE_URL=postgres://food_delivery:food_delivery@localhost:5432/food_delivery?sslmode=disable
 TEST_DATABASE_URL=postgres://food_delivery:food_delivery@localhost:55432/food_delivery_test?sslmode=disable
 
+DB_MAX_CONNS=10
+DB_MIN_CONNS=1
+DB_MAX_CONN_LIFETIME=1h
+DB_MAX_CONN_IDLE_TIME=30m
+DB_HEALTH_CHECK_PERIOD=1m
+
 JWT_SECRET=replace-with-a-long-random-secret
 JWT_TTL=24h
 
@@ -176,6 +196,14 @@ Health check:
 ```text
 GET /health
 ```
+
+```text
+GET /ready
+```
+
+`/health` is a liveness check and verifies that the HTTP application is running.
+
+`/ready` is a readiness check and verifies that PostgreSQL is reachable. It returns `503 Service Unavailable` when the database is unavailable.
 
 Example:
 
@@ -469,7 +497,7 @@ Depending on the endpoint, the API can return:
 
 ## API Documentation
 
-The API specification is being documented using:
+The API is documented using:
 
 * OpenAPI 3.1
 * Scalar
@@ -480,25 +508,34 @@ The OpenAPI specification is stored in:
 openapi/openapi.yaml
 ```
 
-Planned HTTP endpoints for interactive documentation:
+Documentation endpoints:
 
 ```text
 GET /openapi.yaml
 GET /docs
 ```
 
-Scalar will provide an interactive API reference based on the OpenAPI specification.
+Scalar provides an interactive API reference based on the embedded OpenAPI specification.
 
 ## Development Status
 
-Core API functionality is implemented.
+The core v1 API is implemented.
 
-Current focus:
+Implemented infrastructure includes:
 
-* OpenAPI specification
-* Scalar API reference
-* CI pipeline
-* final production-readiness review
+* PostgreSQL migrations
+* Docker Compose environment
+* automated unit and integration tests
+* GitHub Actions CI
+* OpenAPI 3.1 documentation
+* Scalar interactive API reference
+* graceful shutdown
+* configurable database connection pool
+* liveness and readiness checks
+* strict JSON request handling
+* request logging and panic recovery
+
+The remaining work is final end-to-end verification and release cleanup.
 
 ## License
 

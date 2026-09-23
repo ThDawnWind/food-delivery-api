@@ -25,7 +25,12 @@ type HTTPConfig struct {
 }
 
 type DatabaseConfig struct {
-	URL string
+	URL               string
+	MaxConns          int32
+	MinConns          int32
+	MaxConnLifetime   time.Duration
+	MaxConnIdleTime   time.Duration
+	HealthCheckPeriod time.Duration
 }
 
 type JWTConfig struct {
@@ -100,6 +105,55 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("DATABASE_URL environment variable is not set")
 	}
 
+	dbMaxConns, err := parseInt32Env("DB_MAX_CONNS", 10)
+	if err != nil {
+		return Config{}, err
+	}
+
+	if dbMaxConns <= 0 {
+		return Config{}, errors.New("DB_MAX_CONNS must be greater than zero")
+	}
+
+	dbMinConns, err := parseInt32Env("DB_MIN_CONNS", 1)
+	if err != nil {
+		return Config{}, err
+	}
+
+	if dbMinConns < 0 {
+		return Config{}, errors.New("DB_MIN_CONNS must be greater than or equal to zero")
+	}
+
+	if dbMinConns > dbMaxConns {
+		return Config{}, errors.New("DB_MIN_CONNS must not be greater than DB_MAX_CONNS")
+	}
+
+	dbMaxConnLifetime, err := parseDurationEnv("DB_MAX_CONN_LIFETIME", "1h")
+	if err != nil {
+		return Config{}, err
+	}
+
+	if dbMaxConnLifetime <= 0 {
+		return Config{}, errors.New("DB_MAX_CONN_LIFETIME must be greater than zero")
+	}
+
+	dbMaxConnIdleTime, err := parseDurationEnv("DB_MAX_CONN_IDLE_TIME", "30m")
+	if err != nil {
+		return Config{}, err
+	}
+
+	if dbMaxConnIdleTime <= 0 {
+		return Config{}, errors.New("DB_MAX_CONN_IDLE_TIME must be greater than zero")
+	}
+
+	dbHealthCheckPeriod, err := parseDurationEnv("DB_HEALTH_CHECK_PERIOD", "1m")
+	if err != nil {
+		return Config{}, err
+	}
+
+	if dbHealthCheckPeriod <= 0 {
+		return Config{}, errors.New("DB_HEALTH_CHECK_PERIOD must be greater than zero")
+	}
+
 	jwtSecret := strings.TrimSpace(
 		os.Getenv("JWT_SECRET"),
 	)
@@ -151,7 +205,12 @@ func Load() (Config, error) {
 			IdleTimeout:       idleTimeoutParseDuration,
 		},
 		Database: DatabaseConfig{
-			URL: databaseURL,
+			URL:               databaseURL,
+			MaxConns:          dbMaxConns,
+			MinConns:          dbMinConns,
+			MaxConnLifetime:   dbMaxConnLifetime,
+			MaxConnIdleTime:   dbMaxConnIdleTime,
+			HealthCheckPeriod: dbHealthCheckPeriod,
 		},
 		JWT: &JWTConfig{
 			Secret: jwtSecret,
@@ -159,4 +218,32 @@ func Load() (Config, error) {
 		},
 		Timezone: timezone,
 	}, nil
+}
+
+func parseInt32Env(name string, defaultValue int32) (int32, error) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return defaultValue, nil
+	}
+
+	value, err := strconv.ParseInt(raw, 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s value: %w", name, err)
+	}
+
+	return int32(value), nil
+}
+
+func parseDurationEnv(name string, defaultValue string) (time.Duration, error) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		raw = defaultValue
+	}
+
+	value, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s value: %w", name, err)
+	}
+
+	return value, nil
 }

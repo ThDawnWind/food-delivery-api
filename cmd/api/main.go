@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/ThDawnWind/food-delivery-api/internal/address"
@@ -20,26 +21,37 @@ import (
 	"github.com/ThDawnWind/food-delivery-api/internal/user"
 	"github.com/ThDawnWind/food-delivery-api/openapi"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
 )
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, err := w.Write([]byte("OK"))
-	if err != nil {
-		log.Printf("Error writing response: %v", err)
-	} else {
-		log.Println("Health check responded with OK")
-	}
+	_, _ = w.Write([]byte("OK"))
 }
 
-func slowHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("Received request for /slow, simulating slow response...")
-	time.Sleep(4 * time.Second)
-	w.WriteHeader(http.StatusOK)
-	_, err := w.Write([]byte("Slow response completed"))
-	if err != nil {
-		log.Printf("Error writing response: %v", err)
+type databasePinger interface {
+	Ping(context.Context) error
+}
+
+func readinessHandler(db databasePinger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+
+		if err := db.Ping(ctx); err != nil {
+			http.Error(
+				w,
+				"Service Unavailable",
+				http.StatusServiceUnavailable,
+			)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("OK"))
 	}
 }
 
@@ -69,7 +81,17 @@ func main() {
 	)
 	defer dbCancel()
 
-	dbPool, err := database.New(dbCtx, cfg.Database.URL)
+	dbPool, err := database.New(
+		dbCtx,
+		database.Config{
+			URL:               cfg.Database.URL,
+			MaxConns:          cfg.Database.MaxConns,
+			MinConns:          cfg.Database.MinConns,
+			MaxConnLifetime:   cfg.Database.MaxConnLifetime,
+			MaxConnIdleTime:   cfg.Database.MaxConnIdleTime,
+			HealthCheckPeriod: cfg.Database.HealthCheckPeriod,
+		},
+	)
 	if err != nil {
 		log.Fatalf("Error connecting to database: %v", err)
 	} else {
@@ -121,12 +143,19 @@ func main() {
 		location,
 	)
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
 	defer stop()
 
 	router := chi.NewRouter()
+	router.Use(middleware.RequestID)
+	router.Use(middleware.Logger)
+	router.Use(middleware.Recoverer)
 	router.Get("/health", healthHandler)
-	router.Get("/slow", slowHandler)
+	router.Get("/ready", readinessHandler(dbPool))
 
 	router.Get("/openapi.yaml", openapi.SpecHandler)
 	router.Get("/docs", openapi.DocsHandler)

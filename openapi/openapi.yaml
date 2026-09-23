@@ -839,6 +839,30 @@ paths:
                 type: string
               example: OK
 
+  /ready:
+    get:
+      tags:
+        - Health
+      summary: Check application readiness
+      description: Checks whether the application is ready to serve requests and can reach PostgreSQL.
+      operationId: readiness
+      responses:
+        "200":
+          description: Application is ready
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: OK
+
+        "503":
+          description: Application is not ready because the database is unavailable
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: Service Unavailable
+
   /api/v1/orders:
     post:
       tags:

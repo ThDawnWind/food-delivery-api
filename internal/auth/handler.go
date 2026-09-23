@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -55,7 +54,9 @@ func (h *Handler) Routes() http.Handler {
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 
-	if err := json.NewDecoder(r.Body).Decode(
+	if err := httpx.DecodeJSON(
+		w,
+		r,
 		&req,
 	); err != nil {
 		httpx.WriteError(
@@ -117,7 +118,9 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 
-	if err := json.NewDecoder(r.Body).Decode(
+	if err := httpx.DecodeJSON(
+		w,
+		r,
 		&req,
 	); err != nil {
 		httpx.WriteError(

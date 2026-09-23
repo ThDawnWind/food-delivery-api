@@ -2,7 +2,6 @@ package address
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -79,7 +78,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var request createAddressRequest
 
-	if err := json.NewDecoder(r.Body).Decode(
+	if err := httpx.DecodeJSON(
+		w,
+		r,
 		&request,
 	); err != nil {
 		httpx.WriteError(
@@ -278,7 +279,9 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	var request updateAddressRequest
 
-	if err := json.NewDecoder(r.Body).Decode(
+	if err := httpx.DecodeJSON(
+		w,
+		r,
 		&request,
 	); err != nil {
 		httpx.WriteError(

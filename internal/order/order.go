@@ -38,16 +38,6 @@ type OrderItem struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
-type OrderItems struct {
-	ID            int64     `json:"id"`
-	OrderID       int64     `json:"order_id"`
-	ProductID     int64     `json:"product_id"`
-	NameSnapshot  string    `json:"name_snapshot"`
-	PriceSnapshot int64     `json:"price_snapshot"`
-	Quantity      int       `json:"quantity"`
-	CreatedAt     time.Time `json:"created_at"`
-}
-
 type CreateOrder struct {
 	UserID    int64        `json:"-"`
 	AddressID int64        `json:"address_id"`

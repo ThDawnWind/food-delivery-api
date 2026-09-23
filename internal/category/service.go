@@ -11,7 +11,7 @@ import (
 
 var (
 	ErrCategoryNotFound   = errors.New("category not found")
-	ErrCategoryValidation = errors.New("category validation error ")
+	ErrCategoryValidation = errors.New("category validation error")
 )
 
 type RepositoryInterface interface {
