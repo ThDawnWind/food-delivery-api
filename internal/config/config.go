@@ -19,6 +19,7 @@ type Config struct {
 
 type HTTPConfig struct {
 	Port              int
+	ReadTimeout       time.Duration
 	ReadHeaderTimeout time.Duration
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
@@ -47,6 +48,25 @@ func Load() (Config, error) {
 	port, exists := os.LookupEnv("HTTP_PORT")
 	if !exists {
 		port = "8080"
+	}
+
+	readTimeout, exists := os.LookupEnv("HTTP_READ_TIMEOUT")
+	if !exists {
+		readTimeout = "15s"
+	}
+
+	readTimeoutParseDuration, err := time.ParseDuration(readTimeout)
+	if err != nil {
+		return Config{}, fmt.Errorf(
+			"Invalid HTTP_READ_TIMEOUT value: %w",
+			err,
+		)
+	}
+
+	if readTimeoutParseDuration <= 0 {
+		return Config{}, fmt.Errorf(
+			"HTTP_READ_TIMEOUT must be greater than zero",
+		)
 	}
 
 	portInt, err := strconv.Atoi(port)
@@ -200,6 +220,7 @@ func Load() (Config, error) {
 		Env: env,
 		HTTP: HTTPConfig{
 			Port:              portInt,
+			ReadTimeout:       readTimeoutParseDuration,
 			ReadHeaderTimeout: readHeaderTimeoutParseDuration,
 			WriteTimeout:      writeTimeoutParseDuration,
 			IdleTimeout:       idleTimeoutParseDuration,

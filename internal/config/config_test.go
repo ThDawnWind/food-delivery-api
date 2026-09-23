@@ -18,6 +18,7 @@ func TestLoadConfig(t *testing.T) {
 	t.Setenv("DB_MAX_CONN_LIFETIME", "1h")
 	t.Setenv("DB_MAX_CONN_IDLE_TIME", "30m")
 	t.Setenv("DB_HEALTH_CHECK_PERIOD", "1m")
+	t.Setenv("HTTP_READ_TIMEOUT", "15s")
 
 	expectedDatabaseURL := "postgres://user:password@localhost:5432/dbname"
 
@@ -93,6 +94,13 @@ func TestLoadConfig(t *testing.T) {
 			cfg.JWT.TTL,
 		)
 	}
+
+	if cfg.HTTP.ReadTimeout != 15*time.Second {
+		t.Errorf(
+			"Expected ReadTimeout to be 15s, got %v",
+			cfg.HTTP.ReadTimeout,
+		)
+	}
 }
 
 func TestLoadConfigInvalidPort(t *testing.T) {
@@ -143,6 +151,16 @@ func TestLoadConfigInvalidTimeout(t *testing.T) {
 			name:  "invalid idle timeout",
 			env:   "HTTP_IDLE_TIMEOUT",
 			value: "invalid",
+		},
+		{
+			name:  "invalid read timeout",
+			env:   "HTTP_READ_TIMEOUT",
+			value: "invalid",
+		},
+		{
+			name:  "zero read timeout",
+			env:   "HTTP_READ_TIMEOUT",
+			value: "0s",
 		},
 	}
 
