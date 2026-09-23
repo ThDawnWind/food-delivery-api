@@ -17,7 +17,12 @@ func TestRepository_Create(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -113,7 +118,12 @@ func TestRepository_Create_DuplicateUsername(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -177,7 +187,12 @@ func TestRepository_Create_DuplicateEmail(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -241,7 +256,12 @@ func TestRepository_GetByID(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -333,7 +353,12 @@ func TestRepository_GetByEmail(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -401,7 +426,12 @@ func TestRepository_GetByID_NotFound(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -437,7 +467,12 @@ func TestRepository_GetByEmail_NotFound(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}

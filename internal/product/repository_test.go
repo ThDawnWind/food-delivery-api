@@ -17,7 +17,12 @@ func TestRepository_GetByID(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -210,7 +215,12 @@ func TestRepository_GetByID_NotFound(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -240,7 +250,12 @@ func TestRepository_List(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -471,7 +486,12 @@ func TestRepository_Create(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -628,7 +648,12 @@ func TestRepository_Create_RollbackOnImageError(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -738,7 +763,12 @@ func TestRepository_Update(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -912,7 +942,12 @@ func TestRepository_Deactivate(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -1023,7 +1058,12 @@ func TestRepository_Deactivate_NotFound(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -1049,7 +1089,12 @@ func TestRepository_List_ExcludesInactiveProducts(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -1170,7 +1215,12 @@ func TestRepository_List_FilterByCategory(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -1323,7 +1373,12 @@ func TestRepository_List_Search(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -1460,7 +1515,12 @@ func TestRepository_List_LimitOffset(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -1581,7 +1641,12 @@ func TestRepository_Update_NotFound(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}
@@ -1623,7 +1688,12 @@ func TestRepository_Update_RollbackOnImageError(t *testing.T) {
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 
-	dbPool, err := database.New(ctx, dbURL)
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to connect to database: %v", err)
 	}

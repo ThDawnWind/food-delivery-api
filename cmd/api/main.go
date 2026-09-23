@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/ThDawnWind/food-delivery-api/internal/address"
@@ -69,7 +70,17 @@ func main() {
 	)
 	defer dbCancel()
 
-	dbPool, err := database.New(dbCtx, cfg.Database.URL)
+	dbPool, err := database.New(
+		dbCtx,
+		database.Config{
+			URL:               cfg.Database.URL,
+			MaxConns:          cfg.Database.MaxConns,
+			MinConns:          cfg.Database.MinConns,
+			MaxConnLifetime:   cfg.Database.MaxConnLifetime,
+			MaxConnIdleTime:   cfg.Database.MaxConnIdleTime,
+			HealthCheckPeriod: cfg.Database.HealthCheckPeriod,
+		},
+	)
 	if err != nil {
 		log.Fatalf("Error connecting to database: %v", err)
 	} else {
@@ -121,7 +132,11 @@ func main() {
 		location,
 	)
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
 	defer stop()
 
 	router := chi.NewRouter()
