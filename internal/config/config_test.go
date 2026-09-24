@@ -495,3 +495,43 @@ func TestLoadConfigMultipleCORSOrigins(t *testing.T) {
 		)
 	}
 }
+
+func TestLoadConfigTrustedProxyCIDRs(t *testing.T) {
+	setRequiredEnv(t)
+
+	t.Setenv(
+		"TRUSTED_PROXY_CIDRS",
+		"172.18.0.0/16, 10.0.0.0/8",
+	)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf(
+			"expected no error, got %v",
+			err,
+		)
+	}
+
+	if len(cfg.HTTP.TrustedProxyCIDRs) != 2 {
+		t.Fatalf(
+			"expected 2 trusted proxy CIDRs, got %d",
+			len(cfg.HTTP.TrustedProxyCIDRs),
+		)
+	}
+}
+
+func TestLoadConfigInvalidTrustedProxyCIDR(t *testing.T) {
+	setRequiredEnv(t)
+
+	t.Setenv(
+		"TRUSTED_PROXY_CIDRS",
+		"not-a-cidr",
+	)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal(
+			"expected error for invalid trusted proxy CIDR",
+		)
+	}
+}

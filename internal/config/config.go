@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -24,6 +25,7 @@ type HTTPConfig struct {
 	WriteTimeout       time.Duration
 	IdleTimeout        time.Duration
 	CORSAllowedOrigins []string
+	TrustedProxyCIDRs  []netip.Prefix
 }
 
 type DatabaseConfig struct {
@@ -261,6 +263,35 @@ func Load() (Config, error) {
 		}
 	}
 
+	trustedProxyCIDRsRaw := strings.TrimSpace(
+		os.Getenv("TRUSTED_PROXY_CIDRS"),
+	)
+
+	var trustedProxyCIDRs []netip.Prefix
+
+	if trustedProxyCIDRsRaw != "" {
+		for _, rawCIDR := range strings.Split(
+			trustedProxyCIDRsRaw,
+			",",
+		) {
+			rawCIDR = strings.TrimSpace(rawCIDR)
+
+			prefix, err := netip.ParsePrefix(rawCIDR)
+			if err != nil {
+				return Config{}, fmt.Errorf(
+					"invalid TRUSTED_PROXY_CIDRS value %q: %w",
+					rawCIDR,
+					err,
+				)
+			}
+
+			trustedProxyCIDRs = append(
+				trustedProxyCIDRs,
+				prefix.Masked(),
+			)
+		}
+	}
+
 	return Config{
 		Env: env,
 		HTTP: HTTPConfig{
@@ -270,6 +301,7 @@ func Load() (Config, error) {
 			WriteTimeout:       writeTimeoutParseDuration,
 			IdleTimeout:        idleTimeoutParseDuration,
 			CORSAllowedOrigins: corsAllowedOrigins,
+			TrustedProxyCIDRs:  trustedProxyCIDRs,
 		},
 		Database: DatabaseConfig{
 			URL:               databaseURL,

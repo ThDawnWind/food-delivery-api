@@ -3,6 +3,7 @@ package httpx
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ func TestIPRateLimiter(t *testing.T) {
 		rate.Every(time.Hour),
 		2,
 		10*time.Minute,
+		nil,
 	)
 
 	handler := limiter.Middleware(
@@ -72,6 +74,7 @@ func TestIPRateLimiter_SeparateIPs(t *testing.T) {
 		rate.Every(time.Hour),
 		1,
 		10*time.Minute,
+		nil,
 	)
 
 	handler := limiter.Middleware(
@@ -115,6 +118,130 @@ func TestIPRateLimiter_SeparateIPs(t *testing.T) {
 			"expected second IP status %d, got %d",
 			http.StatusOK,
 			secondRecorder.Code,
+		)
+	}
+}
+
+func TestClientIPIgnoresForwardedForFromUntrustedPeer(t *testing.T) {
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/login",
+		nil,
+	)
+
+	request.RemoteAddr = "203.0.113.10:12345"
+
+	request.Header.Set(
+		"X-Forwarded-For",
+		"198.51.100.20",
+	)
+
+	ip := clientIP(
+		request,
+		[]netip.Prefix{
+			netip.MustParsePrefix(
+				"172.18.0.0/16",
+			),
+		},
+	)
+
+	if ip != "203.0.113.10" {
+		t.Fatalf(
+			"expected remote IP, got %q",
+			ip,
+		)
+	}
+}
+
+func TestClientIPUsesForwardedForFromTrustedProxy(t *testing.T) {
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/login",
+		nil,
+	)
+
+	request.RemoteAddr = "172.18.0.5:12345"
+
+	request.Header.Set(
+		"X-Forwarded-For",
+		"203.0.113.25",
+	)
+
+	ip := clientIP(
+		request,
+		[]netip.Prefix{
+			netip.MustParsePrefix(
+				"172.18.0.0/16",
+			),
+		},
+	)
+
+	if ip != "203.0.113.25" {
+		t.Fatalf(
+			"expected client IP, got %q",
+			ip,
+		)
+	}
+}
+
+func TestClientIPSkipsTrustedProxyChain(t *testing.T) {
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/login",
+		nil,
+	)
+
+	request.RemoteAddr = "172.18.0.5:12345"
+
+	request.Header.Set(
+		"X-Forwarded-For",
+		"203.0.113.25, 172.18.0.4",
+	)
+
+	ip := clientIP(
+		request,
+		[]netip.Prefix{
+			netip.MustParsePrefix(
+				"172.18.0.0/16",
+			),
+		},
+	)
+
+	if ip != "203.0.113.25" {
+		t.Fatalf(
+			"expected client IP, got %q",
+			ip,
+		)
+	}
+}
+
+func TestClientIPInvalidForwardedForFallsBackToRemote(t *testing.T) {
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/login",
+		nil,
+	)
+
+	request.RemoteAddr = "172.18.0.5:12345"
+
+	request.Header.Set(
+		"X-Forwarded-For",
+		"definitely-not-an-ip",
+	)
+
+	ip := clientIP(
+		request,
+		[]netip.Prefix{
+			netip.MustParsePrefix(
+				"172.18.0.0/16",
+			),
+		},
+	)
+
+	if ip != "172.18.0.5" {
+		t.Fatalf(
+			"expected proxy IP fallback, got %q",
+			ip,
 		)
 	}
 }

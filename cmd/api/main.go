@@ -135,6 +135,7 @@ func main() {
 		rate.Every(12*time.Second),
 		5,
 		15*time.Minute,
+		cfg.HTTP.TrustedProxyCIDRs,
 	)
 
 	addressRepository := address.NewRepository(dbPool)
