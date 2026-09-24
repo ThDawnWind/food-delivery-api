@@ -3,6 +3,7 @@ package order
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -13,28 +14,69 @@ import (
 )
 
 type ServiceInterface interface {
-	Create(ctx context.Context, input *CreateOrder) (*Order, error)
-	GetByID(ctx context.Context, id int64) (*Order, error)
-	GetByIDForUser(ctx context.Context, orderID int64, userID int64) (*Order, error)
-	ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error)
-	ListAll(ctx context.Context, filter ListOrdersFilter) (*ListOrdersResult, error)
-	Cancel(ctx context.Context, orderID int64, userID int64) error
-	UpdateStatus(ctx context.Context, id int64, status Status) error
+	Create(
+		ctx context.Context,
+		input *CreateOrder,
+	) (*Order, error)
+
+	GetByID(
+		ctx context.Context,
+		id int64,
+	) (*Order, error)
+
+	GetByIDForUser(
+		ctx context.Context,
+		orderID int64,
+		userID int64,
+	) (*Order, error)
+
+	ListByUser(
+		ctx context.Context,
+		userID int64,
+		limit int,
+		offset int,
+	) ([]Order, error)
+
+	ListAll(
+		ctx context.Context,
+		filter ListOrdersFilter,
+	) (*ListOrdersResult, error)
+
+	Cancel(
+		ctx context.Context,
+		orderID int64,
+		userID int64,
+	) error
+
+	UpdateStatus(
+		ctx context.Context,
+		id int64,
+		status Status,
+	) error
 }
 
 type Handler struct {
 	service  ServiceInterface
 	location *time.Location
+	logger   *slog.Logger
 }
 
-func NewHandler(service ServiceInterface) *Handler {
+func NewHandler(
+	service ServiceInterface,
+	logger *slog.Logger,
+) *Handler {
 	return NewHandlerWithLocation(
 		service,
 		time.UTC,
+		logger,
 	)
 }
 
-func NewHandlerWithLocation(service ServiceInterface, location *time.Location) *Handler {
+func NewHandlerWithLocation(
+	service ServiceInterface,
+	location *time.Location,
+	logger *slog.Logger,
+) *Handler {
 	if location == nil {
 		location = time.UTC
 	}
@@ -42,6 +84,7 @@ func NewHandlerWithLocation(service ServiceInterface, location *time.Location) *
 	return &Handler{
 		service:  service,
 		location: location,
+		logger:   logger,
 	}
 }
 
@@ -54,10 +97,17 @@ type updateOrderStatusRequest struct {
 	Status Status `json:"status"`
 }
 
-func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Create(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	var req createOrderRequest
 
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+	if err := httpx.DecodeJSON(
+		w,
+		r,
+		&req,
+	); err != nil {
 		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
@@ -89,7 +139,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		input,
 	)
 	if err != nil {
-		if errors.Is(err, ErrOrderValidation) {
+		if errors.Is(
+			err,
+			ErrOrderValidation,
+		) {
 			httpx.WriteJSON(
 				w,
 				http.StatusBadRequest,
@@ -100,10 +153,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		httpx.WriteError(
+		httpx.WriteInternalError(
+			h.logger,
 			w,
-			http.StatusInternalServerError,
-			"internal server error",
+			r,
+			"failed to create order",
+			err,
 		)
 		return
 	}
@@ -115,10 +170,20 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
-	idParam := chi.URLParam(r, "id")
+func (h *Handler) GetByID(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	idParam := chi.URLParam(
+		r,
+		"id",
+	)
 
-	id, err := strconv.ParseInt(idParam, 10, 64)
+	id, err := strconv.ParseInt(
+		idParam,
+		10,
+		64,
+	)
 	if err != nil || id <= 0 {
 		httpx.WriteError(
 			w,
@@ -140,9 +205,16 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	order, err := h.service.GetByIDForUser(r.Context(), id, userID)
+	order, err := h.service.GetByIDForUser(
+		r.Context(),
+		id,
+		userID,
+	)
 	if err != nil {
-		if errors.Is(err, ErrOrderNotFound) {
+		if errors.Is(
+			err,
+			ErrOrderNotFound,
+		) {
 			httpx.WriteError(
 				w,
 				http.StatusNotFound,
@@ -151,10 +223,12 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		httpx.WriteError(
+		httpx.WriteInternalError(
+			h.logger,
 			w,
-			http.StatusInternalServerError,
-			"internal server error",
+			r,
+			"failed to get order",
+			err,
 		)
 		return
 	}
@@ -166,7 +240,10 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ListByUser(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	userID, ok := auth.UserIDFromContext(
 		r.Context(),
 	)
@@ -181,8 +258,12 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 
 	limit := 0
 
-	if value := r.URL.Query().Get("limit"); value != "" {
-		parsedLimit, err := strconv.Atoi(value)
+	if value := r.URL.Query().Get(
+		"limit",
+	); value != "" {
+		parsedLimit, err := strconv.Atoi(
+			value,
+		)
 		if err != nil {
 			httpx.WriteError(
 				w,
@@ -197,8 +278,12 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 
 	offset := 0
 
-	if value := r.URL.Query().Get("offset"); value != "" {
-		parsedOffset, err := strconv.Atoi(value)
+	if value := r.URL.Query().Get(
+		"offset",
+	); value != "" {
+		parsedOffset, err := strconv.Atoi(
+			value,
+		)
 		if err != nil {
 			httpx.WriteError(
 				w,
@@ -218,7 +303,10 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 		offset,
 	)
 	if err != nil {
-		if errors.Is(err, ErrOrderValidation) {
+		if errors.Is(
+			err,
+			ErrOrderValidation,
+		) {
 			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
@@ -227,10 +315,12 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		httpx.WriteError(
+		httpx.WriteInternalError(
+			h.logger,
 			w,
-			http.StatusInternalServerError,
-			"internal server error",
+			r,
+			"failed to list user orders",
+			err,
 		)
 		return
 	}
@@ -242,9 +332,15 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UpdateStatus(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	id, err := strconv.ParseInt(
-		chi.URLParam(r, "id"),
+		chi.URLParam(
+			r,
+			"id",
+		),
 		10,
 		64,
 	)
@@ -259,7 +355,11 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 
 	var req updateOrderStatusRequest
 
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+	if err := httpx.DecodeJSON(
+		w,
+		r,
+		&req,
+	); err != nil {
 		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
@@ -275,39 +375,60 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		switch {
-		case errors.Is(err, ErrOrderValidation):
+		case errors.Is(
+			err,
+			ErrOrderValidation,
+		):
 			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
 				err.Error(),
 			)
-		case errors.Is(err, ErrOrderNotFound):
+
+		case errors.Is(
+			err,
+			ErrOrderNotFound,
+		):
 			httpx.WriteError(
 				w,
 				http.StatusNotFound,
 				"order not found",
 			)
+
 		default:
-			httpx.WriteError(
+			httpx.WriteInternalError(
+				h.logger,
 				w,
-				http.StatusInternalServerError,
-				"internal server error",
+				r,
+				"failed to update order status",
+				err,
 			)
 		}
 
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(
+		http.StatusNoContent,
+	)
 }
 
-func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ListAll(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	limit := 20
 	offset := 0
-	status := r.URL.Query().Get("status")
+
+	status := r.URL.Query().Get(
+		"status",
+	)
+
 	var userID *int64
 
-	if value := r.URL.Query().Get("user_id"); value != "" {
+	if value := r.URL.Query().Get(
+		"user_id",
+	); value != "" {
 		parsedUserID, err := strconv.ParseInt(
 			value,
 			10,
@@ -327,7 +448,9 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 
 	var createdFrom *time.Time
 
-	if value := r.URL.Query().Get("from"); value != "" {
+	if value := r.URL.Query().Get(
+		"from",
+	); value != "" {
 		parsed, err := time.ParseInLocation(
 			"2006-01-02",
 			value,
@@ -347,7 +470,9 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 
 	var createdTo *time.Time
 
-	if value := r.URL.Query().Get("to"); value != "" {
+	if value := r.URL.Query().Get(
+		"to",
+	); value != "" {
 		parsed, err := time.ParseInLocation(
 			"2006-01-02",
 			value,
@@ -363,14 +488,24 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 		}
 
 		endOfDay := parsed.
-			AddDate(0, 0, 1).
-			Add(-time.Nanosecond)
+			AddDate(
+				0,
+				0,
+				1,
+			).
+			Add(
+				-time.Nanosecond,
+			)
 
 		createdTo = &endOfDay
 	}
 
-	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
-		parsedLimit, err := strconv.Atoi(rawLimit)
+	if rawLimit := r.URL.Query().Get(
+		"limit",
+	); rawLimit != "" {
+		parsedLimit, err := strconv.Atoi(
+			rawLimit,
+		)
 		if err != nil {
 			httpx.WriteError(
 				w,
@@ -383,8 +518,12 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 		limit = parsedLimit
 	}
 
-	if rawOffset := r.URL.Query().Get("offset"); rawOffset != "" {
-		parsedOffset, err := strconv.Atoi(rawOffset)
+	if rawOffset := r.URL.Query().Get(
+		"offset",
+	); rawOffset != "" {
+		parsedOffset, err := strconv.Atoi(
+			rawOffset,
+		)
 		if err != nil {
 			httpx.WriteError(
 				w,
@@ -409,7 +548,10 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 	if err != nil {
-		if errors.Is(err, ErrOrderValidation) {
+		if errors.Is(
+			err,
+			ErrOrderValidation,
+		) {
 			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
@@ -418,10 +560,12 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		httpx.WriteError(
+		httpx.WriteInternalError(
+			h.logger,
 			w,
-			http.StatusInternalServerError,
-			"internal server error",
+			r,
+			"failed to list orders",
+			err,
 		)
 		return
 	}
@@ -433,9 +577,15 @@ func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func (h *Handler) AdminGetByID(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) AdminGetByID(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	id, err := strconv.ParseInt(
-		chi.URLParam(r, "id"),
+		chi.URLParam(
+			r,
+			"id",
+		),
 		10,
 		64,
 	)
@@ -453,7 +603,10 @@ func (h *Handler) AdminGetByID(w http.ResponseWriter, r *http.Request) {
 		id,
 	)
 	if err != nil {
-		if errors.Is(err, ErrOrderNotFound) {
+		if errors.Is(
+			err,
+			ErrOrderNotFound,
+		) {
 			httpx.WriteError(
 				w,
 				http.StatusNotFound,
@@ -462,10 +615,12 @@ func (h *Handler) AdminGetByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		httpx.WriteError(
+		httpx.WriteInternalError(
+			h.logger,
 			w,
-			http.StatusInternalServerError,
-			"internal server error",
+			r,
+			"failed to get admin order",
+			err,
 		)
 		return
 	}
@@ -477,9 +632,15 @@ func (h *Handler) AdminGetByID(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Cancel(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	orderID, err := strconv.ParseInt(
-		chi.URLParam(r, "id"),
+		chi.URLParam(
+			r,
+			"id",
+		),
 		10,
 		64,
 	)
@@ -511,14 +672,20 @@ func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		switch {
-		case errors.Is(err, ErrOrderNotFound):
+		case errors.Is(
+			err,
+			ErrOrderNotFound,
+		):
 			httpx.WriteError(
 				w,
 				http.StatusNotFound,
 				"order not found",
 			)
 
-		case errors.Is(err, ErrOrderValidation):
+		case errors.Is(
+			err,
+			ErrOrderValidation,
+		):
 			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
@@ -526,17 +693,21 @@ func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
 			)
 
 		default:
-			httpx.WriteError(
+			httpx.WriteInternalError(
+				h.logger,
 				w,
-				http.StatusInternalServerError,
-				"internal server error",
+				r,
+				"failed to cancel order",
+				err,
 			)
 		}
 
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(
+		http.StatusNoContent,
+	)
 }
 
 func (h *Handler) Routes() http.Handler {

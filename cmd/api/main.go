@@ -174,9 +174,9 @@ func main() {
 	addressRepository := address.NewRepository(dbPool)
 	addressService := address.NewService(addressRepository)
 	addressHandler := address.NewHandler(
-	addressService,
-	logger,
-)
+		addressService,
+		logger,
+	)
 
 	orderRepository := order.NewRepository(dbPool)
 	orderService := order.NewService(
@@ -187,6 +187,7 @@ func main() {
 	orderHandler := order.NewHandlerWithLocation(
 		orderService,
 		location,
+		logger,
 	)
 
 	ctx, stop := signal.NotifyContext(

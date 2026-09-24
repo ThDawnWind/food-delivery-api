@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -46,7 +48,10 @@ type fakeOrderService struct {
 	getUserID      int64
 }
 
-func (f *fakeOrderService) Create(ctx context.Context, input *CreateOrder) (*Order, error) {
+func (f *fakeOrderService) Create(
+	ctx context.Context,
+	input *CreateOrder,
+) (*Order, error) {
 	f.createInput = input
 
 	if f.createErr != nil {
@@ -56,16 +61,25 @@ func (f *fakeOrderService) Create(ctx context.Context, input *CreateOrder) (*Ord
 	return f.createOrder, nil
 }
 
-func (f *fakeOrderService) GetByID(ctx context.Context, id int64) (*Order, error) {
+func (f *fakeOrderService) GetByID(
+	ctx context.Context,
+	id int64,
+) (*Order, error) {
 	f.getID = id
 
 	if f.getErr != nil {
 		return nil, f.getErr
 	}
+
 	return f.getOrder, nil
 }
 
-func (f *fakeOrderService) ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error) {
+func (f *fakeOrderService) ListByUser(
+	ctx context.Context,
+	userID int64,
+	limit int,
+	offset int,
+) ([]Order, error) {
 	f.listUserID = userID
 	f.listLimit = limit
 	f.listOffset = offset
@@ -73,10 +87,14 @@ func (f *fakeOrderService) ListByUser(ctx context.Context, userID int64, limit i
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
+
 	return f.listOrders, nil
 }
 
-func (f *fakeOrderService) ListAll(ctx context.Context, filter ListOrdersFilter) (*ListOrdersResult, error) {
+func (f *fakeOrderService) ListAll(
+	ctx context.Context,
+	filter ListOrdersFilter,
+) (*ListOrdersResult, error) {
 	f.listAllFilter = filter
 
 	if f.listAllErr != nil {
@@ -91,20 +109,33 @@ func (f *fakeOrderService) ListAll(ctx context.Context, filter ListOrdersFilter)
 	}, nil
 }
 
-func (f *fakeOrderService) UpdateStatus(ctx context.Context, id int64, status Status) error {
+func (f *fakeOrderService) UpdateStatus(
+	ctx context.Context,
+	id int64,
+	status Status,
+) error {
 	f.updateID = id
 	f.updateStatus = status
+
 	return f.updateErr
 }
 
-func (f *fakeOrderService) Cancel(ctx context.Context, orderID int64, userID int64) error {
+func (f *fakeOrderService) Cancel(
+	ctx context.Context,
+	orderID int64,
+	userID int64,
+) error {
 	f.cancelOrderID = orderID
 	f.cancelUserID = userID
 
 	return f.cancelErr
 }
 
-func (f *fakeOrderService) GetByIDForUser(ctx context.Context, orderID int64, userID int64) (*Order, error) {
+func (f *fakeOrderService) GetByIDForUser(
+	ctx context.Context,
+	orderID int64,
+	userID int64,
+) (*Order, error) {
 	f.getUserOrderID = orderID
 	f.getUserID = userID
 
@@ -124,11 +155,17 @@ type fakeTokenParser struct {
 	claims *auth.Claims
 }
 
-func (f *fakeTokenParser) Parse(tokenString string) (*auth.Claims, error) {
+func (f *fakeTokenParser) Parse(
+	tokenString string,
+) (*auth.Claims, error) {
 	return f.claims, nil
 }
 
-func authenticatedHandler(handler http.Handler, userID int64, role string) http.Handler {
+func authenticatedHandler(
+	handler http.Handler,
+	userID int64,
+	role string,
+) http.Handler {
 	parser := &fakeTokenParser{
 		claims: &auth.Claims{
 			UserID: userID,
@@ -136,13 +173,31 @@ func authenticatedHandler(handler http.Handler, userID int64, role string) http.
 		},
 	}
 
-	return auth.Middleware(parser)(handler)
+	return auth.Middleware(parser)(
+		handler,
+	)
 }
 
-func updateStatusRouter(handler *Handler) http.Handler {
+func updateStatusRouter(
+	handler *Handler,
+) http.Handler {
 	router := chi.NewRouter()
-	router.Patch("/api/v1/admin/orders/{id}/status", handler.UpdateStatus)
+
+	router.Patch(
+		"/api/v1/admin/orders/{id}/status",
+		handler.UpdateStatus,
+	)
+
 	return router
+}
+
+func newTestLogger() *slog.Logger {
+	return slog.New(
+		slog.NewJSONHandler(
+			io.Discard,
+			nil,
+		),
+	)
 }
 
 func TestHandler_Create(t *testing.T) {
@@ -164,22 +219,27 @@ func TestHandler_Create(t *testing.T) {
 		},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := `{
-	"address_id": 7,
-	"items": [
-		{
-			"product_id": 1,
-			"quantity": 2
-		}
-	]
-}`
+		"address_id": 7,
+		"items": [
+			{
+				"product_id": 1,
+				"quantity": 2
+			}
+		]
+	}`
 
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/",
-		bytes.NewReader([]byte(body)),
+		bytes.NewReader(
+			[]byte(body),
+		),
 	)
 
 	rec := httptest.NewRecorder()
@@ -188,6 +248,7 @@ func TestHandler_Create(t *testing.T) {
 		"Authorization",
 		"Bearer test-token",
 	)
+
 	protected := authenticatedHandler(
 		handler.Routes(),
 		10,
@@ -228,6 +289,7 @@ func TestHandler_Create(t *testing.T) {
 			service.createInput.AddressID,
 		)
 	}
+
 	if len(service.createInput.Items) != 1 {
 		t.Fatalf(
 			"expected %d item, got %d",
@@ -254,7 +316,10 @@ func TestHandler_Create(t *testing.T) {
 
 	var response Order
 
-	err := json.NewDecoder(rec.Body).Decode(&response)
+	err := json.NewDecoder(
+		rec.Body,
+	).Decode(&response)
+
 	if err != nil {
 		t.Fatalf(
 			"failed to decode response: %v",
@@ -287,15 +352,22 @@ func TestHandler_Create(t *testing.T) {
 	}
 }
 
-func TestHandler_Create_InvalidJSON(t *testing.T) {
+func TestHandler_Create_InvalidJSON(
+	t *testing.T,
+) {
 	service := &fakeOrderService{}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/",
-		bytes.NewBufferString(`{"delivery_address":`),
+		bytes.NewBufferString(
+			`{"delivery_address":`,
+		),
 	)
 
 	rec := httptest.NewRecorder()
@@ -320,12 +392,17 @@ func TestHandler_Create_InvalidJSON(t *testing.T) {
 	}
 }
 
-func TestHandler_Create_ValidationError(t *testing.T) {
+func TestHandler_Create_ValidationError(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
 		createErr: ErrOrderValidation,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`
 	{
@@ -353,7 +430,10 @@ func TestHandler_Create_ValidationError(t *testing.T) {
 		"user",
 	)
 
-	protected.ServeHTTP(rec, req)
+	protected.ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf(
@@ -364,12 +444,19 @@ func TestHandler_Create_ValidationError(t *testing.T) {
 	}
 }
 
-func TestHandler_Create_InternalError(t *testing.T) {
+func TestHandler_Create_InternalError(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
-		createErr: errors.New("database unavailable"),
+		createErr: errors.New(
+			"database unavailable",
+		),
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`
 	{
@@ -402,7 +489,10 @@ func TestHandler_Create_InternalError(t *testing.T) {
 		"user",
 	)
 
-	protected.ServeHTTP(rec, req)
+	protected.ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf(
@@ -424,7 +514,10 @@ func TestHandler_GetByID(t *testing.T) {
 		},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -445,7 +538,10 @@ func TestHandler_GetByID(t *testing.T) {
 		"user",
 	)
 
-	protected.ServeHTTP(rec, req)
+	protected.ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf(
@@ -472,7 +568,9 @@ func TestHandler_GetByID(t *testing.T) {
 	}
 }
 
-func TestHandler_GetByID_OtherUserOrder(t *testing.T) {
+func TestHandler_GetByID_OtherUserOrder(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
 		getOrder: &Order{
 			ID:     10,
@@ -481,7 +579,10 @@ func TestHandler_GetByID_OtherUserOrder(t *testing.T) {
 		},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -502,7 +603,10 @@ func TestHandler_GetByID_OtherUserOrder(t *testing.T) {
 		"user",
 	)
 
-	protected.ServeHTTP(rec, req)
+	protected.ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf(
@@ -513,9 +617,15 @@ func TestHandler_GetByID_OtherUserOrder(t *testing.T) {
 	}
 }
 
-func TestHandler_GetByID_InvalidID(t *testing.T) {
+func TestHandler_GetByID_InvalidID(
+	t *testing.T,
+) {
 	service := &fakeOrderService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -525,7 +635,10 @@ func TestHandler_GetByID_InvalidID(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(rec, req)
+	handler.Routes().ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf(
@@ -536,16 +649,23 @@ func TestHandler_GetByID_InvalidID(t *testing.T) {
 	}
 
 	if service.getID != 0 {
-		t.Fatal("service must not be called for invalid ID")
+		t.Fatal(
+			"service must not be called for invalid ID",
+		)
 	}
 }
 
-func TestHandler_GetByID_NotFound(t *testing.T) {
+func TestHandler_GetByID_NotFound(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
 		getErr: ErrOrderNotFound,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -553,12 +673,12 @@ func TestHandler_GetByID_NotFound(t *testing.T) {
 		nil,
 	)
 
-	rec := httptest.NewRecorder()
-
 	req.Header.Set(
 		"Authorization",
 		"Bearer test-token",
 	)
+
+	rec := httptest.NewRecorder()
 
 	protected := authenticatedHandler(
 		handler.Routes(),
@@ -566,7 +686,10 @@ func TestHandler_GetByID_NotFound(t *testing.T) {
 		"user",
 	)
 
-	protected.ServeHTTP(rec, req)
+	protected.ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf(
@@ -577,12 +700,19 @@ func TestHandler_GetByID_NotFound(t *testing.T) {
 	}
 }
 
-func TestHandler_GetByID_InternalError(t *testing.T) {
+func TestHandler_GetByID_InternalError(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
-		getErr: errors.New("database unavailable"),
+		getErr: errors.New(
+			"database unavailable",
+		),
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -590,12 +720,12 @@ func TestHandler_GetByID_InternalError(t *testing.T) {
 		nil,
 	)
 
-	rec := httptest.NewRecorder()
-
 	req.Header.Set(
 		"Authorization",
 		"Bearer test-token",
 	)
+
+	rec := httptest.NewRecorder()
 
 	protected := authenticatedHandler(
 		handler.Routes(),
@@ -603,7 +733,10 @@ func TestHandler_GetByID_InternalError(t *testing.T) {
 		"user",
 	)
 
-	protected.ServeHTTP(rec, req)
+	protected.ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf(
@@ -632,7 +765,10 @@ func TestHandler_ListByUser(t *testing.T) {
 		},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -653,7 +789,10 @@ func TestHandler_ListByUser(t *testing.T) {
 		"user",
 	)
 
-	protected.ServeHTTP(rec, req)
+	protected.ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf(
@@ -689,7 +828,9 @@ func TestHandler_ListByUser(t *testing.T) {
 
 	var response []Order
 
-	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+	if err := json.NewDecoder(
+		rec.Body,
+	).Decode(&response); err != nil {
 		t.Fatalf(
 			"failed to decode response: %v",
 			err,
@@ -705,9 +846,15 @@ func TestHandler_ListByUser(t *testing.T) {
 	}
 }
 
-func TestHandler_ListByUser_Unauthorized(t *testing.T) {
+func TestHandler_ListByUser_Unauthorized(
+	t *testing.T,
+) {
 	service := &fakeOrderService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -717,7 +864,10 @@ func TestHandler_ListByUser_Unauthorized(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(rec, req)
+	handler.Routes().ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf(
@@ -728,9 +878,15 @@ func TestHandler_ListByUser_Unauthorized(t *testing.T) {
 	}
 }
 
-func TestHandler_ListByUser_InvalidLimit(t *testing.T) {
+func TestHandler_ListByUser_InvalidLimit(
+	t *testing.T,
+) {
 	service := &fakeOrderService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -751,7 +907,10 @@ func TestHandler_ListByUser_InvalidLimit(t *testing.T) {
 		"user",
 	)
 
-	protected.ServeHTTP(rec, req)
+	protected.ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf(
@@ -762,9 +921,15 @@ func TestHandler_ListByUser_InvalidLimit(t *testing.T) {
 	}
 }
 
-func TestHandler_ListByUser_InvalidOffset(t *testing.T) {
+func TestHandler_ListByUser_InvalidOffset(
+	t *testing.T,
+) {
 	service := &fakeOrderService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -785,7 +950,10 @@ func TestHandler_ListByUser_InvalidOffset(t *testing.T) {
 		"user",
 	)
 
-	protected.ServeHTTP(rec, req)
+	protected.ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf(
@@ -796,12 +964,19 @@ func TestHandler_ListByUser_InvalidOffset(t *testing.T) {
 	}
 }
 
-func TestHandler_ListByUser_InternalError(t *testing.T) {
+func TestHandler_ListByUser_InternalError(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
-		listErr: errors.New("database unavailable"),
+		listErr: errors.New(
+			"database unavailable",
+		),
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -822,7 +997,10 @@ func TestHandler_ListByUser_InternalError(t *testing.T) {
 		"user",
 	)
 
-	protected.ServeHTTP(rec, req)
+	protected.ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf(
@@ -835,7 +1013,11 @@ func TestHandler_ListByUser_InternalError(t *testing.T) {
 
 func TestHandler_UpdateStatus(t *testing.T) {
 	service := &fakeOrderService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`{
 		"status": "confirmed"
@@ -849,24 +1031,47 @@ func TestHandler_UpdateStatus(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 
-	updateStatusRouter(handler).ServeHTTP(rec, req)
+	updateStatusRouter(
+		handler,
+	).ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusNoContent {
-		t.Fatalf("expected status %d, got %d", http.StatusNoContent, rec.Code)
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusNoContent,
+			rec.Code,
+		)
 	}
 
 	if service.updateID != 10 {
-		t.Errorf("expected order ID %d, got %d", 10, service.updateID)
+		t.Errorf(
+			"expected order ID %d, got %d",
+			10,
+			service.updateID,
+		)
 	}
 
 	if service.updateStatus != StatusConfirmed {
-		t.Errorf("expected status %q, got %q", StatusConfirmed, service.updateStatus)
+		t.Errorf(
+			"expected status %q, got %q",
+			StatusConfirmed,
+			service.updateStatus,
+		)
 	}
 }
 
-func TestHandler_UpdateStatus_InvalidID(t *testing.T) {
+func TestHandler_UpdateStatus_InvalidID(
+	t *testing.T,
+) {
 	service := &fakeOrderService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`{
 		"status": "confirmed"
@@ -880,45 +1085,81 @@ func TestHandler_UpdateStatus_InvalidID(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 
-	updateStatusRouter(handler).ServeHTTP(rec, req)
+	updateStatusRouter(
+		handler,
+	).ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			rec.Code,
+		)
 	}
 
 	if service.updateID != 0 {
-		t.Fatal("service must not be called for invalid ID")
+		t.Fatal(
+			"service must not be called for invalid ID",
+		)
 	}
 }
 
-func TestHandler_UpdateStatus_InvalidJSON(t *testing.T) {
+func TestHandler_UpdateStatus_InvalidJSON(
+	t *testing.T,
+) {
 	service := &fakeOrderService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodPatch,
 		"/api/v1/admin/orders/10/status",
-		bytes.NewBufferString(`{"status":`),
+		bytes.NewBufferString(
+			`{"status":`,
+		),
 	)
 
 	rec := httptest.NewRecorder()
 
-	updateStatusRouter(handler).ServeHTTP(rec, req)
+	updateStatusRouter(
+		handler,
+	).ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			rec.Code,
+		)
 	}
 
 	if service.updateID != 0 {
-		t.Fatal("service must not be called for invalid JSON")
+		t.Fatal(
+			"service must not be called for invalid JSON",
+		)
 	}
 }
 
-func TestHandler_UpdateStatus_ValidationError(t *testing.T) {
+func TestHandler_UpdateStatus_ValidationError(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
 		updateErr: ErrOrderValidation,
 	}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`{
 		"status": "completed"
@@ -932,22 +1173,41 @@ func TestHandler_UpdateStatus_ValidationError(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 
-	updateStatusRouter(handler).ServeHTTP(rec, req)
+	updateStatusRouter(
+		handler,
+	).ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusBadRequest,
+			rec.Code,
+		)
 	}
 
 	if service.updateID != 10 {
-		t.Errorf("expected order ID %d, got %d", 10, service.updateID)
+		t.Errorf(
+			"expected order ID %d, got %d",
+			10,
+			service.updateID,
+		)
 	}
 }
 
-func TestHandler_UpdateStatus_NotFound(t *testing.T) {
+func TestHandler_UpdateStatus_NotFound(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
 		updateErr: ErrOrderNotFound,
 	}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`{
 		"status": "confirmed"
@@ -961,22 +1221,43 @@ func TestHandler_UpdateStatus_NotFound(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 
-	updateStatusRouter(handler).ServeHTTP(rec, req)
+	updateStatusRouter(
+		handler,
+	).ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected status %d, got %d", http.StatusNotFound, rec.Code)
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusNotFound,
+			rec.Code,
+		)
 	}
 
 	if service.updateID != 999 {
-		t.Errorf("expected order ID %d, got %d", 999, service.updateID)
+		t.Errorf(
+			"expected order ID %d, got %d",
+			999,
+			service.updateID,
+		)
 	}
 }
 
-func TestHandler_UpdateStatus_InternalError(t *testing.T) {
+func TestHandler_UpdateStatus_InternalError(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
-		updateErr: errors.New("database unavailable"),
+		updateErr: errors.New(
+			"database unavailable",
+		),
 	}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`{
 		"status": "confirmed"
@@ -990,18 +1271,33 @@ func TestHandler_UpdateStatus_InternalError(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 
-	updateStatusRouter(handler).ServeHTTP(rec, req)
+	updateStatusRouter(
+		handler,
+	).ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected status %d, got %d", http.StatusInternalServerError, rec.Code)
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusInternalServerError,
+			rec.Code,
+		)
 	}
 
 	if service.updateID != 10 {
-		t.Errorf("expected order ID %d, got %d", 10, service.updateID)
+		t.Errorf(
+			"expected order ID %d, got %d",
+			10,
+			service.updateID,
+		)
 	}
 }
 
-func TestHandler_ListAll_DefaultPagination(t *testing.T) {
+func TestHandler_ListAll_DefaultPagination(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
 		listAllOrders: []*Order{
 			{
@@ -1017,7 +1313,10 @@ func TestHandler_ListAll_DefaultPagination(t *testing.T) {
 		},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -1112,12 +1411,17 @@ func TestHandler_ListAll_DefaultPagination(t *testing.T) {
 	}
 }
 
-func TestHandler_ListAll_CustomPagination(t *testing.T) {
+func TestHandler_ListAll_CustomPagination(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
 		listAllOrders: []*Order{},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -1157,7 +1461,9 @@ func TestHandler_ListAll_CustomPagination(t *testing.T) {
 	}
 }
 
-func TestHandler_ListAll_InvalidPagination(t *testing.T) {
+func TestHandler_ListAll_InvalidPagination(
+	t *testing.T,
+) {
 	tests := []struct {
 		name string
 		url  string
@@ -1173,41 +1479,54 @@ func TestHandler_ListAll_InvalidPagination(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			service := &fakeOrderService{}
-			handler := NewHandler(service)
+		t.Run(
+			tt.name,
+			func(t *testing.T) {
+				service := &fakeOrderService{}
 
-			request := httptest.NewRequest(
-				http.MethodGet,
-				tt.url,
-				nil,
-			)
-
-			recorder := httptest.NewRecorder()
-
-			handler.ListAll(
-				recorder,
-				request,
-			)
-
-			if recorder.Code != http.StatusBadRequest {
-				t.Fatalf(
-					"expected status %d, got %d",
-					http.StatusBadRequest,
-					recorder.Code,
+				handler := NewHandler(
+					service,
+					newTestLogger(),
 				)
-			}
-		})
+
+				request := httptest.NewRequest(
+					http.MethodGet,
+					tt.url,
+					nil,
+				)
+
+				recorder := httptest.NewRecorder()
+
+				handler.ListAll(
+					recorder,
+					request,
+				)
+
+				if recorder.Code != http.StatusBadRequest {
+					t.Fatalf(
+						"expected status %d, got %d",
+						http.StatusBadRequest,
+						recorder.Code,
+					)
+				}
+			},
+		)
 	}
 }
-func TestHandler_ListAll_InternalError(t *testing.T) {
+
+func TestHandler_ListAll_InternalError(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
 		listAllErr: errors.New(
 			"database unavailable",
 		),
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -1231,12 +1550,17 @@ func TestHandler_ListAll_InternalError(t *testing.T) {
 	}
 }
 
-func TestHandler_ListAll_ValidationError(t *testing.T) {
+func TestHandler_ListAll_ValidationError(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
 		listAllErr: ErrOrderValidation,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -1260,7 +1584,9 @@ func TestHandler_ListAll_ValidationError(t *testing.T) {
 	}
 }
 
-func TestHandler_ListAll_ServiceValidationError(t *testing.T) {
+func TestHandler_ListAll_ServiceValidationError(
+	t *testing.T,
+) {
 	tests := []struct {
 		name string
 		url  string
@@ -1276,43 +1602,54 @@ func TestHandler_ListAll_ServiceValidationError(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			service := &fakeOrderService{
-				listAllErr: ErrOrderValidation,
-			}
+		t.Run(
+			tt.name,
+			func(t *testing.T) {
+				service := &fakeOrderService{
+					listAllErr: ErrOrderValidation,
+				}
 
-			handler := NewHandler(service)
-
-			request := httptest.NewRequest(
-				http.MethodGet,
-				tt.url,
-				nil,
-			)
-
-			recorder := httptest.NewRecorder()
-
-			handler.ListAll(
-				recorder,
-				request,
-			)
-
-			if recorder.Code != http.StatusBadRequest {
-				t.Fatalf(
-					"expected status %d, got %d",
-					http.StatusBadRequest,
-					recorder.Code,
+				handler := NewHandler(
+					service,
+					newTestLogger(),
 				)
-			}
-		})
+
+				request := httptest.NewRequest(
+					http.MethodGet,
+					tt.url,
+					nil,
+				)
+
+				recorder := httptest.NewRecorder()
+
+				handler.ListAll(
+					recorder,
+					request,
+				)
+
+				if recorder.Code != http.StatusBadRequest {
+					t.Fatalf(
+						"expected status %d, got %d",
+						http.StatusBadRequest,
+						recorder.Code,
+					)
+				}
+			},
+		)
 	}
 }
 
-func TestHandler_ListAll_FilterByUserID(t *testing.T) {
+func TestHandler_ListAll_FilterByUserID(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
 		listAllOrders: []*Order{},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -1336,7 +1673,9 @@ func TestHandler_ListAll_FilterByUserID(t *testing.T) {
 	}
 
 	if service.listAllFilter.UserID == nil {
-		t.Fatal("expected user ID filter")
+		t.Fatal(
+			"expected user ID filter",
+		)
 	}
 
 	if *service.listAllFilter.UserID != 5 {
@@ -1348,9 +1687,15 @@ func TestHandler_ListAll_FilterByUserID(t *testing.T) {
 	}
 }
 
-func TestHandler_ListAll_InvalidUserID(t *testing.T) {
+func TestHandler_ListAll_InvalidUserID(
+	t *testing.T,
+) {
 	service := &fakeOrderService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -1374,12 +1719,17 @@ func TestHandler_ListAll_InvalidUserID(t *testing.T) {
 	}
 }
 
-func TestHandler_ListAll_FilterByDate(t *testing.T) {
+func TestHandler_ListAll_FilterByDate(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
 		listAllOrders: []*Order{},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -1403,11 +1753,15 @@ func TestHandler_ListAll_FilterByDate(t *testing.T) {
 	}
 
 	if service.listAllFilter.CreatedFrom == nil {
-		t.Fatal("expected created from filter")
+		t.Fatal(
+			"expected created from filter",
+		)
 	}
 
 	if service.listAllFilter.CreatedTo == nil {
-		t.Fatal("expected created to filter")
+		t.Fatal(
+			"expected created to filter",
+		)
 	}
 
 	expectedFrom := time.Date(
@@ -1421,7 +1775,9 @@ func TestHandler_ListAll_FilterByDate(t *testing.T) {
 		time.UTC,
 	)
 
-	if !service.listAllFilter.CreatedFrom.Equal(expectedFrom) {
+	if !service.listAllFilter.CreatedFrom.Equal(
+		expectedFrom,
+	) {
 		t.Errorf(
 			"expected from %v, got %v",
 			expectedFrom,
@@ -1440,7 +1796,9 @@ func TestHandler_ListAll_FilterByDate(t *testing.T) {
 		time.UTC,
 	)
 
-	if !service.listAllFilter.CreatedTo.Equal(expectedTo) {
+	if !service.listAllFilter.CreatedTo.Equal(
+		expectedTo,
+	) {
 		t.Errorf(
 			"expected to %v, got %v",
 			expectedTo,
@@ -1449,7 +1807,9 @@ func TestHandler_ListAll_FilterByDate(t *testing.T) {
 	}
 }
 
-func TestHandler_ListAll_InvalidDate(t *testing.T) {
+func TestHandler_ListAll_InvalidDate(
+	t *testing.T,
+) {
 	tests := []struct {
 		name string
 		url  string
@@ -1465,35 +1825,44 @@ func TestHandler_ListAll_InvalidDate(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			service := &fakeOrderService{}
-			handler := NewHandler(service)
+		t.Run(
+			tt.name,
+			func(t *testing.T) {
+				service := &fakeOrderService{}
 
-			request := httptest.NewRequest(
-				http.MethodGet,
-				tt.url,
-				nil,
-			)
-
-			recorder := httptest.NewRecorder()
-
-			handler.ListAll(
-				recorder,
-				request,
-			)
-
-			if recorder.Code != http.StatusBadRequest {
-				t.Fatalf(
-					"expected status %d, got %d",
-					http.StatusBadRequest,
-					recorder.Code,
+				handler := NewHandler(
+					service,
+					newTestLogger(),
 				)
-			}
-		})
+
+				request := httptest.NewRequest(
+					http.MethodGet,
+					tt.url,
+					nil,
+				)
+
+				recorder := httptest.NewRecorder()
+
+				handler.ListAll(
+					recorder,
+					request,
+				)
+
+				if recorder.Code != http.StatusBadRequest {
+					t.Fatalf(
+						"expected status %d, got %d",
+						http.StatusBadRequest,
+						recorder.Code,
+					)
+				}
+			},
+		)
 	}
 }
 
-func TestHandler_ListAll_DateUsesLocation(t *testing.T) {
+func TestHandler_ListAll_DateUsesLocation(
+	t *testing.T,
+) {
 	location := time.FixedZone(
 		"TEST",
 		3*60*60,
@@ -1506,6 +1875,7 @@ func TestHandler_ListAll_DateUsesLocation(t *testing.T) {
 	handler := NewHandlerWithLocation(
 		service,
 		location,
+		newTestLogger(),
 	)
 
 	request := httptest.NewRequest(
@@ -1573,7 +1943,10 @@ func TestHandler_ListAll_DateUsesLocation(t *testing.T) {
 func TestHandler_Cancel(t *testing.T) {
 	service := &fakeOrderService{}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodPatch,
@@ -1594,7 +1967,10 @@ func TestHandler_Cancel(t *testing.T) {
 		"user",
 	)
 
-	protected.ServeHTTP(rec, req)
+	protected.ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf(
@@ -1621,9 +1997,15 @@ func TestHandler_Cancel(t *testing.T) {
 	}
 }
 
-func TestHandler_Cancel_InvalidID(t *testing.T) {
+func TestHandler_Cancel_InvalidID(
+	t *testing.T,
+) {
 	service := &fakeOrderService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodPatch,
@@ -1644,7 +2026,10 @@ func TestHandler_Cancel_InvalidID(t *testing.T) {
 		"user",
 	)
 
-	protected.ServeHTTP(rec, req)
+	protected.ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf(
@@ -1661,12 +2046,17 @@ func TestHandler_Cancel_InvalidID(t *testing.T) {
 	}
 }
 
-func TestHandler_Cancel_NotFound(t *testing.T) {
+func TestHandler_Cancel_NotFound(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
 		cancelErr: ErrOrderNotFound,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodPatch,
@@ -1687,7 +2077,10 @@ func TestHandler_Cancel_NotFound(t *testing.T) {
 		"user",
 	)
 
-	protected.ServeHTTP(rec, req)
+	protected.ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf(
@@ -1698,12 +2091,17 @@ func TestHandler_Cancel_NotFound(t *testing.T) {
 	}
 }
 
-func TestHandler_Cancel_ValidationError(t *testing.T) {
+func TestHandler_Cancel_ValidationError(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
 		cancelErr: ErrOrderValidation,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodPatch,
@@ -1724,7 +2122,10 @@ func TestHandler_Cancel_ValidationError(t *testing.T) {
 		"user",
 	)
 
-	protected.ServeHTTP(rec, req)
+	protected.ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf(
@@ -1735,9 +2136,15 @@ func TestHandler_Cancel_ValidationError(t *testing.T) {
 	}
 }
 
-func TestHandler_Cancel_Unauthorized(t *testing.T) {
+func TestHandler_Cancel_Unauthorized(
+	t *testing.T,
+) {
 	service := &fakeOrderService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodPatch,
@@ -1761,12 +2168,19 @@ func TestHandler_Cancel_Unauthorized(t *testing.T) {
 	}
 }
 
-func TestHandler_Cancel_InternalError(t *testing.T) {
+func TestHandler_Cancel_InternalError(
+	t *testing.T,
+) {
 	service := &fakeOrderService{
-		cancelErr: errors.New("database unavailable"),
+		cancelErr: errors.New(
+			"database unavailable",
+		),
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodPatch,
@@ -1787,7 +2201,10 @@ func TestHandler_Cancel_InternalError(t *testing.T) {
 		"user",
 	)
 
-	protected.ServeHTTP(rec, req)
+	protected.ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf(
