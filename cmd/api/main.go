@@ -163,6 +163,7 @@ func main() {
 	router.Use(middleware.RequestID)
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
+	router.Use(httpx.SecurityHeaders)
 
 	router.Use(cors.Handler(cors.Options{
 		AllowedOrigins: cfg.HTTP.CORSAllowedOrigins,
