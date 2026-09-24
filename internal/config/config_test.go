@@ -18,6 +18,8 @@ func TestLoadConfig(t *testing.T) {
 	t.Setenv("DB_MAX_CONN_LIFETIME", "1h")
 	t.Setenv("DB_MAX_CONN_IDLE_TIME", "30m")
 	t.Setenv("DB_HEALTH_CHECK_PERIOD", "1m")
+	t.Setenv("HTTP_READ_TIMEOUT", "15s")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 
 	expectedDatabaseURL := "postgres://user:password@localhost:5432/dbname"
 
@@ -93,6 +95,27 @@ func TestLoadConfig(t *testing.T) {
 			cfg.JWT.TTL,
 		)
 	}
+
+	if cfg.HTTP.ReadTimeout != 15*time.Second {
+		t.Errorf(
+			"Expected ReadTimeout to be 15s, got %v",
+			cfg.HTTP.ReadTimeout,
+		)
+	}
+
+	if len(cfg.HTTP.CORSAllowedOrigins) != 1 {
+		t.Fatalf(
+			"expected 1 CORS origin, got %d",
+			len(cfg.HTTP.CORSAllowedOrigins),
+		)
+	}
+
+	if cfg.HTTP.CORSAllowedOrigins[0] != "http://localhost:3000" {
+		t.Errorf(
+			"unexpected CORS origin: %q",
+			cfg.HTTP.CORSAllowedOrigins[0],
+		)
+	}
 }
 
 func TestLoadConfigInvalidPort(t *testing.T) {
@@ -143,6 +166,16 @@ func TestLoadConfigInvalidTimeout(t *testing.T) {
 			name:  "invalid idle timeout",
 			env:   "HTTP_IDLE_TIMEOUT",
 			value: "invalid",
+		},
+		{
+			name:  "invalid read timeout",
+			env:   "HTTP_READ_TIMEOUT",
+			value: "invalid",
+		},
+		{
+			name:  "zero read timeout",
+			env:   "HTTP_READ_TIMEOUT",
+			value: "0s",
 		},
 	}
 
@@ -359,5 +392,146 @@ func TestLoadConfigMinConnsGreaterThanMaxConns(t *testing.T) {
 	_, err := Load()
 	if err == nil {
 		t.Fatal("expected error when DB_MIN_CONNS is greater than DB_MAX_CONNS")
+	}
+}
+
+func TestLoadConfigRejectsExampleJWTSecretInProduction(t *testing.T) {
+	setRequiredEnv(t)
+
+	t.Setenv(
+		"APP_ENV",
+		"production",
+	)
+
+	t.Setenv(
+		"JWT_SECRET",
+		insecureExampleJWTSecret,
+	)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal(
+			"expected error for example JWT secret in production",
+		)
+	}
+}
+
+func TestLoadConfigAllowsCustomJWTSecretInProduction(t *testing.T) {
+	setRequiredEnv(t)
+
+	t.Setenv(
+		"APP_ENV",
+		"production",
+	)
+
+	t.Setenv(
+		"JWT_SECRET",
+		"gN7vP2xQ9mK4sR8wT3yL6cF1hJ5dB0zA",
+	)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf(
+			"expected no error, got %v",
+			err,
+		)
+	}
+
+	if cfg.Env != "production" {
+		t.Errorf(
+			"expected production environment, got %q",
+			cfg.Env,
+		)
+	}
+}
+
+func TestLoadConfigRejectsWildcardCORSInProduction(
+	t *testing.T,
+) {
+	setRequiredEnv(t)
+
+	t.Setenv("APP_ENV", "production")
+	t.Setenv(
+		"JWT_SECRET",
+		"gN7vP2xQ9mK4sR8wT3yL6cF1hJ5dB0zA",
+	)
+	t.Setenv(
+		"CORS_ALLOWED_ORIGINS",
+		"*",
+	)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal(
+			"expected wildcard CORS origin to be rejected in production",
+		)
+	}
+}
+
+func TestLoadConfigMultipleCORSOrigins(t *testing.T) {
+	setRequiredEnv(t)
+
+	t.Setenv(
+		"CORS_ALLOWED_ORIGINS",
+		"http://localhost:3000, http://localhost:3001",
+	)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.HTTP.CORSAllowedOrigins) != 2 {
+		t.Fatalf(
+			"expected 2 origins, got %d",
+			len(cfg.HTTP.CORSAllowedOrigins),
+		)
+	}
+
+	if cfg.HTTP.CORSAllowedOrigins[1] != "http://localhost:3001" {
+		t.Errorf(
+			"unexpected second origin: %q",
+			cfg.HTTP.CORSAllowedOrigins[1],
+		)
+	}
+}
+
+func TestLoadConfigTrustedProxyCIDRs(t *testing.T) {
+	setRequiredEnv(t)
+
+	t.Setenv(
+		"TRUSTED_PROXY_CIDRS",
+		"172.18.0.0/16, 10.0.0.0/8",
+	)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf(
+			"expected no error, got %v",
+			err,
+		)
+	}
+
+	if len(cfg.HTTP.TrustedProxyCIDRs) != 2 {
+		t.Fatalf(
+			"expected 2 trusted proxy CIDRs, got %d",
+			len(cfg.HTTP.TrustedProxyCIDRs),
+		)
+	}
+}
+
+func TestLoadConfigInvalidTrustedProxyCIDR(t *testing.T) {
+	setRequiredEnv(t)
+
+	t.Setenv(
+		"TRUSTED_PROXY_CIDRS",
+		"not-a-cidr",
+	)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal(
+			"expected error for invalid trusted proxy CIDR",
+		)
 	}
 }

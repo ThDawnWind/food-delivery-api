@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -19,6 +20,8 @@ type fakeRepository struct {
 
 	getByEmailUser *User
 	getByEmailErr  error
+
+	getByEmailInput string
 }
 
 func (f *fakeRepository) Create(ctx context.Context, input *CreateUser) (*User, error) {
@@ -50,6 +53,8 @@ func (f *fakeRepository) GetByID(ctx context.Context, id int64) (*User, error) {
 }
 
 func (f *fakeRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
+	f.getByEmailInput = email
+
 	if f.getByEmailErr != nil {
 		return nil, f.getByEmailErr
 	}
@@ -165,6 +170,39 @@ func TestService_Register_Validation(t *testing.T) {
 				Username: "alex",
 				Email:    "alex@example.com",
 				Password: "1234567",
+			},
+		},
+		{
+			name: "password too long",
+			input: &RegisterUser{
+				Username: "alex",
+				Email:    "alex@example.com",
+				Password: strings.Repeat("a", 73),
+			},
+		},
+		{
+			name: "username too long",
+			input: &RegisterUser{
+				Username: strings.Repeat("a", 51),
+				Email:    "alex@example.com",
+				Password: "password123",
+			},
+		},
+		{
+			name: "email too long",
+			input: &RegisterUser{
+				Username: "alex",
+				Email: strings.Repeat("a", 89) +
+					"@example.com",
+				Password: "password123",
+			},
+		},
+		{
+			name: "invalid email",
+			input: &RegisterUser{
+				Username: "alex",
+				Email:    "not-an-email",
+				Password: "password123",
 			},
 		},
 	}
@@ -584,3 +622,169 @@ func TestService_Login_RepositoryError(t *testing.T) {
 		)
 	}
 }
+
+func TestService_Register_MaxPasswordLength(t *testing.T) {
+	repository := &fakeRepository{}
+	service := NewService(repository)
+
+	user, err := service.Register(
+		context.Background(),
+		&RegisterUser{
+			Username: "alex",
+			Email:    "alex@example.com",
+			Password: strings.Repeat("a", 72),
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if user == nil {
+		t.Fatal("expected user, got nil")
+	}
+}
+
+func TestService_Login_InvalidCredentialsFormat(t *testing.T) {
+	tests := []struct {
+		name  string
+		input *LoginUser
+	}{
+		{
+			name: "invalid email",
+			input: &LoginUser{
+				Email:    "not-an-email",
+				Password: "password123",
+			},
+		},
+		{
+			name: "email too long",
+			input: &LoginUser{
+				Email: strings.Repeat("a", 89) +
+					"@example.com",
+				Password: "password123",
+			},
+		},
+		{
+			name: "password too long",
+			input: &LoginUser{
+				Email:    "alex@example.com",
+				Password: strings.Repeat("a", 73),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repository := &fakeRepository{}
+
+			service := NewService(repository)
+
+			userData, err := service.Login(
+				context.Background(),
+				tt.input,
+			)
+
+			if userData != nil {
+				t.Fatalf(
+					"expected nil user, got %+v",
+					userData,
+				)
+			}
+
+			if !errors.Is(
+				err,
+				ErrInvalidCredentials,
+			) {
+				t.Fatalf(
+					"expected ErrInvalidCredentials, got %v",
+					err,
+				)
+			}
+
+			if repository.getByEmailInput != "" {
+				t.Fatal(
+					"repository must not be called on invalid credentials",
+				)
+			}
+		})
+	}
+}
+
+func TestDummyPasswordHashUsesDefaultCost(t *testing.T) {
+	cost, err := bcrypt.Cost(
+		dummyPasswordHash,
+	)
+	if err != nil {
+		t.Fatalf(
+			"invalid dummy password hash: %v",
+			err,
+		)
+	}
+
+	if cost != bcrypt.DefaultCost {
+		t.Fatalf(
+			"expected dummy hash cost %d, got %d",
+			bcrypt.DefaultCost,
+			cost,
+		)
+	}
+}
+
+// func BenchmarkServiceLoginExistingUserWrongPassword(b *testing.B) {
+// 	password := "correct-password"
+
+// 	hash, err := bcrypt.GenerateFromPassword(
+// 		[]byte(password),
+// 		bcrypt.DefaultCost,
+// 	)
+// 	if err != nil {
+// 		b.Fatal(err)
+// 	}
+
+// 	repository := &fakeRepository{
+// 		getByEmailUser: &User{
+// 			ID:           1,
+// 			Email:        "alex@example.com",
+// 			PasswordHash: string(hash),
+// 			Role:         RoleUser,
+// 		},
+// 	}
+
+// 	service := NewService(repository)
+
+// 	input := &LoginUser{
+// 		Email:    "alex@example.com",
+// 		Password: "wrong-password",
+// 	}
+
+// 	b.ResetTimer()
+
+// 	for b.Loop() {
+// 		_, _ = service.Login(
+// 			context.Background(),
+// 			input,
+// 		)
+// 	}
+// }
+
+// func BenchmarkServiceLoginMissingUser(b *testing.B) {
+// 	repository := &fakeRepository{
+// 		getByEmailErr: pgx.ErrNoRows,
+// 	}
+
+// 	service := NewService(repository)
+
+// 	input := &LoginUser{
+// 		Email:    "missing@example.com",
+// 		Password: "wrong-password",
+// 	}
+
+// 	b.ResetTimer()
+
+// 	for b.Loop() {
+// 		_, _ = service.Login(
+// 			context.Background(),
+// 			input,
+// 		)
+// 	}
+// }

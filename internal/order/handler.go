@@ -15,6 +15,7 @@ import (
 type ServiceInterface interface {
 	Create(ctx context.Context, input *CreateOrder) (*Order, error)
 	GetByID(ctx context.Context, id int64) (*Order, error)
+	GetByIDForUser(ctx context.Context, orderID int64, userID int64) (*Order, error)
 	ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error)
 	ListAll(ctx context.Context, filter ListOrdersFilter) (*ListOrdersResult, error)
 	Cancel(ctx context.Context, orderID int64, userID int64) error
@@ -139,7 +140,7 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	order, err := h.service.GetByID(r.Context(), id)
+	order, err := h.service.GetByIDForUser(r.Context(), id, userID)
 	if err != nil {
 		if errors.Is(err, ErrOrderNotFound) {
 			httpx.WriteError(
@@ -154,15 +155,6 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 			w,
 			http.StatusInternalServerError,
 			"internal server error",
-		)
-		return
-	}
-
-	if order.UserID != userID {
-		httpx.WriteError(
-			w,
-			http.StatusNotFound,
-			"order not found",
 		)
 		return
 	}

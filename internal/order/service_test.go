@@ -47,6 +47,9 @@ type fakeOrderRepository struct {
 	cancelOrderID int64
 	cancelUserID  int64
 	cancelErr     error
+
+	getUserOrderID int64
+	getUserID      int64
 }
 
 func (f *fakeProductReader) GetByID(ctx context.Context, id int64) (*product.Product, error) {
@@ -60,6 +63,23 @@ func (f *fakeProductReader) GetByID(ctx context.Context, id int64) (*product.Pro
 	}
 
 	return productData, nil
+}
+
+func (f *fakeOrderRepository) GetByIDForUser(ctx context.Context, orderID int64, userID int64) (*Order, error) {
+	f.getUserOrderID = orderID
+	f.getUserID = userID
+
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	if f.order == nil ||
+		f.order.ID != orderID ||
+		f.order.UserID != userID {
+		return nil, pgx.ErrNoRows
+	}
+
+	return f.order, nil
 }
 
 func (f *fakeOrderRepository) Create(ctx context.Context, order *Order) (*Order, error) {
@@ -1937,6 +1957,133 @@ func TestService_Create_AddressNotFound(t *testing.T) {
 	if repository.order != nil {
 		t.Fatal(
 			"repository must not be called when address is unavailable",
+		)
+	}
+}
+
+func TestService_GetByIDForUser(t *testing.T) {
+	expectedOrder := &Order{
+		ID:         10,
+		UserID:     5,
+		Status:     StatusNew,
+		TotalPrice: 74900,
+	}
+
+	repository := &fakeOrderRepository{
+		order: expectedOrder,
+	}
+
+	service := NewService(
+		&fakeProductReader{},
+		repository,
+		nil,
+	)
+
+	order, err := service.GetByIDForUser(
+		context.Background(),
+		10,
+		5,
+	)
+	if err != nil {
+		t.Fatalf(
+			"unexpected error: %v",
+			err,
+		)
+	}
+
+	if order == nil {
+		t.Fatal("expected order, got nil")
+	}
+
+	if order.ID != 10 {
+		t.Fatalf(
+			"expected order ID %d, got %d",
+			10,
+			order.ID,
+		)
+	}
+
+	if repository.getUserOrderID != 10 {
+		t.Fatalf(
+			"expected repository order ID %d, got %d",
+			10,
+			repository.getUserOrderID,
+		)
+	}
+
+	if repository.getUserID != 5 {
+		t.Fatalf(
+			"expected repository user ID %d, got %d",
+			5,
+			repository.getUserID,
+		)
+	}
+}
+
+func TestService_GetByIDForUser_OtherUserOrder(
+	t *testing.T,
+) {
+	repository := &fakeOrderRepository{
+		order: &Order{
+			ID:     10,
+			UserID: 99,
+			Status: StatusNew,
+		},
+	}
+
+	service := NewService(
+		&fakeProductReader{},
+		repository,
+		nil,
+	)
+
+	order, err := service.GetByIDForUser(
+		context.Background(),
+		10,
+		5,
+	)
+
+	if order != nil {
+		t.Fatalf(
+			"expected nil order, got %+v",
+			order,
+		)
+	}
+
+	if !errors.Is(err, ErrOrderNotFound) {
+		t.Fatalf(
+			"expected ErrOrderNotFound, got %v",
+			err,
+		)
+	}
+}
+
+func TestService_GetByIDForUser_InvalidUserID(
+	t *testing.T,
+) {
+	service := NewService(
+		&fakeProductReader{},
+		&fakeOrderRepository{},
+		nil,
+	)
+
+	order, err := service.GetByIDForUser(
+		context.Background(),
+		10,
+		0,
+	)
+
+	if order != nil {
+		t.Fatalf(
+			"expected nil order, got %+v",
+			order,
+		)
+	}
+
+	if !errors.Is(err, ErrOrderValidation) {
+		t.Fatalf(
+			"expected ErrOrderValidation, got %v",
+			err,
 		)
 	}
 }

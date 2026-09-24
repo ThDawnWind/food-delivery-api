@@ -2,10 +2,12 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
+	"github.com/ThDawnWind/food-delivery-api/internal/user"
 )
 
 type contextKey string
@@ -17,6 +19,10 @@ const (
 
 type TokenParser interface {
 	Parse(tokenString string) (*Claims, error)
+}
+
+type UserProvider interface {
+	GetByID(ctx context.Context, id int64) (*user.User, error)
 }
 
 func Middleware(tokens TokenParser) func(http.Handler) http.Handler {
@@ -115,14 +121,14 @@ func RoleFromContext(ctx context.Context) (string, bool) {
 	return role, ok
 }
 
-func RequireRole(requiredRole string) func(http.Handler) http.Handler {
+func RequireRole(users UserProvider, requiredRole user.Role) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(
 			func(
 				w http.ResponseWriter,
 				r *http.Request,
 			) {
-				role, ok := RoleFromContext(
+				userID, ok := UserIDFromContext(
 					r.Context(),
 				)
 				if !ok {
@@ -134,7 +140,32 @@ func RequireRole(requiredRole string) func(http.Handler) http.Handler {
 					return
 				}
 
-				if role != requiredRole {
+				currentUser, err := users.GetByID(
+					r.Context(),
+					userID,
+				)
+				if err != nil {
+					if errors.Is(
+						err,
+						user.ErrUserNotFound,
+					) {
+						httpx.WriteError(
+							w,
+							http.StatusUnauthorized,
+							"unauthorized",
+						)
+						return
+					}
+
+					httpx.WriteError(
+						w,
+						http.StatusInternalServerError,
+						"internal server error",
+					)
+					return
+				}
+
+				if currentUser.Role != requiredRole {
 					httpx.WriteError(
 						w,
 						http.StatusForbidden,

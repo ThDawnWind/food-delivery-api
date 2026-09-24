@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -18,10 +19,13 @@ type Config struct {
 }
 
 type HTTPConfig struct {
-	Port              int
-	ReadHeaderTimeout time.Duration
-	WriteTimeout      time.Duration
-	IdleTimeout       time.Duration
+	Port               int
+	ReadTimeout        time.Duration
+	ReadHeaderTimeout  time.Duration
+	WriteTimeout       time.Duration
+	IdleTimeout        time.Duration
+	CORSAllowedOrigins []string
+	TrustedProxyCIDRs  []netip.Prefix
 }
 
 type DatabaseConfig struct {
@@ -38,6 +42,8 @@ type JWTConfig struct {
 	TTL    time.Duration
 }
 
+const insecureExampleJWTSecret = "replace-with-a-long-random-secret"
+
 func Load() (Config, error) {
 	env, exists := os.LookupEnv("APP_ENV")
 	if !exists {
@@ -47,6 +53,25 @@ func Load() (Config, error) {
 	port, exists := os.LookupEnv("HTTP_PORT")
 	if !exists {
 		port = "8080"
+	}
+
+	readTimeout, exists := os.LookupEnv("HTTP_READ_TIMEOUT")
+	if !exists {
+		readTimeout = "15s"
+	}
+
+	readTimeoutParseDuration, err := time.ParseDuration(readTimeout)
+	if err != nil {
+		return Config{}, fmt.Errorf(
+			"Invalid HTTP_READ_TIMEOUT value: %w",
+			err,
+		)
+	}
+
+	if readTimeoutParseDuration <= 0 {
+		return Config{}, fmt.Errorf(
+			"HTTP_READ_TIMEOUT must be greater than zero",
+		)
 	}
 
 	portInt, err := strconv.Atoi(port)
@@ -164,6 +189,13 @@ func Load() (Config, error) {
 		)
 	}
 
+	if env == "production" &&
+		jwtSecret == insecureExampleJWTSecret {
+		return Config{}, errors.New(
+			"JWT_SECRET must be changed from the example value in production",
+		)
+	}
+
 	jwtTTLRaw := os.Getenv("JWT_TTL")
 	if jwtTTLRaw == "" {
 		jwtTTLRaw = "24h"
@@ -196,13 +228,80 @@ func Load() (Config, error) {
 		)
 	}
 
+	corsAllowedOriginsRaw := strings.TrimSpace(
+		os.Getenv("CORS_ALLOWED_ORIGINS"),
+	)
+
+	if corsAllowedOriginsRaw == "" {
+		corsAllowedOriginsRaw = "http://localhost:3000"
+	}
+
+	corsAllowedOrigins := strings.Split(
+		corsAllowedOriginsRaw,
+		",",
+	)
+
+	for i := range corsAllowedOrigins {
+		corsAllowedOrigins[i] = strings.TrimSpace(
+			corsAllowedOrigins[i],
+		)
+
+		if corsAllowedOrigins[i] == "" {
+			return Config{}, errors.New(
+				"CORS_ALLOWED_ORIGINS contains an empty origin",
+			)
+		}
+	}
+
+	if env == "production" {
+		for _, origin := range corsAllowedOrigins {
+			if origin == "*" {
+				return Config{}, errors.New(
+					"CORS_ALLOWED_ORIGINS must not contain '*' in production",
+				)
+			}
+		}
+	}
+
+	trustedProxyCIDRsRaw := strings.TrimSpace(
+		os.Getenv("TRUSTED_PROXY_CIDRS"),
+	)
+
+	var trustedProxyCIDRs []netip.Prefix
+
+	if trustedProxyCIDRsRaw != "" {
+		for _, rawCIDR := range strings.Split(
+			trustedProxyCIDRsRaw,
+			",",
+		) {
+			rawCIDR = strings.TrimSpace(rawCIDR)
+
+			prefix, err := netip.ParsePrefix(rawCIDR)
+			if err != nil {
+				return Config{}, fmt.Errorf(
+					"invalid TRUSTED_PROXY_CIDRS value %q: %w",
+					rawCIDR,
+					err,
+				)
+			}
+
+			trustedProxyCIDRs = append(
+				trustedProxyCIDRs,
+				prefix.Masked(),
+			)
+		}
+	}
+
 	return Config{
 		Env: env,
 		HTTP: HTTPConfig{
-			Port:              portInt,
-			ReadHeaderTimeout: readHeaderTimeoutParseDuration,
-			WriteTimeout:      writeTimeoutParseDuration,
-			IdleTimeout:       idleTimeoutParseDuration,
+			Port:               portInt,
+			ReadTimeout:        readTimeoutParseDuration,
+			ReadHeaderTimeout:  readHeaderTimeoutParseDuration,
+			WriteTimeout:       writeTimeoutParseDuration,
+			IdleTimeout:        idleTimeoutParseDuration,
+			CORSAllowedOrigins: corsAllowedOrigins,
+			TrustedProxyCIDRs:  trustedProxyCIDRs,
 		},
 		Database: DatabaseConfig{
 			URL:               databaseURL,

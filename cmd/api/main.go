@@ -16,13 +16,16 @@ import (
 	"github.com/ThDawnWind/food-delivery-api/internal/category"
 	"github.com/ThDawnWind/food-delivery-api/internal/config"
 	"github.com/ThDawnWind/food-delivery-api/internal/database"
+	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
 	"github.com/ThDawnWind/food-delivery-api/internal/order"
 	"github.com/ThDawnWind/food-delivery-api/internal/product"
 	"github.com/ThDawnWind/food-delivery-api/internal/user"
 	"github.com/ThDawnWind/food-delivery-api/openapi"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
+	"golang.org/x/time/rate"
 )
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -128,6 +131,13 @@ func main() {
 
 	authHandler := auth.NewHandler(authService)
 
+	authRateLimiter := httpx.NewIPRateLimiter(
+		rate.Every(12*time.Second),
+		5,
+		15*time.Minute,
+		cfg.HTTP.TrustedProxyCIDRs,
+	)
+
 	addressRepository := address.NewRepository(dbPool)
 	addressService := address.NewService(addressRepository)
 	addressHandler := address.NewHandler(addressService)
@@ -154,6 +164,27 @@ func main() {
 	router.Use(middleware.RequestID)
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
+	router.Use(httpx.SecurityHeaders)
+
+	router.Use(cors.Handler(cors.Options{
+		AllowedOrigins: cfg.HTTP.CORSAllowedOrigins,
+		AllowedMethods: []string{
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodPatch,
+			http.MethodDelete,
+			http.MethodOptions,
+		},
+		AllowedHeaders: []string{
+			"Accept",
+			"Authorization",
+			"Content-Type",
+		},
+		AllowCredentials: false,
+		MaxAge:           300,
+	}))
+
 	router.Get("/health", healthHandler)
 	router.Get("/ready", readinessHandler(dbPool))
 
@@ -166,7 +197,12 @@ func main() {
 
 		r.Group(func(r chi.Router) {
 			r.Use(auth.Middleware(tokenManager))
-			r.Use(auth.RequireRole("admin"))
+			r.Use(
+				auth.RequireRole(
+					userService,
+					user.RoleAdmin,
+				),
+			)
 
 			r.Post("/", categoryHandler.Create)
 			r.Put("/{id}", categoryHandler.Update)
@@ -180,7 +216,12 @@ func main() {
 
 		r.Group(func(r chi.Router) {
 			r.Use(auth.Middleware(tokenManager))
-			r.Use(auth.RequireRole("admin"))
+			r.Use(
+				auth.RequireRole(
+					userService,
+					user.RoleAdmin,
+				),
+			)
 
 			r.Post("/", productHandler.Create)
 			r.Put("/{id}", productHandler.Update)
@@ -190,7 +231,12 @@ func main() {
 
 	router.Route("/api/v1/admin", func(r chi.Router) {
 		r.Use(auth.Middleware(tokenManager))
-		r.Use(auth.RequireRole("admin"))
+		r.Use(
+			auth.RequireRole(
+				userService,
+				user.RoleAdmin,
+			),
+		)
 
 		r.Get("/orders", orderHandler.ListAll)
 		r.Get("/orders/{id}", orderHandler.AdminGetByID)
@@ -211,14 +257,19 @@ func main() {
 		)
 	})
 
-	router.Mount(
-		"/api/v1/auth",
-		authHandler.Routes(),
-	)
+	router.Group(func(r chi.Router) {
+		r.Use(authRateLimiter.Middleware)
+
+		r.Mount(
+			"/api/v1/auth",
+			authHandler.Routes(),
+		)
+	})
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.HTTP.Port),
 		Handler:           router,
+		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
 		WriteTimeout:      cfg.HTTP.WriteTimeout,
 		IdleTimeout:       cfg.HTTP.IdleTimeout,
