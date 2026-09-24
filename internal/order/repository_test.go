@@ -2582,3 +2582,290 @@ func TestRepository_CancelByUser_OtherUser(t *testing.T) {
 		)
 	}
 }
+
+func TestRepository_GetByIDForUser_OtherUser(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
+	if err != nil {
+		t.Fatalf(
+			"failed to connect to database: %v",
+			err,
+		)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	var ownerID int64
+	var otherUserID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+			INSERT INTO users (
+				username,
+				email,
+				password_hash
+			)
+			VALUES ($1, $2, $3)
+			RETURNING id
+		`,
+		fmt.Sprintf(
+			"order-owner-%d",
+			suffix,
+		),
+		fmt.Sprintf(
+			"order-owner-%d@example.com",
+			suffix,
+		),
+		"test-password-hash",
+	).Scan(&ownerID)
+	if err != nil {
+		t.Fatalf(
+			"failed to create owner: %v",
+			err,
+		)
+	}
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+			INSERT INTO users (
+				username,
+				email,
+				password_hash
+			)
+			VALUES ($1, $2, $3)
+			RETURNING id
+		`,
+		fmt.Sprintf(
+			"other-user-%d",
+			suffix,
+		),
+		fmt.Sprintf(
+			"other-user-%d@example.com",
+			suffix,
+		),
+		"test-password-hash",
+	).Scan(&otherUserID)
+	if err != nil {
+		t.Fatalf(
+			"failed to create other user: %v",
+			err,
+		)
+	}
+
+	var orderID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+			INSERT INTO orders (
+				user_id,
+				status,
+				total_price,
+				delivery_address
+			)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id
+		`,
+		ownerID,
+		StatusNew,
+		int64(74900),
+		"Security test street 1",
+	).Scan(&orderID)
+	if err != nil {
+		t.Fatalf(
+			"failed to create order: %v",
+			err,
+		)
+	}
+
+	t.Cleanup(func() {
+		ctx := context.Background()
+
+		_, _ = dbPool.Exec(
+			ctx,
+			`DELETE FROM orders WHERE id = $1`,
+			orderID,
+		)
+
+		_, _ = dbPool.Exec(
+			ctx,
+			`DELETE FROM users WHERE id = ANY($1::bigint[])`,
+			[]int64{
+				ownerID,
+				otherUserID,
+			},
+		)
+	})
+
+	order, err := repo.GetByIDForUser(
+		ctx,
+		orderID,
+		otherUserID,
+	)
+
+	if order != nil {
+		t.Fatalf(
+			"expected nil order, got %+v",
+			order,
+		)
+	}
+
+	if !errors.Is(
+		err,
+		pgx.ErrNoRows,
+	) {
+		t.Fatalf(
+			"expected pgx.ErrNoRows, got %v",
+			err,
+		)
+	}
+}
+
+func TestRepository_GetByIDForUser_Owner(t *testing.T) {
+	ctx := context.Background()
+
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+
+	dbPool, err := database.New(
+		ctx,
+		database.Config{
+			URL: dbURL,
+		},
+	)
+	if err != nil {
+		t.Fatalf(
+			"failed to connect to database: %v",
+			err,
+		)
+	}
+
+	t.Cleanup(func() {
+		dbPool.Close()
+	})
+
+	repo := NewRepository(dbPool)
+
+	suffix := time.Now().UnixNano()
+
+	var userID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+			INSERT INTO users (
+				username,
+				email,
+				password_hash
+			)
+			VALUES ($1, $2, $3)
+			RETURNING id
+		`,
+		fmt.Sprintf(
+			"order-user-%d",
+			suffix,
+		),
+		fmt.Sprintf(
+			"order-user-%d@example.com",
+			suffix,
+		),
+		"test-password-hash",
+	).Scan(&userID)
+	if err != nil {
+		t.Fatalf(
+			"failed to create user: %v",
+			err,
+		)
+	}
+
+	var orderID int64
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+			INSERT INTO orders (
+				user_id,
+				status,
+				total_price,
+				delivery_address
+			)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id
+		`,
+		userID,
+		StatusNew,
+		int64(74900),
+		"Security test street 1",
+	).Scan(&orderID)
+	if err != nil {
+		t.Fatalf(
+			"failed to create order: %v",
+			err,
+		)
+	}
+
+	t.Cleanup(func() {
+		ctx := context.Background()
+
+		_, _ = dbPool.Exec(
+			ctx,
+			`DELETE FROM orders WHERE id = $1`,
+			orderID,
+		)
+
+		_, _ = dbPool.Exec(
+			ctx,
+			`DELETE FROM users WHERE id = $1`,
+			userID,
+		)
+	})
+
+	order, err := repo.GetByIDForUser(
+		ctx,
+		orderID,
+		userID,
+	)
+	if err != nil {
+		t.Fatalf(
+			"unexpected error: %v",
+			err,
+		)
+	}
+
+	if order == nil {
+		t.Fatal(
+			"expected order, got nil",
+		)
+	}
+
+	if order.ID != orderID {
+		t.Fatalf(
+			"expected order ID %d, got %d",
+			orderID,
+			order.ID,
+		)
+	}
+
+	if order.UserID != userID {
+		t.Fatalf(
+			"expected user ID %d, got %d",
+			userID,
+			order.UserID,
+		)
+	}
+}

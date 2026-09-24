@@ -41,6 +41,9 @@ type fakeOrderService struct {
 	cancelOrderID int64
 	cancelUserID  int64
 	cancelErr     error
+
+	getUserOrderID int64
+	getUserID      int64
 }
 
 func (f *fakeOrderService) Create(ctx context.Context, input *CreateOrder) (*Order, error) {
@@ -99,6 +102,22 @@ func (f *fakeOrderService) Cancel(ctx context.Context, orderID int64, userID int
 	f.cancelUserID = userID
 
 	return f.cancelErr
+}
+
+func (f *fakeOrderService) GetByIDForUser(ctx context.Context, orderID int64, userID int64) (*Order, error) {
+	f.getUserOrderID = orderID
+	f.getUserID = userID
+
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
+
+	if f.getOrder == nil ||
+		f.getOrder.UserID != userID {
+		return nil, ErrOrderNotFound
+	}
+
+	return f.getOrder, nil
 }
 
 type fakeTokenParser struct {
@@ -436,11 +455,19 @@ func TestHandler_GetByID(t *testing.T) {
 		)
 	}
 
-	if service.getID != 10 {
+	if service.getUserOrderID != 10 {
 		t.Errorf(
 			"expected order ID %d, got %d",
 			10,
-			service.getID,
+			service.getUserOrderID,
+		)
+	}
+
+	if service.getUserID != 5 {
+		t.Errorf(
+			"expected user ID %d, got %d",
+			5,
+			service.getUserID,
 		)
 	}
 }

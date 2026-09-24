@@ -617,3 +617,55 @@ func (r *Repository) CancelByUser(ctx context.Context, orderID int64, userID int
 
 	return nil
 }
+
+func (r *Repository) GetByIDForUser(ctx context.Context, orderID int64, userID int64) (*Order, error) {
+	order := &Order{}
+
+	err := r.db.QueryRow(
+		ctx,
+		`
+			SELECT
+				id,
+				user_id,
+				status,
+				total_price,
+				delivery_address,
+				created_at,
+				updated_at
+			FROM orders
+			WHERE id = $1
+			  AND user_id = $2
+		`,
+		orderID,
+		userID,
+	).Scan(
+		&order.ID,
+		&order.UserID,
+		&order.Status,
+		&order.TotalPrice,
+		&order.DeliveryAddress,
+		&order.CreatedAt,
+		&order.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to get user order: %w",
+			err,
+		)
+	}
+
+	items, err := r.listItemsByOrderID(
+		ctx,
+		order.ID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to get order items: %w",
+			err,
+		)
+	}
+
+	order.Items = items
+
+	return order, nil
+}

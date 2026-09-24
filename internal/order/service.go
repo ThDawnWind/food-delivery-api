@@ -27,6 +27,7 @@ type OrderRepository interface {
 	ListAll(ctx context.Context, filter ListOrdersFilter) ([]*Order, error)
 	CountAll(ctx context.Context, filter ListOrdersFilter) (int64, error)
 	CancelByUser(ctx context.Context, orderID int64, userID int64) error
+	GetByIDForUser(ctx context.Context, orderID int64, userID int64) (*Order, error)
 }
 
 type Service struct {
@@ -205,12 +206,41 @@ func (s *Service) GetByID(ctx context.Context, id int64) (*Order, error) {
 	return order, nil
 }
 
-func (s *Service) ListByUser(
-	ctx context.Context,
-	userID int64,
-	limit int,
-	offset int,
-) ([]Order, error) {
+func (s *Service) GetByIDForUser(ctx context.Context, orderID int64, userID int64) (*Order, error) {
+	if orderID <= 0 {
+		return nil, fmt.Errorf(
+			"%w: invalid order id",
+			ErrOrderValidation,
+		)
+	}
+
+	if userID <= 0 {
+		return nil, fmt.Errorf(
+			"%w: invalid user id",
+			ErrOrderValidation,
+		)
+	}
+
+	order, err := s.repository.GetByIDForUser(
+		ctx,
+		orderID,
+		userID,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrOrderNotFound
+		}
+
+		return nil, fmt.Errorf(
+			"failed to get user order: %w",
+			err,
+		)
+	}
+
+	return order, nil
+}
+
+func (s *Service) ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error) {
 	if userID <= 0 {
 		return nil, fmt.Errorf(
 			"%w: invalid user id",
