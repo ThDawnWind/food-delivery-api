@@ -173,7 +173,10 @@ func main() {
 
 	addressRepository := address.NewRepository(dbPool)
 	addressService := address.NewService(addressRepository)
-	addressHandler := address.NewHandler(addressService)
+	addressHandler := address.NewHandler(
+	addressService,
+	logger,
+)
 
 	orderRepository := order.NewRepository(dbPool)
 	orderService := order.NewService(
