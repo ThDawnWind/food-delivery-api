@@ -36,6 +36,10 @@ const (
 	maxPasswordBytes      = 72
 )
 
+var dummyPasswordHash = []byte(
+	"$2a$10$XajjQvNhvvRt5GSeFk1xFeyqRrsxkhBkUiQeg0dt.wU1qD4aFDcga",
+)
+
 func (s *Service) Register(ctx context.Context, input *RegisterUser) (*User, error) {
 	if input == nil {
 		return nil, fmt.Errorf(
@@ -206,29 +210,38 @@ func (s *Service) Login(ctx context.Context, input *LoginUser) (*User, error) {
 		return nil, ErrInvalidCredentials
 	}
 
-	user, err := s.repository.GetByEmail(
+	userData, err := s.repository.GetByEmail(
 		ctx,
 		email,
 	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrInvalidCredentials
-		}
 
-		return nil, fmt.Errorf(
-			"failed to get user by email: %w",
-			err,
+	passwordHash := dummyPasswordHash
+
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf(
+				"failed to get user by email: %w",
+				err,
+			)
+		}
+	} else {
+		passwordHash = []byte(
+			userData.PasswordHash,
 		)
 	}
 
-	err = bcrypt.CompareHashAndPassword(
-		[]byte(user.PasswordHash),
+	compareErr := bcrypt.CompareHashAndPassword(
+		passwordHash,
 		[]byte(input.Password),
 	)
 
-	if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrInvalidCredentials
+	}
+
+	if compareErr != nil {
 		if errors.Is(
-			err,
+			compareErr,
 			bcrypt.ErrMismatchedHashAndPassword,
 		) {
 			return nil, ErrInvalidCredentials
@@ -236,9 +249,10 @@ func (s *Service) Login(ctx context.Context, input *LoginUser) (*User, error) {
 
 		return nil, fmt.Errorf(
 			"failed to compare password hash: %w",
-			err,
+			compareErr,
 		)
 	}
 
-	return user, nil
+	return userData, nil
+
 }

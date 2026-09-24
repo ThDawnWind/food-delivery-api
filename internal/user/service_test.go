@@ -709,3 +709,82 @@ func TestService_Login_InvalidCredentialsFormat(t *testing.T) {
 		})
 	}
 }
+
+func TestDummyPasswordHashUsesDefaultCost(t *testing.T) {
+	cost, err := bcrypt.Cost(
+		dummyPasswordHash,
+	)
+	if err != nil {
+		t.Fatalf(
+			"invalid dummy password hash: %v",
+			err,
+		)
+	}
+
+	if cost != bcrypt.DefaultCost {
+		t.Fatalf(
+			"expected dummy hash cost %d, got %d",
+			bcrypt.DefaultCost,
+			cost,
+		)
+	}
+}
+
+// func BenchmarkServiceLoginExistingUserWrongPassword(b *testing.B) {
+// 	password := "correct-password"
+
+// 	hash, err := bcrypt.GenerateFromPassword(
+// 		[]byte(password),
+// 		bcrypt.DefaultCost,
+// 	)
+// 	if err != nil {
+// 		b.Fatal(err)
+// 	}
+
+// 	repository := &fakeRepository{
+// 		getByEmailUser: &User{
+// 			ID:           1,
+// 			Email:        "alex@example.com",
+// 			PasswordHash: string(hash),
+// 			Role:         RoleUser,
+// 		},
+// 	}
+
+// 	service := NewService(repository)
+
+// 	input := &LoginUser{
+// 		Email:    "alex@example.com",
+// 		Password: "wrong-password",
+// 	}
+
+// 	b.ResetTimer()
+
+// 	for b.Loop() {
+// 		_, _ = service.Login(
+// 			context.Background(),
+// 			input,
+// 		)
+// 	}
+// }
+
+// func BenchmarkServiceLoginMissingUser(b *testing.B) {
+// 	repository := &fakeRepository{
+// 		getByEmailErr: pgx.ErrNoRows,
+// 	}
+
+// 	service := NewService(repository)
+
+// 	input := &LoginUser{
+// 		Email:    "missing@example.com",
+// 		Password: "wrong-password",
+// 	}
+
+// 	b.ResetTimer()
+
+// 	for b.Loop() {
+// 		_, _ = service.Login(
+// 			context.Background(),
+// 			input,
+// 		)
+// 	}
+// }
