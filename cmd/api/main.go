@@ -91,7 +91,9 @@ func main() {
 			"failed to load timezone",
 			slog.Any("error", err),
 		)
+		return
 	}
+
 	dbCtx, dbCancel := context.WithTimeout(
 		context.Background(),
 		5*time.Second,
@@ -114,11 +116,13 @@ func main() {
 			"failed to connect to database",
 			slog.Any("error", err),
 		)
-	} else {
-		logger.Info(
-			"database connection established",
-		)
+		return
 	}
+
+	logger.Info(
+		"database connection established",
+	)
+
 	defer dbPool.Close()
 
 	categoryRepository := category.NewRepository(dbPool)
@@ -141,6 +145,7 @@ func main() {
 			"failed to create token manager",
 			slog.Any("error", err),
 		)
+		return
 	}
 
 	authService := auth.NewService(
