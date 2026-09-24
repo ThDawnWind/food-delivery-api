@@ -18,11 +18,12 @@ type Config struct {
 }
 
 type HTTPConfig struct {
-	Port              int
-	ReadTimeout       time.Duration
-	ReadHeaderTimeout time.Duration
-	WriteTimeout      time.Duration
-	IdleTimeout       time.Duration
+	Port               int
+	ReadTimeout        time.Duration
+	ReadHeaderTimeout  time.Duration
+	WriteTimeout       time.Duration
+	IdleTimeout        time.Duration
+	CORSAllowedOrigins []string
 }
 
 type DatabaseConfig struct {
@@ -225,14 +226,50 @@ func Load() (Config, error) {
 		)
 	}
 
+	corsAllowedOriginsRaw := strings.TrimSpace(
+		os.Getenv("CORS_ALLOWED_ORIGINS"),
+	)
+
+	if corsAllowedOriginsRaw == "" {
+		corsAllowedOriginsRaw = "http://localhost:3000"
+	}
+
+	corsAllowedOrigins := strings.Split(
+		corsAllowedOriginsRaw,
+		",",
+	)
+
+	for i := range corsAllowedOrigins {
+		corsAllowedOrigins[i] = strings.TrimSpace(
+			corsAllowedOrigins[i],
+		)
+
+		if corsAllowedOrigins[i] == "" {
+			return Config{}, errors.New(
+				"CORS_ALLOWED_ORIGINS contains an empty origin",
+			)
+		}
+	}
+
+	if env == "production" {
+		for _, origin := range corsAllowedOrigins {
+			if origin == "*" {
+				return Config{}, errors.New(
+					"CORS_ALLOWED_ORIGINS must not contain '*' in production",
+				)
+			}
+		}
+	}
+
 	return Config{
 		Env: env,
 		HTTP: HTTPConfig{
-			Port:              portInt,
-			ReadTimeout:       readTimeoutParseDuration,
-			ReadHeaderTimeout: readHeaderTimeoutParseDuration,
-			WriteTimeout:      writeTimeoutParseDuration,
-			IdleTimeout:       idleTimeoutParseDuration,
+			Port:               portInt,
+			ReadTimeout:        readTimeoutParseDuration,
+			ReadHeaderTimeout:  readHeaderTimeoutParseDuration,
+			WriteTimeout:       writeTimeoutParseDuration,
+			IdleTimeout:        idleTimeoutParseDuration,
+			CORSAllowedOrigins: corsAllowedOrigins,
 		},
 		Database: DatabaseConfig{
 			URL:               databaseURL,

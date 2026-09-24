@@ -19,6 +19,7 @@ func TestLoadConfig(t *testing.T) {
 	t.Setenv("DB_MAX_CONN_IDLE_TIME", "30m")
 	t.Setenv("DB_HEALTH_CHECK_PERIOD", "1m")
 	t.Setenv("HTTP_READ_TIMEOUT", "15s")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 
 	expectedDatabaseURL := "postgres://user:password@localhost:5432/dbname"
 
@@ -99,6 +100,20 @@ func TestLoadConfig(t *testing.T) {
 		t.Errorf(
 			"Expected ReadTimeout to be 15s, got %v",
 			cfg.HTTP.ReadTimeout,
+		)
+	}
+
+	if len(cfg.HTTP.CORSAllowedOrigins) != 1 {
+		t.Fatalf(
+			"expected 1 CORS origin, got %d",
+			len(cfg.HTTP.CORSAllowedOrigins),
+		)
+	}
+
+	if cfg.HTTP.CORSAllowedOrigins[0] != "http://localhost:3000" {
+		t.Errorf(
+			"unexpected CORS origin: %q",
+			cfg.HTTP.CORSAllowedOrigins[0],
 		)
 	}
 }
@@ -426,6 +441,57 @@ func TestLoadConfigAllowsCustomJWTSecretInProduction(t *testing.T) {
 		t.Errorf(
 			"expected production environment, got %q",
 			cfg.Env,
+		)
+	}
+}
+
+func TestLoadConfigRejectsWildcardCORSInProduction(
+	t *testing.T,
+) {
+	setRequiredEnv(t)
+
+	t.Setenv("APP_ENV", "production")
+	t.Setenv(
+		"JWT_SECRET",
+		"gN7vP2xQ9mK4sR8wT3yL6cF1hJ5dB0zA",
+	)
+	t.Setenv(
+		"CORS_ALLOWED_ORIGINS",
+		"*",
+	)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal(
+			"expected wildcard CORS origin to be rejected in production",
+		)
+	}
+}
+
+func TestLoadConfigMultipleCORSOrigins(t *testing.T) {
+	setRequiredEnv(t)
+
+	t.Setenv(
+		"CORS_ALLOWED_ORIGINS",
+		"http://localhost:3000, http://localhost:3001",
+	)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.HTTP.CORSAllowedOrigins) != 2 {
+		t.Fatalf(
+			"expected 2 origins, got %d",
+			len(cfg.HTTP.CORSAllowedOrigins),
+		)
+	}
+
+	if cfg.HTTP.CORSAllowedOrigins[1] != "http://localhost:3001" {
+		t.Errorf(
+			"unexpected second origin: %q",
+			cfg.HTTP.CORSAllowedOrigins[1],
 		)
 	}
 }

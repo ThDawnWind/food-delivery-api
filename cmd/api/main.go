@@ -23,6 +23,7 @@ import (
 	"github.com/ThDawnWind/food-delivery-api/openapi"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
 	"golang.org/x/time/rate"
 )
@@ -162,6 +163,26 @@ func main() {
 	router.Use(middleware.RequestID)
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
+
+	router.Use(cors.Handler(cors.Options{
+		AllowedOrigins: cfg.HTTP.CORSAllowedOrigins,
+		AllowedMethods: []string{
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodPatch,
+			http.MethodDelete,
+			http.MethodOptions,
+		},
+		AllowedHeaders: []string{
+			"Accept",
+			"Authorization",
+			"Content-Type",
+		},
+		AllowCredentials: false,
+		MaxAge:           300,
+	}))
+
 	router.Get("/health", healthHandler)
 	router.Get("/ready", readinessHandler(dbPool))
 
