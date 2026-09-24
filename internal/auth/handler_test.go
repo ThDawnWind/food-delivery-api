@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -55,7 +57,10 @@ func TestHandler_Login(t *testing.T) {
 		},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`{
 		"email": "alex@example.com",
@@ -133,7 +138,10 @@ func TestHandler_Login(t *testing.T) {
 func TestHandler_Login_InvalidJSON(t *testing.T) {
 	service := &fakeLoginService{}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodPost,
@@ -165,7 +173,10 @@ func TestHandler_Login_ValidationError(t *testing.T) {
 		err: user.ErrUserValidation,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`{
 		"email": "",
@@ -196,7 +207,10 @@ func TestHandler_Login_InvalidCredentials(t *testing.T) {
 		err: user.ErrInvalidCredentials,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`{
 		"email": "alex@example.com",
@@ -227,7 +241,19 @@ func TestHandler_Login_InternalError(t *testing.T) {
 		err: errors.New("database unavailable"),
 	}
 
-	handler := NewHandler(service)
+	var logBuffer bytes.Buffer
+
+	logger := slog.New(
+		slog.NewJSONHandler(
+			&logBuffer,
+			nil,
+		),
+	)
+
+	handler := NewHandler(
+		service,
+		logger,
+	)
 
 	body := []byte(`{
 		"email": "alex@example.com",
@@ -242,13 +268,77 @@ func TestHandler_Login_InternalError(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(rec, req)
+	handler.Routes().ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf(
 			"expected status %d, got %d",
 			http.StatusInternalServerError,
 			rec.Code,
+		)
+	}
+
+	var response map[string]string
+
+	if err := json.NewDecoder(
+		rec.Body,
+	).Decode(&response); err != nil {
+		t.Fatalf(
+			"failed to decode response: %v",
+			err,
+		)
+	}
+
+	if response["error"] != "internal server error" {
+		t.Errorf(
+			"expected safe client error %q, got %q",
+			"internal server error",
+			response["error"],
+		)
+	}
+
+	if bytes.Contains(
+		rec.Body.Bytes(),
+		[]byte("database unavailable"),
+	) {
+		t.Fatal(
+			"internal error must not be exposed to client",
+		)
+	}
+
+	var logEntry map[string]any
+
+	if err := json.Unmarshal(
+		logBuffer.Bytes(),
+		&logEntry,
+	); err != nil {
+		t.Fatalf(
+			"failed to decode log entry: %v",
+			err,
+		)
+	}
+
+	if logEntry["level"] != "ERROR" {
+		t.Errorf(
+			"expected ERROR level, got %v",
+			logEntry["level"],
+		)
+	}
+
+	if logEntry["msg"] != "failed to login user" {
+		t.Errorf(
+			"unexpected log message: %v",
+			logEntry["msg"],
+		)
+	}
+
+	if logEntry["error"] != "database unavailable" {
+		t.Errorf(
+			"expected internal error in log, got %v",
+			logEntry["error"],
 		)
 	}
 }
@@ -263,7 +353,10 @@ func TestHandler_Register(t *testing.T) {
 		},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`{
 		"username": "alex",
@@ -322,7 +415,10 @@ func TestHandler_Register(t *testing.T) {
 
 func TestHandler_Register_InvalidJSON(t *testing.T) {
 	service := &fakeLoginService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodPost,
@@ -354,7 +450,10 @@ func TestHandler_Register_ValidationError(t *testing.T) {
 		registerErr: user.ErrUserValidation,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`{
 		"username": "",
@@ -386,7 +485,10 @@ func TestHandler_Register_Conflict(t *testing.T) {
 		registerErr: user.ErrUserConflict,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`{
 		"username": "alex",
@@ -418,7 +520,19 @@ func TestHandler_Register_InternalError(t *testing.T) {
 		registerErr: errors.New("database unavailable"),
 	}
 
-	handler := NewHandler(service)
+	var logBuffer bytes.Buffer
+
+	logger := slog.New(
+		slog.NewJSONHandler(
+			&logBuffer,
+			nil,
+		),
+	)
+
+	handler := NewHandler(
+		service,
+		logger,
+	)
 
 	body := []byte(`{
 		"username": "alex",
@@ -434,7 +548,10 @@ func TestHandler_Register_InternalError(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 
-	handler.Routes().ServeHTTP(rec, req)
+	handler.Routes().ServeHTTP(
+		rec,
+		req,
+	)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf(
@@ -443,4 +560,74 @@ func TestHandler_Register_InternalError(t *testing.T) {
 			rec.Code,
 		)
 	}
+
+	var response map[string]string
+
+	if err := json.NewDecoder(
+		rec.Body,
+	).Decode(&response); err != nil {
+		t.Fatalf(
+			"failed to decode response: %v",
+			err,
+		)
+	}
+
+	if response["error"] != "internal server error" {
+		t.Errorf(
+			"expected safe client error %q, got %q",
+			"internal server error",
+			response["error"],
+		)
+	}
+
+	if bytes.Contains(
+		rec.Body.Bytes(),
+		[]byte("database unavailable"),
+	) {
+		t.Fatal(
+			"internal error must not be exposed to client",
+		)
+	}
+
+	var logEntry map[string]any
+
+	if err := json.Unmarshal(
+		logBuffer.Bytes(),
+		&logEntry,
+	); err != nil {
+		t.Fatalf(
+			"failed to decode log entry: %v",
+			err,
+		)
+	}
+
+	if logEntry["level"] != "ERROR" {
+		t.Errorf(
+			"expected ERROR level, got %v",
+			logEntry["level"],
+		)
+	}
+
+	if logEntry["msg"] != "failed to register user" {
+		t.Errorf(
+			"unexpected log message: %v",
+			logEntry["msg"],
+		)
+	}
+
+	if logEntry["error"] != "database unavailable" {
+		t.Errorf(
+			"expected internal error in log, got %v",
+			logEntry["error"],
+		)
+	}
+}
+
+func newTestLogger() *slog.Logger {
+	return slog.New(
+		slog.NewJSONHandler(
+			io.Discard,
+			nil,
+		),
+	)
 }

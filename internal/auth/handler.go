@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
@@ -23,11 +24,13 @@ type ServiceInterface interface {
 
 type Handler struct {
 	service ServiceInterface
+	logger  *slog.Logger
 }
 
-func NewHandler(service ServiceInterface) *Handler {
+func NewHandler(service ServiceInterface, logger *slog.Logger) *Handler {
 	return &Handler{
 		service: service,
+		logger:  logger,
 	}
 }
 
@@ -98,10 +101,12 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 			)
 
 		default:
-			httpx.WriteError(
+			httpx.WriteInternalError(
+				h.logger,
 				w,
-				http.StatusInternalServerError,
-				"internal server error",
+				r,
+				"failed to register user",
+				err,
 			)
 		}
 
@@ -161,10 +166,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			)
 
 		default:
-			httpx.WriteError(
+			httpx.WriteInternalError(
+				h.logger,
 				w,
-				http.StatusInternalServerError,
-				"internal server error",
+				r,
+				"failed to login user",
+				err,
 			)
 		}
 
