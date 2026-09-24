@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -73,7 +75,10 @@ func TestHandler_GetByID(t *testing.T) {
 		},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Get("/products/{id}", handler.GetByID)
@@ -121,7 +126,10 @@ func TestHandler_GetByID(t *testing.T) {
 
 func TestHandler_GetByID_InvalidID(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Get("/products/{id}", handler.GetByID)
@@ -150,7 +158,10 @@ func TestHandler_GetByID_NotFound(t *testing.T) {
 		err: ErrProductNotFound,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Get("/products/{id}", handler.GetByID)
@@ -179,7 +190,10 @@ func TestHandler_GetByID_ServiceError(t *testing.T) {
 		err: errors.New("service unavailable"),
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Get("/products/{id}", handler.GetByID)
@@ -224,8 +238,10 @@ func TestHandler_List(t *testing.T) {
 			},
 		},
 	}
-
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -272,8 +288,10 @@ func TestHandler_List_ServiceError(t *testing.T) {
 	service := &fakeService{
 		err: errors.New("service unavailable"),
 	}
-
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -296,7 +314,10 @@ func TestHandler_List_ServiceError(t *testing.T) {
 
 func TestHandler_Create(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := `{
 		"name": "Pepperoni",
@@ -366,7 +387,10 @@ func TestHandler_Create(t *testing.T) {
 
 func TestHandler_Create_InvalidJSON(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodPost,
@@ -395,8 +419,10 @@ func TestHandler_Create_ValidationError(t *testing.T) {
 	service := &fakeService{
 		err: ErrProductValidation,
 	}
-
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := `{
 		"name": "",
@@ -428,8 +454,10 @@ func TestHandler_Create_ServiceError(t *testing.T) {
 	service := &fakeService{
 		err: errors.New("service unavailable"),
 	}
-
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := `{
 		"name": "Pepperoni",
@@ -459,7 +487,10 @@ func TestHandler_Create_ServiceError(t *testing.T) {
 
 func TestHandler_Update(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Put("/products/{id}", handler.Update)
@@ -529,7 +560,10 @@ func TestHandler_Update(t *testing.T) {
 
 func TestHandler_Update_InvalidID(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Put("/products/{id}", handler.Update)
@@ -559,7 +593,10 @@ func TestHandler_Update_InvalidID(t *testing.T) {
 
 func TestHandler_Update_InvalidJSON(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Put("/products/{id}", handler.Update)
@@ -588,7 +625,10 @@ func TestHandler_Update_ValidationError(t *testing.T) {
 		err: ErrProductValidation,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Put("/products/{id}", handler.Update)
@@ -625,7 +665,10 @@ func TestHandler_Update_NotFound(t *testing.T) {
 		err: ErrProductNotFound,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Put("/products/{id}", handler.Update)
@@ -662,7 +705,10 @@ func TestHandler_Update_ServiceError(t *testing.T) {
 		err: errors.New("service unavailable"),
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Put("/products/{id}", handler.Update)
@@ -696,7 +742,10 @@ func TestHandler_Update_ServiceError(t *testing.T) {
 
 func TestHandler_Delete(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Delete("/products/{id}", handler.Delete)
@@ -730,7 +779,10 @@ func TestHandler_Delete(t *testing.T) {
 
 func TestHandler_Delete_InvalidID(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Delete("/products/{id}", handler.Delete)
@@ -763,7 +815,10 @@ func TestHandler_Delete_NotFound(t *testing.T) {
 		err: ErrProductNotFound,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Delete("/products/{id}", handler.Delete)
@@ -792,7 +847,10 @@ func TestHandler_Delete_ServiceError(t *testing.T) {
 		err: errors.New("service unavailable"),
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Delete("/products/{id}", handler.Delete)
@@ -821,7 +879,10 @@ func TestHandler_List_WithFilters(t *testing.T) {
 		products: []Product{},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -880,7 +941,10 @@ func TestHandler_List_WithFilters(t *testing.T) {
 
 func TestHandler_List_InvalidCategoryID(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -903,7 +967,10 @@ func TestHandler_List_InvalidCategoryID(t *testing.T) {
 
 func TestHandler_List_InvalidLimit(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -926,7 +993,10 @@ func TestHandler_List_InvalidLimit(t *testing.T) {
 
 func TestHandler_List_InvalidOffset(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -952,7 +1022,10 @@ func TestHandler_List_ValidationError(t *testing.T) {
 		err: ErrProductValidation,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -971,4 +1044,13 @@ func TestHandler_List_ValidationError(t *testing.T) {
 			rec.Code,
 		)
 	}
+}
+
+func newTestLogger() *slog.Logger {
+	return slog.New(
+		slog.NewJSONHandler(
+			io.Discard,
+			nil,
+		),
+	)
 }

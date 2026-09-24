@@ -127,11 +127,17 @@ func main() {
 
 	categoryRepository := category.NewRepository(dbPool)
 	categoryService := category.NewService(categoryRepository)
-	categoryHandler := category.NewHandler(categoryService)
+	categoryHandler := category.NewHandler(
+		categoryService,
+		logger,
+	)
 
 	productRepository := product.NewRepository(dbPool)
 	productService := product.NewService(productRepository)
-	productHandler := product.NewHandler(productService)
+	productHandler := product.NewHandler(
+		productService,
+		logger,
+	)
 
 	userRepository := user.NewRepository(dbPool)
 	userService := user.NewService(userRepository)

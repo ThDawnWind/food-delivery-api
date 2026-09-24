@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -88,7 +90,10 @@ func TestHandler_List(t *testing.T) {
 		},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -158,7 +163,10 @@ func TestHandler_List_ServiceError(t *testing.T) {
 		err: errors.New("service failure"),
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -181,7 +189,10 @@ func TestHandler_GetByID(t *testing.T) {
 		},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Get("/api/v1/categories/{id}", handler.GetByID)
@@ -238,7 +249,10 @@ func TestHandler_GetByID(t *testing.T) {
 
 func TestHandler_GetByID_InvalidID(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Get("/api/v1/categories/{id}", handler.GetByID)
@@ -260,7 +274,10 @@ func TestHandler_GetByID_NotFound(t *testing.T) {
 		err: ErrCategoryNotFound,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Get("/api/v1/categories/{id}", handler.GetByID)
@@ -282,7 +299,10 @@ func TestHandler_GetByID_ServiceError(t *testing.T) {
 		err: errors.New("service failure"),
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Get("/api/v1/categories/{id}", handler.GetByID)
@@ -308,7 +328,10 @@ func TestHandler_Create(t *testing.T) {
 		},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := `{
 		"name": "Pizza",
@@ -393,7 +416,10 @@ func TestHandler_Create(t *testing.T) {
 
 func TestHandler_Create_InvalidJSON(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := `{
 		"name": "Pizza",
@@ -417,7 +443,10 @@ func TestHandler_Create_ValidationError(t *testing.T) {
 		err: ErrCategoryValidation,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := `{
 		"name": "",
@@ -441,7 +470,10 @@ func TestHandler_Create_ServiceError(t *testing.T) {
 		err: errors.New("service failure"),
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := `{
 		"name": "Pizza",
@@ -462,7 +494,10 @@ func TestHandler_Create_ServiceError(t *testing.T) {
 }
 func TestHandler_Update(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Put("/api/v1/categories/{id}", handler.Update)
@@ -521,7 +556,10 @@ func TestHandler_Update(t *testing.T) {
 
 func TestHandler_Update_InvalidID(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Put("/api/v1/categories/{id}", handler.Update)
@@ -545,7 +583,10 @@ func TestHandler_Update_InvalidID(t *testing.T) {
 }
 func TestHandler_Update_InvalidJSON(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Put("/api/v1/categories/{id}", handler.Update)
@@ -572,7 +613,10 @@ func TestHandler_Update_NotFound(t *testing.T) {
 		err: ErrCategoryNotFound,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Put("/api/v1/categories/{id}", handler.Update)
@@ -599,7 +643,10 @@ func TestHandler_Update_ServiceError(t *testing.T) {
 		err: errors.New("service failure"),
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Put("/api/v1/categories/{id}", handler.Update)
@@ -623,7 +670,10 @@ func TestHandler_Update_ServiceError(t *testing.T) {
 }
 func TestHandler_Delete(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Delete("/api/v1/categories/{id}", handler.Delete)
@@ -649,7 +699,10 @@ func TestHandler_Delete(t *testing.T) {
 
 func TestHandler_Delete_InvalidID(t *testing.T) {
 	service := &fakeService{}
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Delete("/api/v1/categories/{id}", handler.Delete)
@@ -671,7 +724,10 @@ func TestHandler_Delete_NotFound(t *testing.T) {
 		err: ErrCategoryNotFound,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Delete("/api/v1/categories/{id}", handler.Delete)
@@ -693,7 +749,10 @@ func TestHandler_Delete_ServiceError(t *testing.T) {
 		err: errors.New("service failure"),
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	router := chi.NewRouter()
 	router.Delete("/api/v1/categories/{id}", handler.Delete)
@@ -709,4 +768,13 @@ func TestHandler_Delete_ServiceError(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	assertErrorResponse(t, rec, http.StatusInternalServerError, "internal server error")
+}
+
+func newTestLogger() *slog.Logger {
+	return slog.New(
+		slog.NewJSONHandler(
+			io.Discard,
+			nil,
+		),
+	)
 }

@@ -3,6 +3,7 @@ package category
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -20,11 +21,16 @@ type ServiceInterface interface {
 
 type Handler struct {
 	service ServiceInterface
+	logger  *slog.Logger
 }
 
-func NewHandler(service ServiceInterface) *Handler {
+func NewHandler(
+	service ServiceInterface,
+	logger *slog.Logger,
+) *Handler {
 	return &Handler{
 		service: service,
+		logger:  logger,
 	}
 }
 
@@ -38,15 +44,20 @@ type updateCategoryRequest struct {
 	Slug string `json:"slug"`
 }
 
-func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) List(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	categories, err := h.service.List(
 		r.Context(),
 	)
 	if err != nil {
-		httpx.WriteError(
+		httpx.WriteInternalError(
+			h.logger,
 			w,
-			http.StatusInternalServerError,
-			"internal server error",
+			r,
+			"failed to list categories",
+			err,
 		)
 		return
 	}
@@ -58,7 +69,10 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetByID(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	idParam := chi.URLParam(
 		r,
 		"id",
@@ -95,10 +109,12 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		httpx.WriteError(
+		httpx.WriteInternalError(
+			h.logger,
 			w,
-			http.StatusInternalServerError,
-			"internal server error",
+			r,
+			"failed to get category",
+			err,
 		)
 		return
 	}
@@ -110,7 +126,10 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Create(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	var req createCategoryRequest
 
 	err := httpx.DecodeJSON(
@@ -145,10 +164,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		httpx.WriteError(
+		httpx.WriteInternalError(
+			h.logger,
 			w,
-			http.StatusInternalServerError,
-			"internal server error",
+			r,
+			"failed to create category",
+			err,
 		)
 		return
 	}
@@ -160,7 +181,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Update(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	idParam := chi.URLParam(
 		r,
 		"id",
@@ -229,10 +253,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			)
 
 		default:
-			httpx.WriteError(
+			httpx.WriteInternalError(
+				h.logger,
 				w,
-				http.StatusInternalServerError,
-				"internal server error",
+				r,
+				"failed to update category",
+				err,
 			)
 		}
 
@@ -244,7 +270,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Delete(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	idParam := chi.URLParam(
 		r,
 		"id",
@@ -281,10 +310,12 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		httpx.WriteError(
+		httpx.WriteInternalError(
+			h.logger,
 			w,
-			http.StatusInternalServerError,
-			"internal server error",
+			r,
+			"failed to delete category",
+			err,
 		)
 		return
 	}
