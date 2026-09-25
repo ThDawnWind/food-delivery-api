@@ -132,6 +132,13 @@ func main() {
 		"database connection established",
 	)
 
+	dbPoolMetrics := database.NewPoolMetrics(
+		dbPool,
+	)
+
+	registry.MustRegister(
+		dbPoolMetrics,
+	)
 	defer dbPool.Close()
 
 	categoryRepository := category.NewRepository(dbPool)
