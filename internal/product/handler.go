@@ -3,6 +3,7 @@ package product
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -20,11 +21,13 @@ type ServiceInterface interface {
 
 type Handler struct {
 	service ServiceInterface
+	logger  *slog.Logger
 }
 
-func NewHandler(service ServiceInterface) *Handler {
+func NewHandler(service ServiceInterface, logger *slog.Logger) *Handler {
 	return &Handler{
 		service: service,
+		logger:  logger,
 	}
 }
 
@@ -121,10 +124,12 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		httpx.WriteError(
+		httpx.WriteInternalError(
+			h.logger,
 			w,
-			http.StatusInternalServerError,
-			"internal server error",
+			r,
+			"failed to list products",
+			err,
 		)
 		return
 	}
@@ -172,10 +177,12 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 			)
 
 		default:
-			httpx.WriteError(
+			httpx.WriteInternalError(
+				h.logger,
 				w,
-				http.StatusInternalServerError,
-				"internal server error",
+				r,
+				"failed to get product",
+				err,
 			)
 		}
 
@@ -248,10 +255,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		httpx.WriteError(
+		httpx.WriteInternalError(
+			h.logger,
 			w,
-			http.StatusInternalServerError,
-			"internal server error",
+			r,
+			"failed to create product",
+			err,
 		)
 		return
 	}
@@ -345,12 +354,13 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 				http.StatusNotFound,
 				"product not found",
 			)
-
 		default:
-			httpx.WriteError(
+			httpx.WriteInternalError(
+				h.logger,
 				w,
-				http.StatusInternalServerError,
-				"internal server error",
+				r,
+				"failed to update product",
+				err,
 			)
 		}
 

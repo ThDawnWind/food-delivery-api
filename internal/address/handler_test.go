@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -37,7 +39,10 @@ type fakeAddressService struct {
 	deleteErr       error
 }
 
-func (f *fakeAddressService) Create(ctx context.Context, input *CreateAddress) (*Address, error) {
+func (f *fakeAddressService) Create(
+	ctx context.Context,
+	input *CreateAddress,
+) (*Address, error) {
 	f.createInput = input
 
 	if f.createErr != nil {
@@ -47,7 +52,11 @@ func (f *fakeAddressService) Create(ctx context.Context, input *CreateAddress) (
 	return f.createAddress, nil
 }
 
-func (f *fakeAddressService) GetByID(ctx context.Context, addressID int64, userID int64) (*Address, error) {
+func (f *fakeAddressService) GetByID(
+	ctx context.Context,
+	addressID int64,
+	userID int64,
+) (*Address, error) {
 	f.getByIDAddressID = addressID
 	f.getByIDUserID = userID
 
@@ -58,7 +67,10 @@ func (f *fakeAddressService) GetByID(ctx context.Context, addressID int64, userI
 	return f.getByIDAddress, nil
 }
 
-func (f *fakeAddressService) ListByUser(ctx context.Context, userID int64) ([]Address, error) {
+func (f *fakeAddressService) ListByUser(
+	ctx context.Context,
+	userID int64,
+) ([]Address, error) {
 	f.listByUserID = userID
 
 	if f.listByUserErr != nil {
@@ -68,7 +80,12 @@ func (f *fakeAddressService) ListByUser(ctx context.Context, userID int64) ([]Ad
 	return f.listByUserAddresses, nil
 }
 
-func (f *fakeAddressService) Update(ctx context.Context, addressID int64, userID int64, input *UpdateAddress) (*Address, error) {
+func (f *fakeAddressService) Update(
+	ctx context.Context,
+	addressID int64,
+	userID int64,
+	input *UpdateAddress,
+) (*Address, error) {
 	f.updateAddressID = addressID
 	f.updateUserID = userID
 	f.updateInput = input
@@ -80,7 +97,11 @@ func (f *fakeAddressService) Update(ctx context.Context, addressID int64, userID
 	return f.updateAddress, nil
 }
 
-func (f *fakeAddressService) Delete(ctx context.Context, addressID int64, userID int64) error {
+func (f *fakeAddressService) Delete(
+	ctx context.Context,
+	addressID int64,
+	userID int64,
+) error {
 	f.deleteAddressID = addressID
 	f.deleteUserID = userID
 
@@ -92,7 +113,9 @@ type fakeTokenParser struct {
 	err    error
 }
 
-func (f *fakeTokenParser) Parse(token string) (*auth.Claims, error) {
+func (f *fakeTokenParser) Parse(
+	token string,
+) (*auth.Claims, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -100,7 +123,11 @@ func (f *fakeTokenParser) Parse(token string) (*auth.Claims, error) {
 	return f.claims, nil
 }
 
-func authenticatedAddressHandler(handler http.Handler, userID int64, role string) http.Handler {
+func authenticatedAddressHandler(
+	handler http.Handler,
+	userID int64,
+	role string,
+) http.Handler {
 	parser := &fakeTokenParser{
 		claims: &auth.Claims{
 			UserID: userID,
@@ -108,7 +135,18 @@ func authenticatedAddressHandler(handler http.Handler, userID int64, role string
 		},
 	}
 
-	return auth.Middleware(parser)(handler)
+	return auth.Middleware(parser)(
+		handler,
+	)
+}
+
+func newTestLogger() *slog.Logger {
+	return slog.New(
+		slog.NewJSONHandler(
+			io.Discard,
+			nil,
+		),
+	)
 }
 
 func TestHandler_Create(t *testing.T) {
@@ -122,7 +160,10 @@ func TestHandler_Create(t *testing.T) {
 		},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`{
 		"label": "Home",
@@ -163,7 +204,9 @@ func TestHandler_Create(t *testing.T) {
 	}
 
 	if service.createInput == nil {
-		t.Fatal("expected create input")
+		t.Fatal(
+			"expected create input",
+		)
 	}
 
 	if service.createInput.UserID != 10 {
@@ -218,9 +261,15 @@ func TestHandler_Create(t *testing.T) {
 	}
 }
 
-func TestHandler_Create_Unauthorized(t *testing.T) {
+func TestHandler_Create_Unauthorized(
+	t *testing.T,
+) {
 	service := &fakeAddressService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`{
 		"city": "Amsterdam",
@@ -256,14 +305,22 @@ func TestHandler_Create_Unauthorized(t *testing.T) {
 	}
 }
 
-func TestHandler_Create_InvalidJSON(t *testing.T) {
+func TestHandler_Create_InvalidJSON(
+	t *testing.T,
+) {
 	service := &fakeAddressService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodPost,
 		"/",
-		bytes.NewBufferString(`{invalid json`),
+		bytes.NewBufferString(
+			`{invalid json`,
+		),
 	)
 
 	request.Header.Set(
@@ -297,12 +354,17 @@ func TestHandler_Create_InvalidJSON(t *testing.T) {
 	}
 }
 
-func TestHandler_Create_ValidationError(t *testing.T) {
+func TestHandler_Create_ValidationError(
+	t *testing.T,
+) {
 	service := &fakeAddressService{
 		createErr: ErrAddressValidation,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`{
 		"city": "",
@@ -341,12 +403,19 @@ func TestHandler_Create_ValidationError(t *testing.T) {
 	}
 }
 
-func TestHandler_Create_InternalError(t *testing.T) {
+func TestHandler_Create_InternalError(
+	t *testing.T,
+) {
 	service := &fakeAddressService{
-		createErr: errors.New("database unavailable"),
+		createErr: errors.New(
+			"database unavailable",
+		),
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`{
 		"city": "Amsterdam",
@@ -405,7 +474,10 @@ func TestHandler_ListByUser(t *testing.T) {
 		},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -465,9 +537,15 @@ func TestHandler_ListByUser(t *testing.T) {
 	}
 }
 
-func TestHandler_ListByUser_Unauthorized(t *testing.T) {
+func TestHandler_ListByUser_Unauthorized(
+	t *testing.T,
+) {
 	service := &fakeAddressService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -497,12 +575,19 @@ func TestHandler_ListByUser_Unauthorized(t *testing.T) {
 	}
 }
 
-func TestHandler_ListByUser_InternalError(t *testing.T) {
+func TestHandler_ListByUser_InternalError(
+	t *testing.T,
+) {
 	service := &fakeAddressService{
-		listByUserErr: errors.New("database unavailable"),
+		listByUserErr: errors.New(
+			"database unavailable",
+		),
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -546,7 +631,10 @@ func TestHandler_GetByID(t *testing.T) {
 		},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -614,9 +702,15 @@ func TestHandler_GetByID(t *testing.T) {
 	}
 }
 
-func TestHandler_GetByID_InvalidID(t *testing.T) {
+func TestHandler_GetByID_InvalidID(
+	t *testing.T,
+) {
 	service := &fakeAddressService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -640,12 +734,17 @@ func TestHandler_GetByID_InvalidID(t *testing.T) {
 	}
 }
 
-func TestHandler_GetByID_NotFound(t *testing.T) {
+func TestHandler_GetByID_NotFound(
+	t *testing.T,
+) {
 	service := &fakeAddressService{
 		getByIDErr: ErrAddressNotFound,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -678,9 +777,15 @@ func TestHandler_GetByID_NotFound(t *testing.T) {
 	}
 }
 
-func TestHandler_GetByID_Unauthorized(t *testing.T) {
+func TestHandler_GetByID_Unauthorized(
+	t *testing.T,
+) {
 	service := &fakeAddressService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodGet,
@@ -715,7 +820,10 @@ func TestHandler_Update(t *testing.T) {
 		},
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	body := []byte(`{
 		"city": "Rotterdam",
@@ -769,11 +877,15 @@ func TestHandler_Update(t *testing.T) {
 	}
 
 	if service.updateInput == nil {
-		t.Fatal("expected update input")
+		t.Fatal(
+			"expected update input",
+		)
 	}
 
 	if service.updateInput.City == nil {
-		t.Fatal("expected city")
+		t.Fatal(
+			"expected city",
+		)
 	}
 
 	if *service.updateInput.City != "Rotterdam" {
@@ -785,17 +897,24 @@ func TestHandler_Update(t *testing.T) {
 	}
 }
 
-func TestHandler_Update_NotFound(t *testing.T) {
+func TestHandler_Update_NotFound(
+	t *testing.T,
+) {
 	service := &fakeAddressService{
 		updateErr: ErrAddressNotFound,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodPatch,
 		"/999",
-		bytes.NewBufferString(`{"city":"Rotterdam"}`),
+		bytes.NewBufferString(
+			`{"city":"Rotterdam"}`,
+		),
 	)
 
 	request.Header.Set(
@@ -823,14 +942,22 @@ func TestHandler_Update_NotFound(t *testing.T) {
 	}
 }
 
-func TestHandler_Update_InvalidJSON(t *testing.T) {
+func TestHandler_Update_InvalidJSON(
+	t *testing.T,
+) {
 	service := &fakeAddressService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodPatch,
 		"/5",
-		bytes.NewBufferString(`{invalid`),
+		bytes.NewBufferString(
+			`{invalid`,
+		),
 	)
 
 	request.Header.Set(
@@ -860,7 +987,11 @@ func TestHandler_Update_InvalidJSON(t *testing.T) {
 
 func TestHandler_Delete(t *testing.T) {
 	service := &fakeAddressService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodDelete,
@@ -909,12 +1040,17 @@ func TestHandler_Delete(t *testing.T) {
 	}
 }
 
-func TestHandler_Delete_NotFound(t *testing.T) {
+func TestHandler_Delete_NotFound(
+	t *testing.T,
+) {
 	service := &fakeAddressService{
 		deleteErr: ErrAddressNotFound,
 	}
 
-	handler := NewHandler(service)
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodDelete,
@@ -947,9 +1083,15 @@ func TestHandler_Delete_NotFound(t *testing.T) {
 	}
 }
 
-func TestHandler_Delete_Unauthorized(t *testing.T) {
+func TestHandler_Delete_Unauthorized(
+	t *testing.T,
+) {
 	service := &fakeAddressService{}
-	handler := NewHandler(service)
+
+	handler := NewHandler(
+		service,
+		newTestLogger(),
+	)
 
 	request := httptest.NewRequest(
 		http.MethodDelete,

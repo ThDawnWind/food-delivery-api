@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -25,6 +25,9 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/time/rate"
 )
 
@@ -59,25 +62,55 @@ func readinessHandler(db databasePinger) http.HandlerFunc {
 }
 
 func main() {
+	logger := slog.New(
+		slog.NewJSONHandler(
+			os.Stdout,
+			&slog.HandlerOptions{
+				Level: slog.LevelInfo,
+			},
+		),
+	)
+
+	registry := prometheus.NewRegistry()
+
+	registry.MustRegister(
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(
+			collectors.ProcessCollectorOpts{},
+		),
+	)
+
+	httpMetrics := httpx.NewHTTPMetrics(
+		registry,
+	)
+
 	if err := godotenv.Load(); err != nil {
-		log.Println(".env file not found, using environment variables")
+		logger.Info(
+			".env file not found, using environment variables",
+		)
 	}
 
 	serverErr := make(chan error, 1)
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Error loading configuration: %v", err)
+		logger.Error(
+			"failed to load configuration",
+			slog.Any("error", err),
+		)
+		return
 	}
 
 	location, err := time.LoadLocation(
 		cfg.Timezone,
 	)
 	if err != nil {
-		log.Fatalf(
-			"failed to load timezone: %v",
-			err,
+		logger.Error(
+			"failed to load timezone",
+			slog.Any("error", err),
 		)
+		return
 	}
+
 	dbCtx, dbCancel := context.WithTimeout(
 		context.Background(),
 		5*time.Second,
@@ -96,19 +129,39 @@ func main() {
 		},
 	)
 	if err != nil {
-		log.Fatalf("Error connecting to database: %v", err)
-	} else {
-		log.Println("Database connection established")
+		logger.Error(
+			"failed to connect to database",
+			slog.Any("error", err),
+		)
+		return
 	}
+
+	logger.Info(
+		"database connection established",
+	)
+
+	dbPoolMetrics := database.NewPoolMetrics(
+		dbPool,
+	)
+
+	registry.MustRegister(
+		dbPoolMetrics,
+	)
 	defer dbPool.Close()
 
 	categoryRepository := category.NewRepository(dbPool)
 	categoryService := category.NewService(categoryRepository)
-	categoryHandler := category.NewHandler(categoryService)
+	categoryHandler := category.NewHandler(
+		categoryService,
+		logger,
+	)
 
 	productRepository := product.NewRepository(dbPool)
 	productService := product.NewService(productRepository)
-	productHandler := product.NewHandler(productService)
+	productHandler := product.NewHandler(
+		productService,
+		logger,
+	)
 
 	userRepository := user.NewRepository(dbPool)
 	userService := user.NewService(userRepository)
@@ -118,10 +171,11 @@ func main() {
 		cfg.JWT.TTL,
 	)
 	if err != nil {
-		log.Fatalf(
-			"Error creating token manager: %v",
-			err,
+		logger.Error(
+			"failed to create token manager",
+			slog.Any("error", err),
 		)
+		return
 	}
 
 	authService := auth.NewService(
@@ -129,7 +183,10 @@ func main() {
 		tokenManager,
 	)
 
-	authHandler := auth.NewHandler(authService)
+	authHandler := auth.NewHandler(
+		authService,
+		logger,
+	)
 
 	authRateLimiter := httpx.NewIPRateLimiter(
 		rate.Every(12*time.Second),
@@ -140,7 +197,10 @@ func main() {
 
 	addressRepository := address.NewRepository(dbPool)
 	addressService := address.NewService(addressRepository)
-	addressHandler := address.NewHandler(addressService)
+	addressHandler := address.NewHandler(
+		addressService,
+		logger,
+	)
 
 	orderRepository := order.NewRepository(dbPool)
 	orderService := order.NewService(
@@ -151,6 +211,7 @@ func main() {
 	orderHandler := order.NewHandlerWithLocation(
 		orderService,
 		location,
+		logger,
 	)
 
 	ctx, stop := signal.NotifyContext(
@@ -162,8 +223,23 @@ func main() {
 
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
-	router.Use(middleware.Logger)
-	router.Use(middleware.Recoverer)
+	router.Use(
+		httpx.RequestLogger(
+			logger,
+			cfg.HTTP.TrustedProxyCIDRs,
+		),
+	)
+	router.Use(
+		httpx.MetricsMiddleware(
+			httpMetrics,
+		),
+	)
+	router.Use(
+		httpx.Recoverer(
+			logger,
+		),
+	)
+
 	router.Use(httpx.SecurityHeaders)
 
 	router.Use(cors.Handler(cors.Options{
@@ -187,6 +263,14 @@ func main() {
 
 	router.Get("/health", healthHandler)
 	router.Get("/ready", readinessHandler(dbPool))
+
+	router.Handle(
+		"/metrics",
+		promhttp.HandlerFor(
+			registry,
+			promhttp.HandlerOpts{},
+		),
+	)
 
 	router.Get("/openapi.yaml", openapi.SpecHandler)
 	router.Get("/docs", openapi.DocsHandler)
@@ -276,7 +360,13 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("Starting server on %s", server.Addr)
+		logger.Info(
+			"starting server",
+			slog.String(
+				"address",
+				server.Addr,
+			),
+		)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 		}
@@ -284,13 +374,20 @@ func main() {
 
 	select {
 	case <-ctx.Done():
-		log.Println("Received shutdown signal")
+		logger.Info(
+			"received shutdown signal",
+		)
 	case err := <-serverErr:
-		log.Printf("Server error: %v", err)
+		logger.Error(
+			"server error",
+			slog.Any("error", err),
+		)
 		return
 	}
 
-	log.Println("Shutting down server...")
+	logger.Info(
+		"shutting down server...",
+	)
 
 	shutdownCtx, cancel := context.WithTimeout(
 		context.Background(),
@@ -299,9 +396,14 @@ func main() {
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Server forced to shutdown: %v", err)
+		logger.Error(
+			"server forced to shutdown",
+			slog.Any("error", err),
+		)
 		return
 	}
 
-	log.Println("Server gracefully stopped")
+	logger.Info(
+		"server gracefully stopped",
+	)
 }

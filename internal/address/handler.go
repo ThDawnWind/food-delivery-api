@@ -3,6 +3,7 @@ package address
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -12,20 +13,48 @@ import (
 )
 
 type AddressService interface {
-	Create(ctx context.Context, input *CreateAddress) (*Address, error)
-	GetByID(ctx context.Context, addressID int64, userID int64) (*Address, error)
-	ListByUser(ctx context.Context, userID int64) ([]Address, error)
-	Update(ctx context.Context, addressID int64, userID int64, input *UpdateAddress) (*Address, error)
-	Delete(ctx context.Context, addressID int64, userID int64) error
+	Create(
+		ctx context.Context,
+		input *CreateAddress,
+	) (*Address, error)
+
+	GetByID(
+		ctx context.Context,
+		addressID int64,
+		userID int64,
+	) (*Address, error)
+
+	ListByUser(
+		ctx context.Context,
+		userID int64,
+	) ([]Address, error)
+
+	Update(
+		ctx context.Context,
+		addressID int64,
+		userID int64,
+		input *UpdateAddress,
+	) (*Address, error)
+
+	Delete(
+		ctx context.Context,
+		addressID int64,
+		userID int64,
+	) error
 }
 
 type Handler struct {
 	service AddressService
+	logger  *slog.Logger
 }
 
-func NewHandler(service AddressService) *Handler {
+func NewHandler(
+	service AddressService,
+	logger *slog.Logger,
+) *Handler {
 	return &Handler{
 		service: service,
+		logger:  logger,
 	}
 }
 
@@ -63,7 +92,10 @@ func (h *Handler) Routes() http.Handler {
 	return router
 }
 
-func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Create(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	userID, ok := auth.UserIDFromContext(
 		r.Context(),
 	)
@@ -118,10 +150,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		httpx.WriteError(
+		httpx.WriteInternalError(
+			h.logger,
 			w,
-			http.StatusInternalServerError,
-			"internal server error",
+			r,
+			"failed to create address",
+			err,
 		)
 		return
 	}
@@ -133,7 +167,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ListByUser(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	userID, ok := auth.UserIDFromContext(
 		r.Context(),
 	)
@@ -163,10 +200,12 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		httpx.WriteError(
+		httpx.WriteInternalError(
+			h.logger,
 			w,
-			http.StatusInternalServerError,
-			"internal server error",
+			r,
+			"failed to list addresses",
+			err,
 		)
 		return
 	}
@@ -178,9 +217,15 @@ func (h *Handler) ListByUser(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetByID(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	addressID, err := strconv.ParseInt(
-		chi.URLParam(r, "id"),
+		chi.URLParam(
+			r,
+			"id",
+		),
 		10,
 		64,
 	)
@@ -233,10 +278,12 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 			)
 
 		default:
-			httpx.WriteError(
+			httpx.WriteInternalError(
+				h.logger,
 				w,
-				http.StatusInternalServerError,
-				"internal server error",
+				r,
+				"failed to get address",
+				err,
 			)
 		}
 
@@ -250,9 +297,15 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Update(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	addressID, err := strconv.ParseInt(
-		chi.URLParam(r, "id"),
+		chi.URLParam(
+			r,
+			"id",
+		),
 		10,
 		64,
 	)
@@ -309,14 +362,20 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		switch {
-		case errors.Is(err, ErrAddressValidation):
+		case errors.Is(
+			err,
+			ErrAddressValidation,
+		):
 			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
 				"invalid address data",
 			)
 
-		case errors.Is(err, ErrAddressNotFound):
+		case errors.Is(
+			err,
+			ErrAddressNotFound,
+		):
 			httpx.WriteError(
 				w,
 				http.StatusNotFound,
@@ -324,10 +383,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			)
 
 		default:
-			httpx.WriteError(
+			httpx.WriteInternalError(
+				h.logger,
 				w,
-				http.StatusInternalServerError,
-				"internal server error",
+				r,
+				"failed to update address",
+				err,
 			)
 		}
 
@@ -341,9 +402,15 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Delete(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	addressID, err := strconv.ParseInt(
-		chi.URLParam(r, "id"),
+		chi.URLParam(
+			r,
+			"id",
+		),
 		10,
 		64,
 	)
@@ -375,14 +442,20 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		switch {
-		case errors.Is(err, ErrAddressValidation):
+		case errors.Is(
+			err,
+			ErrAddressValidation,
+		):
 			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
 				"invalid address data",
 			)
 
-		case errors.Is(err, ErrAddressNotFound):
+		case errors.Is(
+			err,
+			ErrAddressNotFound,
+		):
 			httpx.WriteError(
 				w,
 				http.StatusNotFound,
@@ -390,15 +463,19 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 			)
 
 		default:
-			httpx.WriteError(
+			httpx.WriteInternalError(
+				h.logger,
 				w,
-				http.StatusInternalServerError,
-				"internal server error",
+				r,
+				"failed to delete address",
+				err,
 			)
 		}
 
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(
+		http.StatusNoContent,
+	)
 }
