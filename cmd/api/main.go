@@ -205,7 +205,11 @@ func main() {
 			cfg.HTTP.TrustedProxyCIDRs,
 		),
 	)
-	router.Use(middleware.Recoverer)
+	router.Use(
+		httpx.Recoverer(
+			logger,
+		),
+	)
 	router.Use(httpx.SecurityHeaders)
 
 	router.Use(cors.Handler(cors.Options{
