@@ -25,6 +25,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/time/rate"
 )
 
@@ -67,6 +69,13 @@ func main() {
 			},
 		),
 	)
+
+	registry := prometheus.NewRegistry()
+
+	httpMetrics := httpx.NewHTTPMetrics(
+		registry,
+	)
+
 	if err := godotenv.Load(); err != nil {
 		logger.Info(
 			".env file not found, using environment variables",
@@ -206,10 +215,16 @@ func main() {
 		),
 	)
 	router.Use(
+		httpx.MetricsMiddleware(
+			httpMetrics,
+		),
+	)
+	router.Use(
 		httpx.Recoverer(
 			logger,
 		),
 	)
+
 	router.Use(httpx.SecurityHeaders)
 
 	router.Use(cors.Handler(cors.Options{
@@ -233,6 +248,14 @@ func main() {
 
 	router.Get("/health", healthHandler)
 	router.Get("/ready", readinessHandler(dbPool))
+
+	router.Handle(
+		"/metrics",
+		promhttp.HandlerFor(
+			registry,
+			promhttp.HandlerOpts{},
+		),
+	)
 
 	router.Get("/openapi.yaml", openapi.SpecHandler)
 	router.Get("/docs", openapi.DocsHandler)
