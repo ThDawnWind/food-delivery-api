@@ -26,6 +26,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/time/rate"
 )
@@ -71,6 +72,13 @@ func main() {
 	)
 
 	registry := prometheus.NewRegistry()
+
+	registry.MustRegister(
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(
+			collectors.ProcessCollectorOpts{},
+		),
+	)
 
 	httpMetrics := httpx.NewHTTPMetrics(
 		registry,
