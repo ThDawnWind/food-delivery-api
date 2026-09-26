@@ -71,6 +71,17 @@ func main() {
 		),
 	)
 
+	if err := run(logger); err != nil {
+		logger.Error(
+			"application stopped with error",
+			slog.Any("error", err),
+		)
+
+		os.Exit(1)
+	}
+}
+
+func run(logger *slog.Logger) error {
 	registry := prometheus.NewRegistry()
 
 	registry.MustRegister(
@@ -93,22 +104,20 @@ func main() {
 	serverErr := make(chan error, 1)
 	cfg, err := config.Load()
 	if err != nil {
-		logger.Error(
-			"failed to load configuration",
-			slog.Any("error", err),
+		return fmt.Errorf(
+			"failed to load configuration: %w",
+			err,
 		)
-		return
 	}
 
 	location, err := time.LoadLocation(
 		cfg.Timezone,
 	)
 	if err != nil {
-		logger.Error(
-			"failed to load timezone",
-			slog.Any("error", err),
+		return fmt.Errorf(
+			"failed to load timezone: %w",
+			err,
 		)
-		return
 	}
 
 	dbCtx, dbCancel := context.WithTimeout(
@@ -129,11 +138,10 @@ func main() {
 		},
 	)
 	if err != nil {
-		logger.Error(
-			"failed to connect to database",
-			slog.Any("error", err),
+		return fmt.Errorf(
+			"failed to connect to database: %w",
+			err,
 		)
-		return
 	}
 
 	logger.Info(
@@ -171,11 +179,10 @@ func main() {
 		cfg.JWT.TTL,
 	)
 	if err != nil {
-		logger.Error(
-			"failed to create token manager",
-			slog.Any("error", err),
+		return fmt.Errorf(
+			"failed to create token manager: %w",
+			err,
 		)
-		return
 	}
 
 	authService := auth.NewService(
@@ -378,11 +385,10 @@ func main() {
 			"received shutdown signal",
 		)
 	case err := <-serverErr:
-		logger.Error(
-			"server error",
-			slog.Any("error", err),
+		return fmt.Errorf(
+			"server error: %w",
+			err,
 		)
-		return
 	}
 
 	logger.Info(
@@ -396,14 +402,15 @@ func main() {
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		logger.Error(
-			"server forced to shutdown",
-			slog.Any("error", err),
+		return fmt.Errorf(
+			"failed to shutdown server: %w",
+			err,
 		)
-		return
 	}
 
 	logger.Info(
 		"server gracefully stopped",
 	)
+
+	return nil
 }
