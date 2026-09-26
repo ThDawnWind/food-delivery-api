@@ -2,3 +2,4 @@
 .env.test
 *.exe
 .env.production
+backups/
