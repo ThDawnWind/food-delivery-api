@@ -3,6 +3,7 @@ package httpx
 import (
 	"net/http"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -66,6 +67,7 @@ func (l *IPRateLimiter) Middleware(
 					http.StatusTooManyRequests,
 					"too many requests",
 				)
+
 				return
 			}
 
@@ -141,15 +143,13 @@ func clientIP(
 		",",
 	)
 
-	for i := len(parts) - 1; i >= 0; i-- {
+	for _, part := range slices.Backward(parts) {
 		rawIP := strings.TrimSpace(
-			parts[i],
+			part,
 		)
 
 		ip, err := netip.ParseAddr(rawIP)
 		if err != nil {
-			// Заголовок содержит мусор.
-			// Безопаснее вообще ему не доверять.
 			return remoteIP.String()
 		}
 

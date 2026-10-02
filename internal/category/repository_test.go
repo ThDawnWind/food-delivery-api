@@ -8,10 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ThDawnWind/food-delivery-api/internal/database"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/ThDawnWind/food-delivery-api/internal/database"
 )
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_GetByID(t *testing.T) {
 	ctx := context.Background()
 
@@ -29,6 +31,7 @@ func TestRepository_GetByID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
+
 	t.Cleanup(dbPool.Close)
 
 	repo := NewRepository(dbPool)
@@ -62,9 +65,9 @@ func TestRepository_GetByID(t *testing.T) {
 	if category.Name != "Test Category" || category.Slug != "test-category" {
 		t.Errorf("GetByID returned unexpected category: %+v", category)
 	}
-
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_GetByID_NotFound(t *testing.T) {
 	ctx := context.Background()
 
@@ -82,6 +85,7 @@ func TestRepository_GetByID_NotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
+
 	t.Cleanup(dbPool.Close)
 
 	repo := NewRepository(dbPool)
@@ -89,7 +93,7 @@ func TestRepository_GetByID_NotFound(t *testing.T) {
 
 	_, err = repo.GetByID(ctx, checkID)
 	if err == nil {
-		t.Fatalf("Expected error for non-existent category ID, got nil")
+		t.Fatal("Expected error for non-existent category ID, got nil")
 	}
 
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -97,6 +101,7 @@ func TestRepository_GetByID_NotFound(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_List(t *testing.T) {
 	ctx := context.Background()
 
@@ -114,11 +119,13 @@ func TestRepository_List(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
+
 	t.Cleanup(dbPool.Close)
 
 	repo := NewRepository(dbPool)
 
 	var id1 int64
+
 	var id2 int64
 
 	suffix := time.Now().UnixNano()
@@ -159,7 +166,6 @@ func TestRepository_List(t *testing.T) {
 			id1,
 			id2,
 		)
-
 		if err != nil {
 			t.Errorf("Failed to clean up test categories: %v", err)
 		}
@@ -190,9 +196,9 @@ func TestRepository_List(t *testing.T) {
 	if !found2 {
 		t.Errorf("category with id %d not found", id2)
 	}
-
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_Create(t *testing.T) {
 	ctx := context.Background()
 
@@ -210,6 +216,7 @@ func TestRepository_Create(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
+
 	t.Cleanup(dbPool.Close)
 
 	repo := NewRepository(dbPool)
@@ -260,6 +267,7 @@ func TestRepository_Create(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_Update(t *testing.T) {
 	ctx := context.Background()
 
@@ -277,6 +285,7 @@ func TestRepository_Update(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
+
 	t.Cleanup(dbPool.Close)
 
 	repo := NewRepository(dbPool)
@@ -341,6 +350,7 @@ func TestRepository_Update(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_Update_NotFound(t *testing.T) {
 	ctx := context.Background()
 
@@ -358,6 +368,7 @@ func TestRepository_Update_NotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
+
 	t.Cleanup(dbPool.Close)
 
 	repo := NewRepository(dbPool)
@@ -374,6 +385,7 @@ func TestRepository_Update_NotFound(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_Delete(t *testing.T) {
 	ctx := context.Background()
 
@@ -391,6 +403,7 @@ func TestRepository_Delete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
+
 	t.Cleanup(dbPool.Close)
 
 	repo := NewRepository(dbPool)
@@ -420,6 +433,7 @@ func TestRepository_Delete(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_Delete_NotFound(t *testing.T) {
 	ctx := context.Background()
 
@@ -437,6 +451,7 @@ func TestRepository_Delete_NotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
+
 	t.Cleanup(dbPool.Close)
 
 	repo := NewRepository(dbPool)

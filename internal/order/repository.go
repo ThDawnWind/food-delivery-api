@@ -28,6 +28,7 @@ func (r *Repository) Create(ctx context.Context, order *Order) (*Order, error) {
 		)
 	}
 
+	//nolint:errcheck // Rollback is best-effort; successful transactions are committed explicitly.
 	defer tx.Rollback(ctx)
 
 	err = tx.QueryRow(
@@ -54,7 +55,6 @@ func (r *Repository) Create(ctx context.Context, order *Order) (*Order, error) {
 		&order.CreatedAt,
 		&order.UpdatedAt,
 	)
-
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to create order: %w",
@@ -89,7 +89,6 @@ func (r *Repository) Create(ctx context.Context, order *Order) (*Order, error) {
 			&order.Items[i].ID,
 			&order.Items[i].CreatedAt,
 		)
-
 		if err != nil {
 			return nil, fmt.Errorf(
 				"failed to create order item: %w",
@@ -98,7 +97,8 @@ func (r *Repository) Create(ctx context.Context, order *Order) (*Order, error) {
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	err = tx.Commit(ctx)
+	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to commit transaction: %w",
 			err,
@@ -155,68 +155,6 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (*Order, error) {
 	return order, nil
 }
 
-func (r *Repository) listItemsByOrderID(ctx context.Context, orderID int64) ([]OrderItem, error) {
-	rows, err := r.db.Query(
-		ctx,
-		`
-				SELECT
-					id,
-					order_id,
-					product_id,
-					name_snapshot,
-					price_snapshot,
-					quantity,
-					created_at
-				FROM order_items
-				WHERE order_id = $1
-				ORDER BY id
-				`,
-		orderID,
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf(
-			"failed to query order items: %w",
-			err,
-		)
-	}
-
-	defer rows.Close()
-
-	items := make([]OrderItem, 0)
-
-	for rows.Next() {
-		var item OrderItem
-
-		err := rows.Scan(
-			&item.ID,
-			&item.OrderID,
-			&item.ProductID,
-			&item.NameSnapshot,
-			&item.PriceSnapshot,
-			&item.Quantity,
-			&item.CreatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"failed to scan order item: %w",
-				err,
-			)
-		}
-
-		items = append(items, item)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf(
-			"failed to iterate order items: %w",
-			err,
-		)
-	}
-
-	return items, nil
-}
-
 func (r *Repository) ListByUser(ctx context.Context, userID int64, limit, offset int) ([]Order, error) {
 	rows, err := r.db.Query(
 		ctx,
@@ -239,7 +177,6 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64, limit, offset
 		limit,
 		offset,
 	)
-
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to query orders: %w",
@@ -274,7 +211,8 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64, limit, offset
 		orders = append(orders, order)
 	}
 
-	if err := rows.Err(); err != nil {
+	err = rows.Err()
+	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to iterate orders: %w",
 			err,
@@ -312,70 +250,7 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64, limit, offset
 	return orders, nil
 }
 
-func (r *Repository) listItemsByOrderIDs(ctx context.Context, orderIDs []int64) (map[int64][]OrderItem, error) {
-	rows, err := r.db.Query(
-		ctx,
-		`
-				SELECT
-					id,
-					order_id,
-					product_id,
-					name_snapshot,
-					price_snapshot,
-					quantity,
-					created_at
-				FROM order_items
-				WHERE order_id = ANY($1::bigint[])
-				ORDER BY order_id, id
-				`,
-		orderIDs,
-	)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"failed to query order items: %w",
-			err,
-		)
-	}
-	defer rows.Close()
-
-	itemsByOrderID := make(map[int64][]OrderItem)
-
-	for rows.Next() {
-		var item OrderItem
-
-		err := rows.Scan(
-			&item.ID,
-			&item.OrderID,
-			&item.ProductID,
-			&item.NameSnapshot,
-			&item.PriceSnapshot,
-			&item.Quantity,
-			&item.CreatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"failed to scan order item: %w",
-				err,
-			)
-		}
-
-		itemsByOrderID[item.OrderID] = append(
-			itemsByOrderID[item.OrderID],
-			item,
-		)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf(
-			"failed to iterate order items: %w",
-			err,
-		)
-	}
-
-	return itemsByOrderID, nil
-}
-
-func (r *Repository) UpdateStatus(ctx context.Context, id int64, from Status, to Status) error {
+func (r *Repository) UpdateStatus(ctx context.Context, id int64, from, to Status) error {
 	commandTag, err := r.db.Exec(
 		ctx,
 		`
@@ -399,6 +274,7 @@ func (r *Repository) UpdateStatus(ctx context.Context, id int64, from Status, to
 	if commandTag.RowsAffected() == 0 {
 		return pgx.ErrNoRows
 	}
+
 	return nil
 }
 
@@ -468,7 +344,8 @@ func (r *Repository) ListAll(ctx context.Context, filter ListOrdersFilter) ([]*O
 		)
 	}
 
-	if err := rows.Err(); err != nil {
+	err = rows.Err()
+	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to iterate orders: %w",
 			err,
@@ -538,7 +415,7 @@ func (r *Repository) CountAll(ctx context.Context, filter ListOrdersFilter) (int
 	return total, nil
 }
 
-func (r *Repository) CancelByUser(ctx context.Context, orderID int64, userID int64) error {
+func (r *Repository) CancelByUser(ctx context.Context, orderID, userID int64) error {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf(
@@ -547,9 +424,8 @@ func (r *Repository) CancelByUser(ctx context.Context, orderID int64, userID int
 		)
 	}
 
-	defer func() {
-		_ = tx.Rollback(ctx)
-	}()
+	//nolint:errcheck // Rollback is best-effort; successful transactions are committed explicitly.
+	defer tx.Rollback(ctx)
 
 	var status Status
 
@@ -565,7 +441,6 @@ func (r *Repository) CancelByUser(ctx context.Context, orderID int64, userID int
 		orderID,
 		userID,
 	).Scan(&status)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return pgx.ErrNoRows
@@ -577,10 +452,8 @@ func (r *Repository) CancelByUser(ctx context.Context, orderID int64, userID int
 		)
 	}
 
-	switch status {
-	case StatusNew, StatusConfirmed:
-
-	default:
+	if status != StatusNew &&
+		status != StatusConfirmed {
 		return ErrOrderCannotCancel
 	}
 
@@ -608,7 +481,8 @@ func (r *Repository) CancelByUser(ctx context.Context, orderID int64, userID int
 		return pgx.ErrNoRows
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	err = tx.Commit(ctx)
+	if err != nil {
 		return fmt.Errorf(
 			"failed to commit cancellation: %w",
 			err,
@@ -618,7 +492,7 @@ func (r *Repository) CancelByUser(ctx context.Context, orderID int64, userID int
 	return nil
 }
 
-func (r *Repository) GetByIDForUser(ctx context.Context, orderID int64, userID int64) (*Order, error) {
+func (r *Repository) GetByIDForUser(ctx context.Context, orderID, userID int64) (*Order, error) {
 	order := &Order{}
 
 	err := r.db.QueryRow(
@@ -668,4 +542,130 @@ func (r *Repository) GetByIDForUser(ctx context.Context, orderID int64, userID i
 	order.Items = items
 
 	return order, nil
+}
+
+func (r *Repository) listItemsByOrderID(ctx context.Context, orderID int64) ([]OrderItem, error) {
+	rows, err := r.db.Query(
+		ctx,
+		`
+				SELECT
+					id,
+					order_id,
+					product_id,
+					name_snapshot,
+					price_snapshot,
+					quantity,
+					created_at
+				FROM order_items
+				WHERE order_id = $1
+				ORDER BY id
+				`,
+		orderID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to query order items: %w",
+			err,
+		)
+	}
+
+	defer rows.Close()
+
+	items := make([]OrderItem, 0)
+
+	for rows.Next() {
+		var item OrderItem
+
+		err := rows.Scan(
+			&item.ID,
+			&item.OrderID,
+			&item.ProductID,
+			&item.NameSnapshot,
+			&item.PriceSnapshot,
+			&item.Quantity,
+			&item.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to scan order item: %w",
+				err,
+			)
+		}
+
+		items = append(items, item)
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to iterate order items: %w",
+			err,
+		)
+	}
+
+	return items, nil
+}
+
+func (r *Repository) listItemsByOrderIDs(ctx context.Context, orderIDs []int64) (map[int64][]OrderItem, error) {
+	rows, err := r.db.Query(
+		ctx,
+		`
+				SELECT
+					id,
+					order_id,
+					product_id,
+					name_snapshot,
+					price_snapshot,
+					quantity,
+					created_at
+				FROM order_items
+				WHERE order_id = ANY($1::bigint[])
+				ORDER BY order_id, id
+				`,
+		orderIDs,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to query order items: %w",
+			err,
+		)
+	}
+	defer rows.Close()
+
+	itemsByOrderID := make(map[int64][]OrderItem)
+
+	for rows.Next() {
+		var item OrderItem
+
+		err := rows.Scan(
+			&item.ID,
+			&item.OrderID,
+			&item.ProductID,
+			&item.NameSnapshot,
+			&item.PriceSnapshot,
+			&item.Quantity,
+			&item.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to scan order item: %w",
+				err,
+			)
+		}
+
+		itemsByOrderID[item.OrderID] = append(
+			itemsByOrderID[item.OrderID],
+			item,
+		)
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to iterate order items: %w",
+			err,
+		)
+	}
+
+	return itemsByOrderID, nil
 }

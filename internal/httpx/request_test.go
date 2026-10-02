@@ -12,7 +12,10 @@ type testRequest struct {
 }
 
 func TestDecodeJSON(t *testing.T) {
-	request := httptest.NewRequest(
+	t.Parallel()
+
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/",
 		strings.NewReader(`{"name":"test"}`),
@@ -41,7 +44,10 @@ func TestDecodeJSON(t *testing.T) {
 }
 
 func TestDecodeJSONUnknownField(t *testing.T) {
-	request := httptest.NewRequest(
+	t.Parallel()
+
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/",
 		strings.NewReader(
@@ -64,7 +70,10 @@ func TestDecodeJSONUnknownField(t *testing.T) {
 }
 
 func TestDecodeJSONMultipleValues(t *testing.T) {
-	request := httptest.NewRequest(
+	t.Parallel()
+
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/",
 		strings.NewReader(
@@ -87,7 +96,10 @@ func TestDecodeJSONMultipleValues(t *testing.T) {
 }
 
 func TestDecodeJSONEmptyBody(t *testing.T) {
-	request := httptest.NewRequest(
+	t.Parallel()
+
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/",
 		nil,
@@ -108,11 +120,14 @@ func TestDecodeJSONEmptyBody(t *testing.T) {
 }
 
 func TestDecodeJSONBodyTooLarge(t *testing.T) {
+	t.Parallel()
+
 	payload := `{"name":"` +
 		strings.Repeat("a", int(maxRequestBodySize)) +
 		`"}`
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/",
 		strings.NewReader(payload),

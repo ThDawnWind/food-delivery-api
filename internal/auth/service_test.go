@@ -15,7 +15,7 @@ type fakeUserAuthenticator struct {
 	registerInput *user.RegisterUser
 }
 
-func (f *fakeUserAuthenticator) Register(ctx context.Context, input *user.RegisterUser) (*user.User, error) {
+func (f *fakeUserAuthenticator) Register(_ context.Context, input *user.RegisterUser) (*user.User, error) {
 	f.registerInput = input
 
 	if f.err != nil {
@@ -25,7 +25,7 @@ func (f *fakeUserAuthenticator) Register(ctx context.Context, input *user.Regist
 	return f.user, nil
 }
 
-func (f *fakeUserAuthenticator) Login(ctx context.Context, input *user.LoginUser) (*user.User, error) {
+func (f *fakeUserAuthenticator) Login(_ context.Context, _ *user.LoginUser) (*user.User, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -53,11 +53,13 @@ func (f *fakeTokenGenerator) Generate(userID int64, role string) (string, error)
 }
 
 func TestService_Login(t *testing.T) {
+	t.Parallel()
+
 	users := &fakeUserAuthenticator{
 		user: &user.User{
 			ID:       10,
-			Username: "alex",
-			Email:    "alex@example.com",
+			Username: testUsername,
+			Email:    testEmail,
 			Role:     user.RoleUser,
 		},
 	}
@@ -74,8 +76,8 @@ func TestService_Login(t *testing.T) {
 	result, err := service.Login(
 		context.Background(),
 		&user.LoginUser{
-			Email:    "alex@example.com",
-			Password: "password123",
+			Email:    testEmail,
+			Password: testPassword,
 		},
 	)
 	if err != nil {
@@ -89,10 +91,10 @@ func TestService_Login(t *testing.T) {
 		t.Fatal("expected login result, got nil")
 	}
 
-	if result.AccessToken != "test-access-token" {
+	if result.AccessToken != testAccessToken {
 		t.Errorf(
 			"expected access token %q, got %q",
-			"test-access-token",
+			testAccessToken,
 			result.AccessToken,
 		)
 	}
@@ -117,16 +119,18 @@ func TestService_Login(t *testing.T) {
 		)
 	}
 
-	if tokens.role != "user" {
+	if tokens.role != testRoleUser {
 		t.Errorf(
 			"expected token role %q, got %q",
-			"user",
+			testRoleUser,
 			tokens.role,
 		)
 	}
 }
 
 func TestService_Login_UserAuthenticationError(t *testing.T) {
+	t.Parallel()
+
 	loginErr := user.ErrInvalidCredentials
 
 	users := &fakeUserAuthenticator{
@@ -143,7 +147,7 @@ func TestService_Login_UserAuthenticationError(t *testing.T) {
 	result, err := service.Login(
 		context.Background(),
 		&user.LoginUser{
-			Email:    "alex@example.com",
+			Email:    testEmail,
 			Password: "wrong-password",
 		},
 	)
@@ -170,13 +174,15 @@ func TestService_Login_UserAuthenticationError(t *testing.T) {
 }
 
 func TestService_Login_TokenError(t *testing.T) {
+	t.Parallel()
+
 	tokenErr := errors.New("failed to sign token")
 
 	users := &fakeUserAuthenticator{
 		user: &user.User{
 			ID:       10,
-			Username: "alex",
-			Email:    "alex@example.com",
+			Username: testUsername,
+			Email:    testEmail,
 			Role:     user.RoleUser,
 		},
 	}
@@ -193,8 +199,8 @@ func TestService_Login_TokenError(t *testing.T) {
 	result, err := service.Login(
 		context.Background(),
 		&user.LoginUser{
-			Email:    "alex@example.com",
-			Password: "password123",
+			Email:    testEmail,
+			Password: testPassword,
 		},
 	)
 
@@ -220,7 +226,7 @@ func TestService_Login_TokenError(t *testing.T) {
 		)
 	}
 
-	if tokens.role != "user" {
+	if tokens.role != testRoleUser {
 		t.Errorf(
 			"expected token role %q, got %q",
 			"user",

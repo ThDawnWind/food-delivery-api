@@ -3,6 +3,8 @@ package order
 import "testing"
 
 func TestCanTransitionStatus(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		from Status
@@ -86,6 +88,8 @@ func TestCanTransitionStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			got := CanTransitionStatus(
 				tt.from,
 				tt.to,

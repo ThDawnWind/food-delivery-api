@@ -34,7 +34,7 @@ func (f *fakeTokenParser) Parse(tokenString string) (*Claims, error) {
 	return f.claims, nil
 }
 
-func (f *fakeUserProvider) GetByID(ctx context.Context, id int64) (*user.User, error) {
+func (f *fakeUserProvider) GetByID(_ context.Context, id int64) (*user.User, error) {
 	f.userID = id
 
 	if f.err != nil {
@@ -45,17 +45,20 @@ func (f *fakeUserProvider) GetByID(ctx context.Context, id int64) (*user.User, e
 }
 
 func TestMiddleware_MissingAuthorizationHeader(t *testing.T) {
+	t.Parallel()
+
 	parser := &fakeTokenParser{}
 
 	next := http.HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request) {
+		func(_ http.ResponseWriter, _ *http.Request) {
 			t.Fatal("next handler must not be called")
 		},
 	)
 
 	handler := Middleware(parser)(next)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/test",
 		nil,
@@ -75,17 +78,20 @@ func TestMiddleware_MissingAuthorizationHeader(t *testing.T) {
 }
 
 func TestMiddleware_InvalidAuthorizationHeader(t *testing.T) {
+	t.Parallel()
+
 	parser := &fakeTokenParser{}
 
 	next := http.HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request) {
+		func(_ http.ResponseWriter, _ *http.Request) {
 			t.Fatal("next handler must not be called")
 		},
 	)
 
 	handler := Middleware(parser)(next)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/test",
 		nil,
@@ -110,19 +116,22 @@ func TestMiddleware_InvalidAuthorizationHeader(t *testing.T) {
 }
 
 func TestMiddleware_InvalidToken(t *testing.T) {
+	t.Parallel()
+
 	parser := &fakeTokenParser{
 		err: ErrInvalidToken,
 	}
 
 	next := http.HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request) {
+		func(_ http.ResponseWriter, _ *http.Request) {
 			t.Fatal("next handler must not be called")
 		},
 	)
 
 	handler := Middleware(parser)(next)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/test",
 		nil,
@@ -155,10 +164,12 @@ func TestMiddleware_InvalidToken(t *testing.T) {
 }
 
 func TestMiddleware_ValidToken(t *testing.T) {
+	t.Parallel()
+
 	parser := &fakeTokenParser{
 		claims: &Claims{
 			UserID: 10,
-			Role:   "user",
+			Role:   testRoleUser,
 		},
 	}
 
@@ -194,7 +205,7 @@ func TestMiddleware_ValidToken(t *testing.T) {
 				)
 			}
 
-			if role != "user" {
+			if role != testRoleUser {
 				t.Errorf(
 					"expected role %q, got %q",
 					"user",
@@ -208,7 +219,8 @@ func TestMiddleware_ValidToken(t *testing.T) {
 
 	handler := Middleware(parser)(next)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/test",
 		nil,
@@ -247,9 +259,11 @@ func TestMiddleware_ValidToken(t *testing.T) {
 }
 
 func TestRequireRole_UsesCurrentRoleFromDatabase(t *testing.T) {
+	t.Parallel()
+
 	handler := http.HandlerFunc(func(
 		w http.ResponseWriter,
-		r *http.Request,
+		_ *http.Request,
 	) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -257,7 +271,7 @@ func TestRequireRole_UsesCurrentRoleFromDatabase(t *testing.T) {
 	parser := &fakeTokenParser{
 		claims: &Claims{
 			UserID: 10,
-			Role:   "user",
+			Role:   testRoleUser,
 		},
 	}
 
@@ -275,7 +289,8 @@ func TestRequireRole_UsesCurrentRoleFromDatabase(t *testing.T) {
 		)(handler),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/",
 		nil,
@@ -311,9 +326,11 @@ func TestRequireRole_UsesCurrentRoleFromDatabase(t *testing.T) {
 }
 
 func TestRequireRole_RejectsStaleAdminRole(t *testing.T) {
+	t.Parallel()
+
 	handler := http.HandlerFunc(func(
-		w http.ResponseWriter,
-		r *http.Request,
+		_ http.ResponseWriter,
+		_ *http.Request,
 	) {
 		t.Fatal("next handler must not be called")
 	})
@@ -339,7 +356,8 @@ func TestRequireRole_RejectsStaleAdminRole(t *testing.T) {
 		)(handler),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/",
 		nil,
@@ -367,16 +385,19 @@ func TestRequireRole_RejectsStaleAdminRole(t *testing.T) {
 }
 
 func TestRequireRole_Unauthorized(t *testing.T) {
+	t.Parallel()
+
 	handler := http.HandlerFunc(func(
-		w http.ResponseWriter,
-		r *http.Request,
+		_ http.ResponseWriter,
+		_ *http.Request,
 	) {
 		t.Fatal("next handler must not be called")
 	})
 
 	users := &fakeUserProvider{}
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/",
 		nil,
@@ -402,9 +423,11 @@ func TestRequireRole_Unauthorized(t *testing.T) {
 }
 
 func TestRequireRole_UserNotFound(t *testing.T) {
+	t.Parallel()
+
 	handler := http.HandlerFunc(func(
-		w http.ResponseWriter,
-		r *http.Request,
+		_ http.ResponseWriter,
+		_ *http.Request,
 	) {
 		t.Fatal("next handler must not be called")
 	})
@@ -427,7 +450,8 @@ func TestRequireRole_UserNotFound(t *testing.T) {
 		)(handler),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/",
 		nil,
@@ -455,9 +479,11 @@ func TestRequireRole_UserNotFound(t *testing.T) {
 }
 
 func TestRequireRole_UserProviderError(t *testing.T) {
+	t.Parallel()
+
 	handler := http.HandlerFunc(func(
-		w http.ResponseWriter,
-		r *http.Request,
+		_ http.ResponseWriter,
+		_ *http.Request,
 	) {
 		t.Fatal("next handler must not be called")
 	})
@@ -465,7 +491,7 @@ func TestRequireRole_UserProviderError(t *testing.T) {
 	parser := &fakeTokenParser{
 		claims: &Claims{
 			UserID: 10,
-			Role:   "admin",
+			Role:   testRoleAdmin,
 		},
 	}
 
@@ -480,7 +506,8 @@ func TestRequireRole_UserProviderError(t *testing.T) {
 		)(handler),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/",
 		nil,

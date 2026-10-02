@@ -6,9 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/ThDawnWind/food-delivery-api/internal/address"
 	"github.com/ThDawnWind/food-delivery-api/internal/product"
-	"github.com/jackc/pgx/v5"
 )
 
 type fakeProductReader struct {
@@ -52,7 +53,7 @@ type fakeOrderRepository struct {
 	getUserID      int64
 }
 
-func (f *fakeProductReader) GetByID(ctx context.Context, id int64) (*product.Product, error) {
+func (f *fakeProductReader) GetByID(_ context.Context, id int64) (*product.Product, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -65,7 +66,7 @@ func (f *fakeProductReader) GetByID(ctx context.Context, id int64) (*product.Pro
 	return productData, nil
 }
 
-func (f *fakeOrderRepository) GetByIDForUser(ctx context.Context, orderID int64, userID int64) (*Order, error) {
+func (f *fakeOrderRepository) GetByIDForUser(_ context.Context, orderID, userID int64) (*Order, error) {
 	f.getUserOrderID = orderID
 	f.getUserID = userID
 
@@ -82,7 +83,7 @@ func (f *fakeOrderRepository) GetByIDForUser(ctx context.Context, orderID int64,
 	return f.order, nil
 }
 
-func (f *fakeOrderRepository) Create(ctx context.Context, order *Order) (*Order, error) {
+func (f *fakeOrderRepository) Create(_ context.Context, order *Order) (*Order, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -92,7 +93,7 @@ func (f *fakeOrderRepository) Create(ctx context.Context, order *Order) (*Order,
 	return order, nil
 }
 
-func (f *fakeOrderRepository) GetByID(ctx context.Context, id int64) (*Order, error) {
+func (f *fakeOrderRepository) GetByID(_ context.Context, id int64) (*Order, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -104,7 +105,7 @@ func (f *fakeOrderRepository) GetByID(ctx context.Context, id int64) (*Order, er
 	return f.order, nil
 }
 
-func (f *fakeOrderRepository) ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error) {
+func (f *fakeOrderRepository) ListByUser(_ context.Context, userID int64, limit, offset int) ([]Order, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -116,7 +117,7 @@ func (f *fakeOrderRepository) ListByUser(ctx context.Context, userID int64, limi
 	return f.orders, nil
 }
 
-func (f *fakeOrderRepository) UpdateStatus(ctx context.Context, id int64, from Status, to Status) error {
+func (f *fakeOrderRepository) UpdateStatus(_ context.Context, id int64, from, to Status) error {
 	if f.updateErr != nil {
 		return f.updateErr
 	}
@@ -132,7 +133,7 @@ func (f *fakeOrderRepository) UpdateStatus(ctx context.Context, id int64, from S
 	return nil
 }
 
-func (f *fakeOrderRepository) ListAll(ctx context.Context, filter ListOrdersFilter) ([]*Order, error) {
+func (f *fakeOrderRepository) ListAll(_ context.Context, filter ListOrdersFilter) ([]*Order, error) {
 	f.listAllFilter = filter
 
 	if f.listAllErr != nil {
@@ -142,7 +143,7 @@ func (f *fakeOrderRepository) ListAll(ctx context.Context, filter ListOrdersFilt
 	return f.listAllOrders, nil
 }
 
-func (f *fakeOrderRepository) CountAll(ctx context.Context, filter ListOrdersFilter) (int64, error) {
+func (f *fakeOrderRepository) CountAll(_ context.Context, filter ListOrdersFilter) (int64, error) {
 	f.countAllFilter = filter
 
 	if f.countAllErr != nil {
@@ -152,7 +153,7 @@ func (f *fakeOrderRepository) CountAll(ctx context.Context, filter ListOrdersFil
 	return f.countAllTotal, nil
 }
 
-func (f *fakeAddressReader) GetByID(ctx context.Context, addressID int64, userID int64) (*address.Address, error) {
+func (f *fakeAddressReader) GetByID(_ context.Context, addressID, userID int64) (*address.Address, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -166,7 +167,7 @@ func (f *fakeAddressReader) GetByID(ctx context.Context, addressID int64, userID
 	return f.address, nil
 }
 
-func (f *fakeOrderRepository) CancelByUser(ctx context.Context, orderID int64, userID int64) error {
+func (f *fakeOrderRepository) CancelByUser(_ context.Context, orderID, userID int64) error {
 	if f.cancelErr != nil {
 		return f.cancelErr
 	}
@@ -178,17 +179,19 @@ func (f *fakeOrderRepository) CancelByUser(ctx context.Context, orderID int64, u
 }
 
 func TestService_Create(t *testing.T) {
+	t.Parallel()
+
 	products := &fakeProductReader{
 		products: map[int64]*product.Product{
 			1: {
 				ID:       1,
-				Name:     "Pepperoni",
+				Name:     testProductPepperoni,
 				Price:    59900,
 				IsActive: true,
 			},
 			2: {
 				ID:       2,
-				Name:     "Burger",
+				Name:     testProductBurger,
 				Price:    39900,
 				IsActive: true,
 			},
@@ -205,7 +208,7 @@ func TestService_Create(t *testing.T) {
 			ID:              7,
 			UserID:          10,
 			City:            "Amsterdam",
-			Street:          "Test street",
+			Street:          testStreet,
 			HouseNumber:     "10",
 			ApartmentNumber: &apartment,
 			Entrance:        &entrance,
@@ -241,7 +244,6 @@ func TestService_Create(t *testing.T) {
 		context.Background(),
 		input,
 	)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -253,6 +255,22 @@ func TestService_Create(t *testing.T) {
 	if repository.order == nil {
 		t.Fatal("expected order to be passed to repository")
 	}
+
+	expectedAddress := "Amsterdam, Test street, 10, apt. 42, entrance 2, floor 5, comment: Call before delivery"
+	expectedTotal := int64(59900*2 + 39900)
+
+	assertCreatedOrder(t, order, expectedAddress, expectedTotal)
+	assertCreatedOrderItems(t, order)
+	assertRepositoryOrder(t, repository.order, expectedTotal)
+}
+
+func assertCreatedOrder(
+	t *testing.T,
+	order *Order,
+	expectedAddress string,
+	expectedTotal int64,
+) {
+	t.Helper()
 
 	if order.UserID != 10 {
 		t.Errorf(
@@ -270,8 +288,6 @@ func TestService_Create(t *testing.T) {
 		)
 	}
 
-	expectedAddress := "Amsterdam, Test street, 10, apt. 42, entrance 2, floor 5, comment: Call before delivery"
-
 	if order.DeliveryAddress != expectedAddress {
 		t.Errorf(
 			"expected address %q, got %q",
@@ -280,8 +296,6 @@ func TestService_Create(t *testing.T) {
 		)
 	}
 
-	expectedTotal := int64(59900*2 + 39900)
-
 	if order.TotalPrice != expectedTotal {
 		t.Errorf(
 			"expected total price %d, got %d",
@@ -289,6 +303,10 @@ func TestService_Create(t *testing.T) {
 			order.TotalPrice,
 		)
 	}
+}
+
+func assertCreatedOrderItems(t *testing.T, order *Order) {
+	t.Helper()
 
 	if len(order.Items) != 2 {
 		t.Fatalf(
@@ -306,7 +324,7 @@ func TestService_Create(t *testing.T) {
 		)
 	}
 
-	if order.Items[0].NameSnapshot != "Pepperoni" {
+	if order.Items[0].NameSnapshot != testProductPepperoni {
 		t.Errorf(
 			"expected name snapshot %q, got %q",
 			"Pepperoni",
@@ -330,7 +348,7 @@ func TestService_Create(t *testing.T) {
 		)
 	}
 
-	if order.Items[1].NameSnapshot != "Burger" {
+	if order.Items[1].NameSnapshot != testProductBurger {
 		t.Errorf(
 			"expected name snapshot %q, got %q",
 			"Burger",
@@ -345,41 +363,51 @@ func TestService_Create(t *testing.T) {
 			order.Items[1].PriceSnapshot,
 		)
 	}
+}
 
-	if repository.order.TotalPrice != expectedTotal {
+func assertRepositoryOrder(
+	t *testing.T,
+	order *Order,
+	expectedTotal int64,
+) {
+	t.Helper()
+
+	if order.TotalPrice != expectedTotal {
 		t.Errorf(
 			"expected repository total price %d, got %d",
 			expectedTotal,
-			repository.order.TotalPrice,
+			order.TotalPrice,
 		)
 	}
 
-	if repository.order.Status != StatusNew {
+	if order.Status != StatusNew {
 		t.Errorf(
 			"expected repository status %q, got %q",
 			StatusNew,
-			repository.order.Status,
+			order.Status,
 		)
 	}
 
-	if len(repository.order.Items) != 2 {
+	if len(order.Items) != 2 {
 		t.Fatalf(
 			"expected repository to receive %d items, got %d",
 			2,
-			len(repository.order.Items),
+			len(order.Items),
 		)
 	}
 
-	if repository.order.Items[0].NameSnapshot != "Pepperoni" {
+	if order.Items[0].NameSnapshot != "Pepperoni" {
 		t.Errorf(
 			"expected name snapshot %q, got %q",
 			"Pepperoni",
-			repository.order.Items[0].NameSnapshot,
+			order.Items[0].NameSnapshot,
 		)
 	}
 }
 
 func TestService_Create_Validation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		input *CreateOrder
@@ -389,7 +417,7 @@ func TestService_Create_Validation(t *testing.T) {
 			input: nil,
 		},
 		{
-			name: "invalid user id",
+			name: testInvalidUserID,
 			input: &CreateOrder{
 				UserID:    0,
 				AddressID: 1,
@@ -402,7 +430,7 @@ func TestService_Create_Validation(t *testing.T) {
 			},
 		},
 		{
-			name: "invalid user id",
+			name: testInvalidUserID,
 			input: &CreateOrder{
 				UserID:    0,
 				AddressID: 1,
@@ -469,11 +497,13 @@ func TestService_Create_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			products := &fakeProductReader{
 				products: map[int64]*product.Product{
 					1: {
 						ID:       1,
-						Name:     "Pepperoni",
+						Name:     testProductPepperoni,
 						Price:    59900,
 						IsActive: true,
 					},
@@ -486,8 +516,8 @@ func TestService_Create_Validation(t *testing.T) {
 				address: &address.Address{
 					ID:          1,
 					UserID:      1,
-					City:        "Amsterdam",
-					Street:      "Test street",
+					City:        testCityAmsterdam,
+					Street:      testStreet,
 					HouseNumber: "1",
 				},
 			}
@@ -527,11 +557,13 @@ func TestService_Create_Validation(t *testing.T) {
 }
 
 func TestService_Create_InactiveProduct(t *testing.T) {
+	t.Parallel()
+
 	products := &fakeProductReader{
 		products: map[int64]*product.Product{
 			1: {
 				ID:       1,
-				Name:     "Pepperoni",
+				Name:     testProductPepperoni,
 				Price:    59900,
 				IsActive: false,
 			},
@@ -544,8 +576,8 @@ func TestService_Create_InactiveProduct(t *testing.T) {
 		address: &address.Address{
 			ID:          1,
 			UserID:      1,
-			City:        "Amsterdam",
-			Street:      "Test street",
+			City:        testCityAmsterdam,
+			Street:      testStreet,
 			HouseNumber: "1",
 		},
 	}
@@ -588,6 +620,8 @@ func TestService_Create_InactiveProduct(t *testing.T) {
 }
 
 func TestService_Create_ProductReaderError(t *testing.T) {
+	t.Parallel()
+
 	productErr := errors.New("product service unavailable")
 
 	products := &fakeProductReader{
@@ -600,8 +634,8 @@ func TestService_Create_ProductReaderError(t *testing.T) {
 		address: &address.Address{
 			ID:          1,
 			UserID:      1,
-			City:        "Amsterdam",
-			Street:      "Test street",
+			City:        testCityAmsterdam,
+			Street:      testStreet,
 			HouseNumber: "1",
 		},
 	}
@@ -650,6 +684,8 @@ func TestService_Create_ProductReaderError(t *testing.T) {
 }
 
 func TestService_Create_ProductNotFound(t *testing.T) {
+	t.Parallel()
+
 	products := &fakeProductReader{
 		products: map[int64]*product.Product{},
 	}
@@ -660,8 +696,8 @@ func TestService_Create_ProductNotFound(t *testing.T) {
 		address: &address.Address{
 			ID:          1,
 			UserID:      1,
-			City:        "Amsterdam",
-			Street:      "Test street",
+			City:        testCityAmsterdam,
+			Street:      testStreet,
 			HouseNumber: "1",
 		},
 	}
@@ -704,13 +740,15 @@ func TestService_Create_ProductNotFound(t *testing.T) {
 }
 
 func TestService_Create_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New("database unavailable")
 
 	products := &fakeProductReader{
 		products: map[int64]*product.Product{
 			1: {
 				ID:       1,
-				Name:     "Pepperoni",
+				Name:     testProductPepperoni,
 				Price:    59900,
 				IsActive: true,
 			},
@@ -725,8 +763,8 @@ func TestService_Create_RepositoryError(t *testing.T) {
 		address: &address.Address{
 			ID:          1,
 			UserID:      1,
-			City:        "Amsterdam",
-			Street:      "Test street",
+			City:        testCityAmsterdam,
+			Street:      testStreet,
 			HouseNumber: "1",
 		},
 	}
@@ -769,18 +807,20 @@ func TestService_Create_RepositoryError(t *testing.T) {
 }
 
 func TestService_GetByID(t *testing.T) {
+	t.Parallel()
+
 	expectedOrder := &Order{
 		ID:              10,
 		UserID:          5,
 		Status:          StatusNew,
 		TotalPrice:      159700,
-		DeliveryAddress: "Test street 1",
+		DeliveryAddress: testDeliveryAddress,
 		Items: []OrderItem{
 			{
 				ID:            1,
 				OrderID:       10,
 				ProductID:     1,
-				NameSnapshot:  "Pepperoni",
+				NameSnapshot:  testProductPepperoni,
 				PriceSnapshot: 59900,
 				Quantity:      2,
 			},
@@ -835,6 +875,8 @@ func TestService_GetByID(t *testing.T) {
 }
 
 func TestService_GetByID_InvalidID(t *testing.T) {
+	t.Parallel()
+
 	service := NewService(
 		&fakeProductReader{},
 		&fakeOrderRepository{},
@@ -862,6 +904,8 @@ func TestService_GetByID_InvalidID(t *testing.T) {
 }
 
 func TestService_GetByID_NotFound(t *testing.T) {
+	t.Parallel()
+
 	service := NewService(
 		&fakeProductReader{},
 		&fakeOrderRepository{},
@@ -889,6 +933,8 @@ func TestService_GetByID_NotFound(t *testing.T) {
 }
 
 func TestService_GetByID_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New("database unavailable")
 
 	service := NewService(
@@ -926,6 +972,8 @@ func TestService_GetByID_RepositoryError(t *testing.T) {
 }
 
 func TestService_ListByUser(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeOrderRepository{
 		orders: []Order{
 			{
@@ -993,6 +1041,8 @@ func TestService_ListByUser(t *testing.T) {
 }
 
 func TestService_ListByUser_DefaultLimit(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeOrderRepository{
 		orders: []Order{},
 	}
@@ -1023,6 +1073,8 @@ func TestService_ListByUser_DefaultLimit(t *testing.T) {
 }
 
 func TestService_ListByUser_MaxLimit(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeOrderRepository{
 		orders: []Order{},
 	}
@@ -1053,6 +1105,8 @@ func TestService_ListByUser_MaxLimit(t *testing.T) {
 }
 
 func TestService_ListByUser_Validation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name   string
 		userID int64
@@ -1060,13 +1114,13 @@ func TestService_ListByUser_Validation(t *testing.T) {
 		offset int
 	}{
 		{
-			name:   "invalid user id",
+			name:   testInvalidUserID,
 			userID: 0,
 			limit:  20,
 			offset: 0,
 		},
 		{
-			name:   "negative offset",
+			name:   testNegativeOffset,
 			userID: 1,
 			limit:  20,
 			offset: -1,
@@ -1075,6 +1129,8 @@ func TestService_ListByUser_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			repository := &fakeOrderRepository{}
 
 			service := NewService(
@@ -1108,6 +1164,8 @@ func TestService_ListByUser_Validation(t *testing.T) {
 }
 
 func TestService_ListByUser_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New("database unavailable")
 
 	repository := &fakeOrderRepository{
@@ -1143,6 +1201,8 @@ func TestService_ListByUser_RepositoryError(t *testing.T) {
 }
 
 func TestService_UpdateStatus(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeOrderRepository{
 		order: &Order{
 			ID:     10,
@@ -1176,6 +1236,7 @@ func TestService_UpdateStatus(t *testing.T) {
 			repository.updatedOrderID,
 		)
 	}
+
 	if repository.updatedFrom != StatusNew {
 		t.Errorf(
 			"expected previous status %q, got %q",
@@ -1194,6 +1255,8 @@ func TestService_UpdateStatus(t *testing.T) {
 }
 
 func TestService_UpdateStatus_InvalidTransition(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeOrderRepository{
 		order: &Order{
 			ID:     10,
@@ -1228,6 +1291,8 @@ func TestService_UpdateStatus_InvalidTransition(t *testing.T) {
 }
 
 func TestService_UpdateStatus_InvalidID(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeOrderRepository{}
 
 	service := NewService(
@@ -1257,6 +1322,8 @@ func TestService_UpdateStatus_InvalidID(t *testing.T) {
 }
 
 func TestService_UpdateStatus_NotFound(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeOrderRepository{}
 
 	service := NewService(
@@ -1280,6 +1347,8 @@ func TestService_UpdateStatus_NotFound(t *testing.T) {
 }
 
 func TestService_ListAll(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeOrderRepository{
 		listAllOrders: []*Order{
 			{
@@ -1350,6 +1419,8 @@ func TestService_ListAll(t *testing.T) {
 }
 
 func TestService_ListAll_Validation(t *testing.T) {
+	t.Parallel()
+
 	invalidUserID := int64(0)
 	from := time.Date(
 		2026,
@@ -1396,14 +1467,14 @@ func TestService_ListAll_Validation(t *testing.T) {
 			},
 		},
 		{
-			name: "negative offset",
+			name: testNegativeOffset,
 			filter: ListOrdersFilter{
 				Limit:  20,
 				Offset: -1,
 			},
 		},
 		{
-			name: "invalid user id",
+			name: testInvalidUserID,
 			filter: ListOrdersFilter{
 				UserID: &invalidUserID,
 				Limit:  20,
@@ -1423,6 +1494,8 @@ func TestService_ListAll_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			repository := &fakeOrderRepository{}
 
 			service := NewService(
@@ -1454,6 +1527,8 @@ func TestService_ListAll_Validation(t *testing.T) {
 }
 
 func TestService_ListAll_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New(
 		"database unavailable",
 	)
@@ -1492,6 +1567,8 @@ func TestService_ListAll_RepositoryError(t *testing.T) {
 }
 
 func TestService_ListAll_InvalidStatus(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeOrderRepository{}
 
 	service := NewService(
@@ -1528,6 +1605,8 @@ func TestService_ListAll_InvalidStatus(t *testing.T) {
 }
 
 func TestService_ListAll_WithStatus(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeOrderRepository{
 		listAllOrders: []*Order{},
 	}
@@ -1541,7 +1620,7 @@ func TestService_ListAll_WithStatus(t *testing.T) {
 	_, err := service.ListAll(
 		context.Background(),
 		ListOrdersFilter{
-			Status: "confirmed",
+			Status: string(StatusConfirmed),
 			Limit:  20,
 			Offset: 0,
 		},
@@ -1563,6 +1642,8 @@ func TestService_ListAll_WithStatus(t *testing.T) {
 }
 
 func TestService_ListAll_WithUserID(t *testing.T) {
+	t.Parallel()
+
 	userID := int64(5)
 
 	repository := &fakeOrderRepository{
@@ -1604,6 +1685,8 @@ func TestService_ListAll_WithUserID(t *testing.T) {
 }
 
 func TestService_ListAll_WithCreatedAtFilter(t *testing.T) {
+	t.Parallel()
+
 	from := time.Date(
 		2026,
 		time.September,
@@ -1677,6 +1760,8 @@ func TestService_ListAll_WithCreatedAtFilter(t *testing.T) {
 }
 
 func TestService_ListAll_CountError(t *testing.T) {
+	t.Parallel()
+
 	countErr := errors.New(
 		"database unavailable",
 	)
@@ -1715,6 +1800,8 @@ func TestService_ListAll_CountError(t *testing.T) {
 }
 
 func TestService_Cancel(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeOrderRepository{}
 
 	service := NewService(
@@ -1753,6 +1840,8 @@ func TestService_Cancel(t *testing.T) {
 }
 
 func TestService_Cancel_OtherUserOrder(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeOrderRepository{
 		cancelErr: pgx.ErrNoRows,
 	}
@@ -1778,6 +1867,8 @@ func TestService_Cancel_OtherUserOrder(t *testing.T) {
 }
 
 func TestService_Cancel_InvalidStatus(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeOrderRepository{
 		cancelErr: ErrOrderCannotCancel,
 	}
@@ -1803,6 +1894,8 @@ func TestService_Cancel_InvalidStatus(t *testing.T) {
 }
 
 func TestService_Cancel_Validation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		orderID int64
@@ -1814,7 +1907,7 @@ func TestService_Cancel_Validation(t *testing.T) {
 			userID:  5,
 		},
 		{
-			name:    "invalid user id",
+			name:    testInvalidUserID,
 			orderID: 10,
 			userID:  0,
 		},
@@ -1822,6 +1915,8 @@ func TestService_Cancel_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			repository := &fakeOrderRepository{}
 
 			service := NewService(
@@ -1850,6 +1945,8 @@ func TestService_Cancel_Validation(t *testing.T) {
 }
 
 func TestService_Cancel_NotFound(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeOrderRepository{
 		cancelErr: pgx.ErrNoRows,
 	}
@@ -1873,7 +1970,10 @@ func TestService_Cancel_NotFound(t *testing.T) {
 		)
 	}
 }
+
 func TestService_Cancel_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New(
 		"database unavailable",
 	)
@@ -1903,11 +2003,13 @@ func TestService_Cancel_RepositoryError(t *testing.T) {
 }
 
 func TestService_Create_AddressNotFound(t *testing.T) {
+	t.Parallel()
+
 	products := &fakeProductReader{
 		products: map[int64]*product.Product{
 			1: {
 				ID:       1,
-				Name:     "Pepperoni",
+				Name:     testProductPepperoni,
 				Price:    59900,
 				IsActive: true,
 			},
@@ -1962,6 +2064,8 @@ func TestService_Create_AddressNotFound(t *testing.T) {
 }
 
 func TestService_GetByIDForUser(t *testing.T) {
+	t.Parallel()
+
 	expectedOrder := &Order{
 		ID:         10,
 		UserID:     5,
@@ -2023,6 +2127,8 @@ func TestService_GetByIDForUser(t *testing.T) {
 func TestService_GetByIDForUser_OtherUserOrder(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	repository := &fakeOrderRepository{
 		order: &Order{
 			ID:     10,
@@ -2061,6 +2167,8 @@ func TestService_GetByIDForUser_OtherUserOrder(
 func TestService_GetByIDForUser_InvalidUserID(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := NewService(
 		&fakeProductReader{},
 		&fakeOrderRepository{},

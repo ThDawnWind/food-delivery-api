@@ -9,10 +9,12 @@ import (
 
 func TestMain(m *testing.M) {
 	if os.Getenv("TEST_DATABASE_URL") == "" {
-		if err := godotenv.Load("../../.env.test"); err != nil {
+		err := godotenv.Load("../../.env.test")
+		if err != nil {
+			//nolint:revive // Setup failure must terminate before m.Run.
 			os.Exit(1)
 		}
 	}
 
-	os.Exit(m.Run())
+	m.Run()
 }

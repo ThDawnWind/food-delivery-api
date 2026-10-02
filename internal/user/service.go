@@ -8,8 +8,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type RepositoryInterface interface {
@@ -114,6 +115,7 @@ func (s *Service) Register(ctx context.Context, input *RegisterUser) (*User, err
 			maxPasswordBytes,
 		)
 	}
+
 	hash, err := bcrypt.GenerateFromPassword(
 		[]byte(password),
 		bcrypt.DefaultCost,
@@ -254,5 +256,4 @@ func (s *Service) Login(ctx context.Context, input *LoginUser) (*User, error) {
 	}
 
 	return userData, nil
-
 }

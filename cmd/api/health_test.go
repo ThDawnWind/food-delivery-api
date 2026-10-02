@@ -12,12 +12,15 @@ type fakeDatabasePinger struct {
 	err error
 }
 
-func (f fakeDatabasePinger) Ping(ctx context.Context) error {
+func (f fakeDatabasePinger) Ping(_ context.Context) error {
 	return f.err
 }
 
 func TestHealthHandler(t *testing.T) {
-	request := httptest.NewRequest(
+	t.Parallel()
+
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/health",
 		nil,
@@ -45,11 +48,14 @@ func TestHealthHandler(t *testing.T) {
 }
 
 func TestReadinessHandlerReady(t *testing.T) {
+	t.Parallel()
+
 	handler := readinessHandler(
 		fakeDatabasePinger{},
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/ready",
 		nil,
@@ -77,13 +83,16 @@ func TestReadinessHandlerReady(t *testing.T) {
 }
 
 func TestReadinessHandlerDatabaseUnavailable(t *testing.T) {
+	t.Parallel()
+
 	handler := readinessHandler(
 		fakeDatabasePinger{
 			err: errors.New("database unavailable"),
 		},
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/ready",
 		nil,

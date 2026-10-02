@@ -7,14 +7,15 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
 )
 
 type ServiceInterface interface {
 	GetByID(ctx context.Context, id int64) (*Category, error)
 	List(ctx context.Context) ([]Category, error)
-	Create(ctx context.Context, name string, slug string) (*Category, error)
+	Create(ctx context.Context, name, slug string) (*Category, error)
 	Update(ctx context.Context, category *Category) error
 	Delete(ctx context.Context, id int64) error
 }
@@ -59,6 +60,7 @@ func (h *Handler) List(
 			"failed to list categories",
 			err,
 		)
+
 		return
 	}
 
@@ -89,6 +91,7 @@ func (h *Handler) GetByID(
 			http.StatusBadRequest,
 			"invalid category id",
 		)
+
 		return
 	}
 
@@ -106,6 +109,7 @@ func (h *Handler) GetByID(
 				http.StatusNotFound,
 				"category not found",
 			)
+
 			return
 		}
 
@@ -116,6 +120,7 @@ func (h *Handler) GetByID(
 			"failed to get category",
 			err,
 		)
+
 		return
 	}
 
@@ -143,6 +148,7 @@ func (h *Handler) Create(
 			http.StatusBadRequest,
 			"invalid request body",
 		)
+
 		return
 	}
 
@@ -161,6 +167,7 @@ func (h *Handler) Create(
 				http.StatusBadRequest,
 				"invalid category data",
 			)
+
 			return
 		}
 
@@ -171,6 +178,7 @@ func (h *Handler) Create(
 			"failed to create category",
 			err,
 		)
+
 		return
 	}
 
@@ -201,6 +209,7 @@ func (h *Handler) Update(
 			http.StatusBadRequest,
 			"invalid category id",
 		)
+
 		return
 	}
 
@@ -217,6 +226,7 @@ func (h *Handler) Update(
 			http.StatusBadRequest,
 			"invalid request body",
 		)
+
 		return
 	}
 
@@ -290,6 +300,7 @@ func (h *Handler) Delete(
 			http.StatusBadRequest,
 			"invalid category id",
 		)
+
 		return
 	}
 
@@ -307,6 +318,7 @@ func (h *Handler) Delete(
 				http.StatusNotFound,
 				"category not found",
 			)
+
 			return
 		}
 
@@ -317,6 +329,7 @@ func (h *Handler) Delete(
 			"failed to delete category",
 			err,
 		)
+
 		return
 	}
 

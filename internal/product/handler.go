@@ -7,8 +7,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
 )
 
 type ServiceInterface interface {
@@ -76,6 +77,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 				http.StatusBadRequest,
 				"invalid category_id",
 			)
+
 			return
 		}
 
@@ -90,6 +92,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 				http.StatusBadRequest,
 				"invalid limit",
 			)
+
 			return
 		}
 
@@ -104,6 +107,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 				http.StatusBadRequest,
 				"invalid offset",
 			)
+
 			return
 		}
 
@@ -121,6 +125,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 				http.StatusBadRequest,
 				err.Error(),
 			)
+
 			return
 		}
 
@@ -131,6 +136,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 			"failed to list products",
 			err,
 		)
+
 		return
 	}
 
@@ -153,6 +159,7 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 			http.StatusBadRequest,
 			"invalid product id",
 		)
+
 		return
 	}
 
@@ -199,12 +206,14 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createProductRequest
 
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+	err := httpx.DecodeJSON(w, r, &req)
+	if err != nil {
 		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
 			"invalid request body",
 		)
+
 		return
 	}
 
@@ -252,6 +261,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 				http.StatusBadRequest,
 				err.Error(),
 			)
+
 			return
 		}
 
@@ -262,6 +272,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			"failed to create product",
 			err,
 		)
+
 		return
 	}
 
@@ -284,17 +295,20 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			http.StatusBadRequest,
 			"invalid product id",
 		)
+
 		return
 	}
 
 	var req updateProductRequest
 
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+	err = httpx.DecodeJSON(w, r, &req)
+	if err != nil {
 		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
 			"invalid request body",
 		)
+
 		return
 	}
 
@@ -304,6 +318,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			http.StatusBadRequest,
 			"is_active is required",
 		)
+
 		return
 	}
 
@@ -386,6 +401,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 			http.StatusBadRequest,
 			"invalid product id",
 		)
+
 		return
 	}
 

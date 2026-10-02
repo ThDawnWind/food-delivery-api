@@ -2,62 +2,113 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+
 	"github.com/joho/godotenv"
 	"github.com/pressly/goose/v3"
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
+	err := run()
+	if err != nil {
+		log.Printf("migration failed: %v", err)
+		os.Exit(1)
+	}
+}
+
+func run() (runErr error) {
+	err := godotenv.Load()
+	if err != nil {
 		log.Println(".env file not found, using environment variables")
 	}
 
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		log.Fatal("DATABASE_URL is required")
+		return errors.New("database URL is required")
 	}
 
 	if len(os.Args) < 2 {
-		log.Fatal("usage: migrate [up|down|status]")
+		return errors.New("usage: migrate [up|down|status]")
 	}
 
 	command := os.Args[1]
 
-	db, err := goose.OpenDBWithDriver("postgres", databaseURL)
+	db, err := goose.OpenDBWithDriver(
+		"postgres",
+		databaseURL,
+	)
 	if err != nil {
-		log.Fatalf("failed to open database: %v", err)
+		return fmt.Errorf(
+			"failed to open database: %w",
+			err,
+		)
 	}
-	defer db.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer func() {
+		err := db.Close()
+		if err != nil && runErr == nil {
+			runErr = fmt.Errorf(
+				"failed to close database: %w",
+				err,
+			)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(
+		context.Background(),
+		10*time.Second,
+	)
 	defer cancel()
 
-	if err := db.PingContext(ctx); err != nil {
-		log.Fatalf("failed to connect to database: %v", err)
+	err = db.PingContext(ctx)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to connect to database: %w",
+			err,
+		)
 	}
 
 	switch command {
 	case "up":
-		err = goose.Up(db, "migrations")
+		err = goose.Up(
+			db,
+			"migrations",
+		)
 
 	case "down":
-		err = goose.Down(db, "migrations")
+		err = goose.Down(
+			db,
+			"migrations",
+		)
 
 	case "status":
-		err = goose.Status(db, "migrations")
+		err = goose.Status(
+			db,
+			"migrations",
+		)
 
 	default:
-		log.Fatalf("unknown command %q", command)
+		return fmt.Errorf(
+			"unknown migration command %q",
+			command,
+		)
 	}
 
 	if err != nil {
-		log.Fatalf("migration failed: %v", err)
+		return fmt.Errorf(
+			"migration command %q failed: %w",
+			command,
+			err,
+		)
 	}
 
-	fmt.Printf("migration command %q completed successfully\n", command)
+	log.Print("migration completed successfully")
+
+	return nil
 }

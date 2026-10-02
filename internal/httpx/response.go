@@ -13,7 +13,10 @@ func WriteJSON(w http.ResponseWriter, status int, data any) {
 
 	w.WriteHeader(status)
 
-	_ = json.NewEncoder(w).Encode(data)
+	err := json.NewEncoder(w).Encode(data)
+	if err != nil {
+		return
+	}
 }
 
 func WriteError(w http.ResponseWriter, status int, message string) {

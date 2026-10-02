@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/ThDawnWind/food-delivery-api/internal/address"
 	"github.com/ThDawnWind/food-delivery-api/internal/product"
-	"github.com/jackc/pgx/v5"
 )
 
 type ProductReader interface {
@@ -16,18 +17,18 @@ type ProductReader interface {
 }
 
 type AddressReader interface {
-	GetByID(ctx context.Context, addressID int64, userID int64) (*address.Address, error)
+	GetByID(ctx context.Context, addressID, userID int64) (*address.Address, error)
 }
 
 type OrderRepository interface {
 	Create(ctx context.Context, order *Order) (*Order, error)
 	GetByID(ctx context.Context, id int64) (*Order, error)
-	ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error)
-	UpdateStatus(ctx context.Context, id int64, from Status, to Status) error
+	ListByUser(ctx context.Context, userID int64, limit, offset int) ([]Order, error)
+	UpdateStatus(ctx context.Context, id int64, from, to Status) error
 	ListAll(ctx context.Context, filter ListOrdersFilter) ([]*Order, error)
 	CountAll(ctx context.Context, filter ListOrdersFilter) (int64, error)
-	CancelByUser(ctx context.Context, orderID int64, userID int64) error
-	GetByIDForUser(ctx context.Context, orderID int64, userID int64) (*Order, error)
+	CancelByUser(ctx context.Context, orderID, userID int64) error
+	GetByIDForUser(ctx context.Context, orderID, userID int64) (*Order, error)
 }
 
 type Service struct {
@@ -92,32 +93,9 @@ func (s *Service) Create(ctx context.Context, input *CreateOrder) (*Order, error
 		)
 	}
 
-	seenProducts := make(map[int64]struct{})
-
-	for _, item := range input.Items {
-		if item.ProductID <= 0 {
-			return nil, fmt.Errorf(
-				"%w: product id must be greater than zero",
-				ErrOrderValidation,
-			)
-		}
-
-		if item.Quantity <= 0 {
-			return nil, fmt.Errorf(
-				"%w: quantity must be greater than zero",
-				ErrOrderValidation,
-			)
-		}
-
-		if _, exists := seenProducts[item.ProductID]; exists {
-			return nil, fmt.Errorf(
-				"%w: duplicate product id %d",
-				ErrOrderValidation,
-				item.ProductID,
-			)
-		}
-
-		seenProducts[item.ProductID] = struct{}{}
+	err = validateCreateOrderItems(input)
+	if err != nil {
+		return nil, err
 	}
 
 	order := &Order{
@@ -172,7 +150,6 @@ func (s *Service) Create(ctx context.Context, input *CreateOrder) (*Order, error
 		ctx,
 		order,
 	)
-
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to create order: %w",
@@ -206,7 +183,7 @@ func (s *Service) GetByID(ctx context.Context, id int64) (*Order, error) {
 	return order, nil
 }
 
-func (s *Service) GetByIDForUser(ctx context.Context, orderID int64, userID int64) (*Order, error) {
+func (s *Service) GetByIDForUser(ctx context.Context, orderID, userID int64) (*Order, error) {
 	if orderID <= 0 {
 		return nil, fmt.Errorf(
 			"%w: invalid order id",
@@ -240,7 +217,7 @@ func (s *Service) GetByIDForUser(ctx context.Context, orderID int64, userID int6
 	return order, nil
 }
 
-func (s *Service) ListByUser(ctx context.Context, userID int64, limit int, offset int) ([]Order, error) {
+func (s *Service) ListByUser(ctx context.Context, userID int64, limit, offset int) ([]Order, error) {
 	if userID <= 0 {
 		return nil, fmt.Errorf(
 			"%w: invalid user id",
@@ -308,12 +285,13 @@ func (s *Service) UpdateStatus(ctx context.Context, id int64, status Status) err
 		)
 	}
 
-	if err := s.repository.UpdateStatus(
+	err = s.repository.UpdateStatus(
 		ctx,
 		id,
 		order.Status,
 		status,
-	); err != nil {
+	)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf(
 				"%w: order status has changed",
@@ -416,7 +394,7 @@ func (s *Service) ListAll(ctx context.Context, filter ListOrdersFilter) (*ListOr
 	}, nil
 }
 
-func (s *Service) Cancel(ctx context.Context, orderID int64, userID int64) error {
+func (s *Service) Cancel(ctx context.Context, orderID, userID int64) error {
 	if orderID <= 0 {
 		return fmt.Errorf(
 			"%w: invalid order id",
@@ -457,6 +435,7 @@ func (s *Service) Cancel(ctx context.Context, orderID int64, userID int64) error
 
 	return nil
 }
+
 func buildAddressSnapshot(a *address.Address) string {
 	parts := []string{
 		a.City,
@@ -497,4 +476,43 @@ func buildAddressSnapshot(a *address.Address) string {
 	}
 
 	return strings.Join(parts, ", ")
+}
+
+func validateCreateOrderItems(input *CreateOrder) error {
+	if len(input.Items) == 0 {
+		return fmt.Errorf(
+			"%w: order must contain at least one item",
+			ErrOrderValidation,
+		)
+	}
+
+	seenProducts := make(map[int64]struct{}, len(input.Items))
+
+	for _, item := range input.Items {
+		if item.ProductID <= 0 {
+			return fmt.Errorf(
+				"%w: product id must be greater than zero",
+				ErrOrderValidation,
+			)
+		}
+
+		if item.Quantity <= 0 {
+			return fmt.Errorf(
+				"%w: quantity must be greater than zero",
+				ErrOrderValidation,
+			)
+		}
+
+		if _, exists := seenProducts[item.ProductID]; exists {
+			return fmt.Errorf(
+				"%w: duplicate product id %d",
+				ErrOrderValidation,
+				item.ProductID,
+			)
+		}
+
+		seenProducts[item.ProductID] = struct{}{}
+	}
+
+	return nil
 }

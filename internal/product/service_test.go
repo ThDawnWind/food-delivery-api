@@ -17,34 +17,42 @@ type fakeRepository struct {
 	listCalled    bool
 }
 
-func (f *fakeRepository) GetByID(ctx context.Context, id int64) (*Product, error) {
-	return f.product, f.err
+func (f *fakeRepository) GetByID(_ context.Context, _ int64) (*Product, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	return f.product, nil
 }
 
-func (f *fakeRepository) List(ctx context.Context, filter ListFilter) ([]Product, error) {
+func (f *fakeRepository) List(_ context.Context, filter ListFilter) ([]Product, error) {
 	f.listCalled = true
 	f.listFilter = filter
+
 	return f.products, f.err
 }
 
-func (f *fakeRepository) Create(ctx context.Context, product *Product) (*Product, error) {
+func (f *fakeRepository) Create(_ context.Context, product *Product) (*Product, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
 
 	f.product = product
+
 	return product, nil
 }
-func (f *fakeRepository) Update(ctx context.Context, product *Product) (*Product, error) {
+
+func (f *fakeRepository) Update(_ context.Context, product *Product) (*Product, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
 
 	f.product = product
+
 	return product, nil
 }
 
-func (f *fakeRepository) Deactivate(ctx context.Context, id int64) error {
+func (f *fakeRepository) Deactivate(_ context.Context, id int64) error {
 	if f.err != nil {
 		return f.err
 	}
@@ -55,9 +63,11 @@ func (f *fakeRepository) Deactivate(ctx context.Context, id int64) error {
 }
 
 func TestService_GetByID(t *testing.T) {
+	t.Parallel()
+
 	expected := &Product{
 		ID:         1,
-		Name:       "Pepperoni",
+		Name:       testProductNamePepperoni,
 		Price:      59900,
 		Weight:     450,
 		CategoryID: 1,
@@ -74,7 +84,6 @@ func TestService_GetByID(t *testing.T) {
 		context.Background(),
 		1,
 	)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -101,6 +110,8 @@ func TestService_GetByID(t *testing.T) {
 }
 
 func TestService_GetByID_NotFound(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{
 		err: pgx.ErrNoRows,
 	}
@@ -125,6 +136,8 @@ func TestService_GetByID_NotFound(t *testing.T) {
 }
 
 func TestService_GetByID_InvalidID(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{}
 
 	service := NewService(repository)
@@ -147,6 +160,8 @@ func TestService_GetByID_InvalidID(t *testing.T) {
 }
 
 func TestService_GetByID_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New("database unavailable")
 
 	repository := &fakeRepository{
@@ -181,10 +196,12 @@ func TestService_GetByID_RepositoryError(t *testing.T) {
 }
 
 func TestService_List(t *testing.T) {
+	t.Parallel()
+
 	expected := []Product{
 		{
 			ID:         1,
-			Name:       "Pepperoni",
+			Name:       testProductNamePepperoni,
 			Price:      59900,
 			Weight:     450,
 			CategoryID: 1,
@@ -259,10 +276,10 @@ func TestService_List(t *testing.T) {
 		)
 	}
 
-	if repository.listFilter.Search != "pizza" {
+	if repository.listFilter.Search != testProductSearchPizza {
 		t.Errorf(
 			"expected search %q, got %q",
-			"pizza",
+			testProductSearchPizza,
 			repository.listFilter.Search,
 		)
 	}
@@ -285,6 +302,8 @@ func TestService_List(t *testing.T) {
 }
 
 func TestService_List_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New("database unavailable")
 
 	repository := &fakeRepository{
@@ -314,11 +333,13 @@ func TestService_List_RepositoryError(t *testing.T) {
 }
 
 func TestService_Create(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{}
 	service := NewService(repository)
 
 	product := &Product{
-		Name:       "  Pepperoni  ",
+		Name:       "  " + testProductNamePepperoni + "  ",
 		Price:      59900,
 		Weight:     450,
 		CategoryID: 1,
@@ -329,7 +350,6 @@ func TestService_Create(t *testing.T) {
 		context.Background(),
 		product,
 	)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -338,10 +358,10 @@ func TestService_Create(t *testing.T) {
 		t.Fatal("expected product, got nil")
 	}
 
-	if createdProduct.Name != "Pepperoni" {
+	if createdProduct.Name != testProductNamePepperoni {
 		t.Errorf(
 			"expected trimmed name %q, got %q",
-			"Pepperoni",
+			testProductNamePepperoni,
 			createdProduct.Name,
 		)
 	}
@@ -352,6 +372,8 @@ func TestService_Create(t *testing.T) {
 }
 
 func TestService_Create_Validation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		product *Product
@@ -372,7 +394,7 @@ func TestService_Create_Validation(t *testing.T) {
 		{
 			name: "invalid price",
 			product: &Product{
-				Name:       "Pepperoni",
+				Name:       testProductNamePepperoni,
 				Price:      0,
 				Weight:     450,
 				CategoryID: 1,
@@ -381,7 +403,7 @@ func TestService_Create_Validation(t *testing.T) {
 		{
 			name: "invalid weight",
 			product: &Product{
-				Name:       "Pepperoni",
+				Name:       testProductNamePepperoni,
 				Price:      59900,
 				Weight:     0,
 				CategoryID: 1,
@@ -390,7 +412,7 @@ func TestService_Create_Validation(t *testing.T) {
 		{
 			name: "invalid category id",
 			product: &Product{
-				Name:       "Pepperoni",
+				Name:       testProductNamePepperoni,
 				Price:      59900,
 				Weight:     450,
 				CategoryID: 0,
@@ -400,6 +422,8 @@ func TestService_Create_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			repository := &fakeRepository{}
 			service := NewService(repository)
 
@@ -432,6 +456,8 @@ func TestService_Create_Validation(t *testing.T) {
 }
 
 func TestService_Create_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New("database unavailable")
 
 	repository := &fakeRepository{
@@ -441,7 +467,7 @@ func TestService_Create_RepositoryError(t *testing.T) {
 	service := NewService(repository)
 
 	product := &Product{
-		Name:       "Pepperoni",
+		Name:       testProductNamePepperoni,
 		Price:      59900,
 		Weight:     450,
 		CategoryID: 1,
@@ -469,6 +495,8 @@ func TestService_Create_RepositoryError(t *testing.T) {
 }
 
 func TestService_Update(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{}
 	service := NewService(repository)
 
@@ -485,7 +513,6 @@ func TestService_Update(t *testing.T) {
 		context.Background(),
 		product,
 	)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -508,6 +535,8 @@ func TestService_Update(t *testing.T) {
 }
 
 func TestService_Update_NotFound(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{
 		err: pgx.ErrNoRows,
 	}
@@ -516,7 +545,7 @@ func TestService_Update_NotFound(t *testing.T) {
 
 	product := &Product{
 		ID:         999,
-		Name:       "Pepperoni",
+		Name:       testProductNamePepperoni,
 		Price:      59900,
 		Weight:     450,
 		CategoryID: 1,
@@ -543,6 +572,8 @@ func TestService_Update_NotFound(t *testing.T) {
 }
 
 func TestService_Update_Validation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		product *Product
@@ -555,7 +586,7 @@ func TestService_Update_Validation(t *testing.T) {
 			name: "invalid id",
 			product: &Product{
 				ID:         0,
-				Name:       "Pepperoni",
+				Name:       testProductNamePepperoni,
 				Price:      59900,
 				Weight:     450,
 				CategoryID: 1,
@@ -575,7 +606,7 @@ func TestService_Update_Validation(t *testing.T) {
 			name: "invalid price",
 			product: &Product{
 				ID:         1,
-				Name:       "Pepperoni",
+				Name:       testProductNamePepperoni,
 				Price:      0,
 				Weight:     450,
 				CategoryID: 1,
@@ -585,7 +616,7 @@ func TestService_Update_Validation(t *testing.T) {
 			name: "invalid weight",
 			product: &Product{
 				ID:         1,
-				Name:       "Pepperoni",
+				Name:       testProductNamePepperoni,
 				Price:      59900,
 				Weight:     0,
 				CategoryID: 1,
@@ -595,7 +626,7 @@ func TestService_Update_Validation(t *testing.T) {
 			name: "invalid category id",
 			product: &Product{
 				ID:         1,
-				Name:       "Pepperoni",
+				Name:       testProductNamePepperoni,
 				Price:      59900,
 				Weight:     450,
 				CategoryID: 0,
@@ -605,6 +636,8 @@ func TestService_Update_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			repository := &fakeRepository{}
 			service := NewService(repository)
 
@@ -637,6 +670,8 @@ func TestService_Update_Validation(t *testing.T) {
 }
 
 func TestService_Update_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New("database unavailable")
 
 	repository := &fakeRepository{
@@ -647,7 +682,7 @@ func TestService_Update_RepositoryError(t *testing.T) {
 
 	product := &Product{
 		ID:         1,
-		Name:       "Pepperoni",
+		Name:       testProductNamePepperoni,
 		Price:      59900,
 		Weight:     450,
 		CategoryID: 1,
@@ -680,6 +715,8 @@ func TestService_Update_RepositoryError(t *testing.T) {
 }
 
 func TestService_Deactivate(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{}
 	service := NewService(repository)
 
@@ -687,7 +724,6 @@ func TestService_Deactivate(t *testing.T) {
 		context.Background(),
 		10,
 	)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -702,6 +738,8 @@ func TestService_Deactivate(t *testing.T) {
 }
 
 func TestService_Deactivate_InvalidID(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{}
 	service := NewService(repository)
 
@@ -723,6 +761,8 @@ func TestService_Deactivate_InvalidID(t *testing.T) {
 }
 
 func TestService_Deactivate_NotFound(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{
 		err: pgx.ErrNoRows,
 	}
@@ -743,6 +783,8 @@ func TestService_Deactivate_NotFound(t *testing.T) {
 }
 
 func TestService_Deactivate_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New("database unavailable")
 
 	repository := &fakeRepository{
@@ -771,6 +813,8 @@ func TestService_Deactivate_RepositoryError(t *testing.T) {
 }
 
 func TestService_List_Defaults(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{
 		products: []Product{},
 	}
@@ -803,6 +847,8 @@ func TestService_List_Defaults(t *testing.T) {
 }
 
 func TestService_List_NormalizesFilter(t *testing.T) {
+	t.Parallel()
+
 	categoryID := int64(5)
 
 	repository := &fakeRepository{
@@ -824,10 +870,10 @@ func TestService_List_NormalizesFilter(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if repository.listFilter.Search != "pizza" {
+	if repository.listFilter.Search != testProductSearchPizza {
 		t.Errorf(
 			"expected search %q, got %q",
-			"pizza",
+			testProductSearchPizza,
 			repository.listFilter.Search,
 		)
 	}
@@ -842,6 +888,8 @@ func TestService_List_NormalizesFilter(t *testing.T) {
 }
 
 func TestService_List_Validation(t *testing.T) {
+	t.Parallel()
+
 	invalidCategoryID := int64(0)
 
 	tests := []struct {
@@ -849,7 +897,7 @@ func TestService_List_Validation(t *testing.T) {
 		filter ListFilter
 	}{
 		{
-			name: "invalid category id",
+			name: testProductNameInvalidCategory,
 			filter: ListFilter{
 				CategoryID: &invalidCategoryID,
 			},
@@ -864,6 +912,8 @@ func TestService_List_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			repository := &fakeRepository{}
 			service := NewService(repository)
 
