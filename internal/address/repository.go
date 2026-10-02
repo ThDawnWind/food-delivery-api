@@ -87,7 +87,7 @@ func (r *Repository) Create(ctx context.Context, input *CreateAddress) (*Address
 	return &address, nil
 }
 
-func (r *Repository) GetByID(ctx context.Context, addressID int64, userID int64) (*Address, error) {
+func (r *Repository) GetByID(ctx context.Context, addressID, userID int64) (*Address, error) {
 	const query = `
 		SELECT
 			id,
@@ -203,7 +203,8 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Address, e
 		)
 	}
 
-	if err := rows.Err(); err != nil {
+	err = rows.Err()
+	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to iterate addresses: %w",
 			err,
@@ -213,7 +214,7 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]Address, e
 	return addresses, nil
 }
 
-func (r *Repository) Delete(ctx context.Context, addressID int64, userID int64) error {
+func (r *Repository) Delete(ctx context.Context, addressID, userID int64) error {
 	const query = `
 		DELETE FROM addresses
 		WHERE id = $1
@@ -240,7 +241,7 @@ func (r *Repository) Delete(ctx context.Context, addressID int64, userID int64) 
 	return nil
 }
 
-func (r *Repository) Update(ctx context.Context, addressID int64, userID int64, input *UpdateAddress) (*Address, error) {
+func (r *Repository) Update(ctx context.Context, addressID, userID int64, input *UpdateAddress) (*Address, error) {
 	const query = `
 		UPDATE addresses
 		SET

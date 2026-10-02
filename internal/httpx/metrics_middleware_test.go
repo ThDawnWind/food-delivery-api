@@ -13,6 +13,8 @@ import (
 )
 
 func TestMetricsMiddleware_RoutePatternAndStatus(t *testing.T) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 
 	metrics := NewHTTPMetrics(
@@ -43,6 +45,7 @@ func TestMetricsMiddleware_RoutePatternAndStatus(t *testing.T) {
 					w,
 					r,
 				)
+
 				return
 			}
 
@@ -52,7 +55,8 @@ func TestMetricsMiddleware_RoutePatternAndStatus(t *testing.T) {
 		},
 	)
 
-	successRequest := httptest.NewRequest(
+	successRequest := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/api/v1/products/1",
 		nil,
@@ -65,7 +69,8 @@ func TestMetricsMiddleware_RoutePatternAndStatus(t *testing.T) {
 		successRequest,
 	)
 
-	notFoundRequest := httptest.NewRequest(
+	notFoundRequest := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/api/v1/products/999999",
 		nil,
@@ -112,6 +117,8 @@ func TestMetricsMiddleware_RoutePatternAndStatus(t *testing.T) {
 func TestMetricsMiddleware_RecordsRecoveredPanic(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	registry := prometheus.NewRegistry()
 
 	metrics := NewHTTPMetrics(
@@ -144,8 +151,8 @@ func TestMetricsMiddleware_RecordsRecoveredPanic(
 	router.Get(
 		"/panic",
 		func(
-			w http.ResponseWriter,
-			r *http.Request,
+			_ http.ResponseWriter,
+			_ *http.Request,
 		) {
 			panic(
 				"test panic",
@@ -153,7 +160,8 @@ func TestMetricsMiddleware_RecordsRecoveredPanic(
 		},
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/panic",
 		nil,

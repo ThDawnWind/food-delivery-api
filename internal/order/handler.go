@@ -8,9 +8,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/ThDawnWind/food-delivery-api/internal/auth"
 	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
-	"github.com/go-chi/chi/v5"
 )
 
 type ServiceInterface interface {
@@ -103,16 +104,18 @@ func (h *Handler) Create(
 ) {
 	var req createOrderRequest
 
-	if err := httpx.DecodeJSON(
+	err := httpx.DecodeJSON(
 		w,
 		r,
 		&req,
-	); err != nil {
+	)
+	if err != nil {
 		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
 			"invalid request body",
 		)
+
 		return
 	}
 
@@ -125,6 +128,7 @@ func (h *Handler) Create(
 			http.StatusUnauthorized,
 			"unauthorized",
 		)
+
 		return
 	}
 
@@ -150,6 +154,7 @@ func (h *Handler) Create(
 					"error": err.Error(),
 				},
 			)
+
 			return
 		}
 
@@ -160,6 +165,7 @@ func (h *Handler) Create(
 			"failed to create order",
 			err,
 		)
+
 		return
 	}
 
@@ -190,6 +196,7 @@ func (h *Handler) GetByID(
 			http.StatusBadRequest,
 			"invalid order id",
 		)
+
 		return
 	}
 
@@ -202,6 +209,7 @@ func (h *Handler) GetByID(
 			http.StatusUnauthorized,
 			"unauthorized",
 		)
+
 		return
 	}
 
@@ -220,6 +228,7 @@ func (h *Handler) GetByID(
 				http.StatusNotFound,
 				"order not found",
 			)
+
 			return
 		}
 
@@ -230,6 +239,7 @@ func (h *Handler) GetByID(
 			"failed to get order",
 			err,
 		)
+
 		return
 	}
 
@@ -253,6 +263,7 @@ func (h *Handler) ListByUser(
 			http.StatusUnauthorized,
 			"unauthorized",
 		)
+
 		return
 	}
 
@@ -270,6 +281,7 @@ func (h *Handler) ListByUser(
 				http.StatusBadRequest,
 				"invalid limit",
 			)
+
 			return
 		}
 
@@ -290,6 +302,7 @@ func (h *Handler) ListByUser(
 				http.StatusBadRequest,
 				"invalid offset",
 			)
+
 			return
 		}
 
@@ -312,6 +325,7 @@ func (h *Handler) ListByUser(
 				http.StatusBadRequest,
 				err.Error(),
 			)
+
 			return
 		}
 
@@ -322,6 +336,7 @@ func (h *Handler) ListByUser(
 			"failed to list user orders",
 			err,
 		)
+
 		return
 	}
 
@@ -350,21 +365,24 @@ func (h *Handler) UpdateStatus(
 			http.StatusBadRequest,
 			"invalid order id",
 		)
+
 		return
 	}
 
 	var req updateOrderStatusRequest
 
-	if err := httpx.DecodeJSON(
+	err = httpx.DecodeJSON(
 		w,
 		r,
 		&req,
-	); err != nil {
+	)
+	if err != nil {
 		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
 			"invalid request body",
 		)
+
 		return
 	}
 
@@ -440,6 +458,7 @@ func (h *Handler) ListAll(
 				http.StatusBadRequest,
 				"invalid user_id",
 			)
+
 			return
 		}
 
@@ -452,7 +471,7 @@ func (h *Handler) ListAll(
 		"from",
 	); value != "" {
 		parsed, err := time.ParseInLocation(
-			"2006-01-02",
+			time.DateOnly,
 			value,
 			h.location,
 		)
@@ -462,6 +481,7 @@ func (h *Handler) ListAll(
 				http.StatusBadRequest,
 				"invalid from date",
 			)
+
 			return
 		}
 
@@ -474,7 +494,7 @@ func (h *Handler) ListAll(
 		"to",
 	); value != "" {
 		parsed, err := time.ParseInLocation(
-			"2006-01-02",
+			time.DateOnly,
 			value,
 			h.location,
 		)
@@ -484,6 +504,7 @@ func (h *Handler) ListAll(
 				http.StatusBadRequest,
 				"invalid to date",
 			)
+
 			return
 		}
 
@@ -512,6 +533,7 @@ func (h *Handler) ListAll(
 				http.StatusBadRequest,
 				"invalid limit",
 			)
+
 			return
 		}
 
@@ -530,6 +552,7 @@ func (h *Handler) ListAll(
 				http.StatusBadRequest,
 				"invalid offset",
 			)
+
 			return
 		}
 
@@ -557,6 +580,7 @@ func (h *Handler) ListAll(
 				http.StatusBadRequest,
 				err.Error(),
 			)
+
 			return
 		}
 
@@ -567,6 +591,7 @@ func (h *Handler) ListAll(
 			"failed to list orders",
 			err,
 		)
+
 		return
 	}
 
@@ -595,6 +620,7 @@ func (h *Handler) AdminGetByID(
 			http.StatusBadRequest,
 			"invalid order id",
 		)
+
 		return
 	}
 
@@ -612,6 +638,7 @@ func (h *Handler) AdminGetByID(
 				http.StatusNotFound,
 				"order not found",
 			)
+
 			return
 		}
 
@@ -622,6 +649,7 @@ func (h *Handler) AdminGetByID(
 			"failed to get admin order",
 			err,
 		)
+
 		return
 	}
 
@@ -650,6 +678,7 @@ func (h *Handler) Cancel(
 			http.StatusBadRequest,
 			"invalid order id",
 		)
+
 		return
 	}
 
@@ -662,6 +691,7 @@ func (h *Handler) Cancel(
 			http.StatusUnauthorized,
 			"unauthorized",
 		)
+
 		return
 	}
 

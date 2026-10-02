@@ -11,6 +11,16 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/time/rate"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
+	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/ThDawnWind/food-delivery-api/internal/address"
 	"github.com/ThDawnWind/food-delivery-api/internal/auth"
 	"github.com/ThDawnWind/food-delivery-api/internal/category"
@@ -21,24 +31,20 @@ import (
 	"github.com/ThDawnWind/food-delivery-api/internal/product"
 	"github.com/ThDawnWind/food-delivery-api/internal/user"
 	"github.com/ThDawnWind/food-delivery-api/openapi"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
-	"github.com/joho/godotenv"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"golang.org/x/time/rate"
 )
 
-func healthHandler(w http.ResponseWriter, r *http.Request) {
+func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("OK"))
+
+	_, err := w.Write([]byte("OK"))
+	if err != nil {
+		return
+	}
 }
 
 type databasePinger interface {
-	Ping(context.Context) error
+	Ping(ctx context.Context) error
 }
 
 func readinessHandler(db databasePinger) http.HandlerFunc {
@@ -46,18 +52,24 @@ func readinessHandler(db databasePinger) http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 
-		if err := db.Ping(ctx); err != nil {
+		err := db.Ping(ctx)
+		if err != nil {
 			http.Error(
 				w,
 				"Service Unavailable",
 				http.StatusServiceUnavailable,
 			)
+
 			return
 		}
 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
+
+		_, err = w.Write([]byte("OK"))
+		if err != nil {
+			return
+		}
 	}
 }
 
@@ -71,7 +83,8 @@ func main() {
 		),
 	)
 
-	if err := run(logger); err != nil {
+	err := run(logger)
+	if err != nil {
 		logger.Error(
 			"application stopped with error",
 			slog.Any("error", err),
@@ -95,13 +108,13 @@ func run(logger *slog.Logger) error {
 		registry,
 	)
 
-	if err := godotenv.Load(); err != nil {
+	err := godotenv.Load()
+	if err != nil {
 		logger.Info(
 			".env file not found, using environment variables",
 		)
 	}
 
-	serverErr := make(chan error, 1)
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf(
@@ -155,6 +168,7 @@ func run(logger *slog.Logger) error {
 	registry.MustRegister(
 		dbPoolMetrics,
 	)
+
 	defer dbPool.Close()
 
 	categoryRepository := category.NewRepository(dbPool)
@@ -228,59 +242,13 @@ func run(logger *slog.Logger) error {
 	)
 	defer stop()
 
-	router := chi.NewRouter()
-	router.Use(middleware.RequestID)
-	router.Use(
-		httpx.RequestLogger(
-			logger,
-			cfg.HTTP.TrustedProxyCIDRs,
-		),
+	router := newRouter(
+		logger,
+		cfg,
+		httpMetrics,
+		registry,
+		dbPool,
 	)
-	router.Use(
-		httpx.MetricsMiddleware(
-			httpMetrics,
-		),
-	)
-	router.Use(
-		httpx.Recoverer(
-			logger,
-		),
-	)
-
-	router.Use(httpx.SecurityHeaders)
-
-	router.Use(cors.Handler(cors.Options{
-		AllowedOrigins: cfg.HTTP.CORSAllowedOrigins,
-		AllowedMethods: []string{
-			http.MethodGet,
-			http.MethodPost,
-			http.MethodPut,
-			http.MethodPatch,
-			http.MethodDelete,
-			http.MethodOptions,
-		},
-		AllowedHeaders: []string{
-			"Accept",
-			"Authorization",
-			"Content-Type",
-		},
-		AllowCredentials: false,
-		MaxAge:           300,
-	}))
-
-	router.Get("/health", healthHandler)
-	router.Get("/ready", readinessHandler(dbPool))
-
-	router.Handle(
-		"/metrics",
-		promhttp.HandlerFor(
-			registry,
-			promhttp.HandlerOpts{},
-		),
-	)
-
-	router.Get("/openapi.yaml", openapi.SpecHandler)
-	router.Get("/docs", openapi.DocsHandler)
 
 	router.Route("/api/v1/categories", func(r chi.Router) {
 		r.Get("/", categoryHandler.List)
@@ -366,6 +334,84 @@ func run(logger *slog.Logger) error {
 		IdleTimeout:       cfg.HTTP.IdleTimeout,
 	}
 
+	return runServer(
+		ctx,
+		server,
+		logger,
+	)
+}
+
+func newRouter(
+	logger *slog.Logger,
+	cfg config.Config,
+	httpMetrics *httpx.HTTPMetrics,
+	registry *prometheus.Registry,
+	dbPool databasePinger,
+) *chi.Mux {
+	router := chi.NewRouter()
+
+	router.Use(middleware.RequestID)
+
+	router.Use(
+		httpx.RequestLogger(
+			logger,
+			cfg.HTTP.TrustedProxyCIDRs,
+		),
+	)
+
+	router.Use(
+		httpx.MetricsMiddleware(
+			httpMetrics,
+		),
+	)
+
+	router.Use(
+		httpx.Recoverer(
+			logger,
+		),
+	)
+
+	router.Use(httpx.SecurityHeaders)
+
+	router.Use(cors.Handler(cors.Options{
+		AllowedOrigins: cfg.HTTP.CORSAllowedOrigins,
+		AllowedMethods: []string{
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodPatch,
+			http.MethodDelete,
+			http.MethodOptions,
+		},
+		AllowedHeaders: []string{
+			"Accept",
+			"Authorization",
+			"Content-Type",
+		},
+		AllowCredentials: false,
+		MaxAge:           300,
+	}))
+
+	router.Get("/health", healthHandler)
+	router.Get("/ready", readinessHandler(dbPool))
+
+	router.Handle(
+		"/metrics",
+		promhttp.HandlerFor(
+			registry,
+			promhttp.HandlerOpts{},
+		),
+	)
+
+	router.Get("/openapi.yaml", openapi.SpecHandler)
+	router.Get("/docs", openapi.DocsHandler)
+
+	return router
+}
+
+func runServer(ctx context.Context, server *http.Server, logger *slog.Logger) error {
+	serverErr := make(chan error, 1)
+
 	go func() {
 		logger.Info(
 			"starting server",
@@ -374,7 +420,10 @@ func run(logger *slog.Logger) error {
 				server.Addr,
 			),
 		)
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+
+		err := server.ListenAndServe()
+		if err != nil &&
+			!errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 		}
 	}()
@@ -384,6 +433,7 @@ func run(logger *slog.Logger) error {
 		logger.Info(
 			"received shutdown signal",
 		)
+
 	case err := <-serverErr:
 		return fmt.Errorf(
 			"server error: %w",
@@ -396,12 +446,13 @@ func run(logger *slog.Logger) error {
 	)
 
 	shutdownCtx, cancel := context.WithTimeout(
-		context.Background(),
+		context.WithoutCancel(ctx),
 		6*time.Second,
 	)
 	defer cancel()
 
-	if err := server.Shutdown(shutdownCtx); err != nil {
+	err := server.Shutdown(shutdownCtx)
+	if err != nil {
 		return fmt.Errorf(
 			"failed to shutdown server: %w",
 			err,

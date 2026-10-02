@@ -11,10 +11,10 @@ import (
 
 type RepositoryInterface interface {
 	Create(ctx context.Context, input *CreateAddress) (*Address, error)
-	GetByID(ctx context.Context, addressID int64, userID int64) (*Address, error)
+	GetByID(ctx context.Context, addressID, userID int64) (*Address, error)
 	ListByUser(ctx context.Context, userID int64) ([]Address, error)
-	Update(ctx context.Context, addressID int64, userID int64, input *UpdateAddress) (*Address, error)
-	Delete(ctx context.Context, addressID int64, userID int64) error
+	Update(ctx context.Context, addressID, userID int64, input *UpdateAddress) (*Address, error)
+	Delete(ctx context.Context, addressID, userID int64) error
 }
 
 type Service struct {
@@ -83,7 +83,7 @@ func (s *Service) Create(ctx context.Context, input *CreateAddress) (*Address, e
 	return address, nil
 }
 
-func (s *Service) GetByID(ctx context.Context, addressID int64, userID int64) (*Address, error) {
+func (s *Service) GetByID(ctx context.Context, addressID, userID int64) (*Address, error) {
 	if addressID <= 0 {
 		return nil, fmt.Errorf(
 			"%w: invalid address id",
@@ -139,7 +139,7 @@ func (s *Service) ListByUser(ctx context.Context, userID int64) ([]Address, erro
 	return addresses, nil
 }
 
-func (s *Service) Delete(ctx context.Context, addressID int64, userID int64) error {
+func (s *Service) Delete(ctx context.Context, addressID, userID int64) error {
 	if addressID <= 0 {
 		return fmt.Errorf(
 			"%w: invalid address id",
@@ -173,7 +173,7 @@ func (s *Service) Delete(ctx context.Context, addressID int64, userID int64) err
 	return nil
 }
 
-func (s *Service) Update(ctx context.Context, addressID int64, userID int64, input *UpdateAddress) (*Address, error) {
+func (s *Service) Update(ctx context.Context, addressID, userID int64, input *UpdateAddress) (*Address, error) {
 	if addressID <= 0 {
 		return nil, fmt.Errorf(
 			"%w: invalid address id",

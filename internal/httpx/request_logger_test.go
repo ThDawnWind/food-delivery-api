@@ -12,6 +12,8 @@ import (
 )
 
 func TestRequestLogger(t *testing.T) {
+	t.Parallel()
+
 	var buffer bytes.Buffer
 
 	logger := slog.New(
@@ -27,7 +29,7 @@ func TestRequestLogger(t *testing.T) {
 			nil,
 		)(
 			http.HandlerFunc(
-				func(w http.ResponseWriter, r *http.Request) {
+				func(w http.ResponseWriter, _ *http.Request) {
 					w.WriteHeader(
 						http.StatusCreated,
 					)
@@ -36,7 +38,8 @@ func TestRequestLogger(t *testing.T) {
 		),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/api/v1/orders?token=secret",
 		nil,
@@ -64,10 +67,11 @@ func TestRequestLogger(t *testing.T) {
 
 	var logEntry map[string]any
 
-	if err := json.Unmarshal(
+	err := json.Unmarshal(
 		buffer.Bytes(),
 		&logEntry,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf(
 			"failed to decode log entry: %v",
 			err,
@@ -141,6 +145,8 @@ func TestRequestLogger(t *testing.T) {
 func TestRequestLogger_DefaultStatusOK(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	var buffer bytes.Buffer
 
 	logger := slog.New(
@@ -155,15 +161,22 @@ func TestRequestLogger_DefaultStatusOK(
 		nil,
 	)(
 		http.HandlerFunc(
-			func(w http.ResponseWriter, r *http.Request) {
-				_, _ = w.Write(
+			func(w http.ResponseWriter, _ *http.Request) {
+				_, err := w.Write(
 					[]byte("OK"),
 				)
+				if err != nil {
+					t.Errorf(
+						"failed to write response: %v",
+						err,
+					)
+				}
 			},
 		),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/health",
 		nil,
@@ -178,10 +191,11 @@ func TestRequestLogger_DefaultStatusOK(
 
 	var logEntry map[string]any
 
-	if err := json.Unmarshal(
+	err := json.Unmarshal(
 		buffer.Bytes(),
 		&logEntry,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf(
 			"failed to decode log entry: %v",
 			err,

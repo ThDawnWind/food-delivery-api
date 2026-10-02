@@ -63,9 +63,13 @@ func (m *PoolMetrics) Describe(
 	ch chan<- *prometheus.Desc,
 ) {
 	ch <- m.acquiredConns
+
 	ch <- m.idleConns
+
 	ch <- m.totalConns
+
 	ch <- m.maxConns
+
 	ch <- m.emptyAcquireCount
 }
 

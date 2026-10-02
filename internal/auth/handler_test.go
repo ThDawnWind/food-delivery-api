@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -24,7 +23,7 @@ type fakeLoginService struct {
 	registerErr   error
 }
 
-func (f *fakeLoginService) Register(ctx context.Context, input *user.RegisterUser) (*user.User, error) {
+func (f *fakeLoginService) Register(_ context.Context, input *user.RegisterUser) (*user.User, error) {
 	f.registerInput = input
 
 	if f.registerErr != nil {
@@ -34,7 +33,7 @@ func (f *fakeLoginService) Register(ctx context.Context, input *user.RegisterUse
 	return f.registerUser, nil
 }
 
-func (f *fakeLoginService) Login(ctx context.Context, input *user.LoginUser) (*LoginResult, error) {
+func (f *fakeLoginService) Login(_ context.Context, input *user.LoginUser) (*LoginResult, error) {
 	f.input = input
 
 	if f.err != nil {
@@ -45,13 +44,15 @@ func (f *fakeLoginService) Login(ctx context.Context, input *user.LoginUser) (*L
 }
 
 func TestHandler_Login(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeLoginService{
 		result: &LoginResult{
-			AccessToken: "test-access-token",
+			AccessToken: testAccessToken,
 			User: &user.User{
 				ID:       10,
-				Username: "alex",
-				Email:    "alex@example.com",
+				Username: testUsername,
+				Email:    testEmail,
 				Role:     user.RoleUser,
 			},
 		},
@@ -67,7 +68,8 @@ func TestHandler_Login(t *testing.T) {
 		"password": "password123"
 	}`)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/login",
 		bytes.NewReader(body),
@@ -89,35 +91,36 @@ func TestHandler_Login(t *testing.T) {
 		t.Fatal("expected login input to be passed to service")
 	}
 
-	if service.input.Email != "alex@example.com" {
+	if service.input.Email != testEmail {
 		t.Errorf(
 			"expected email %q, got %q",
-			"alex@example.com",
+			testEmail,
 			service.input.Email,
 		)
 	}
 
-	if service.input.Password != "password123" {
+	if service.input.Password != testPassword {
 		t.Errorf(
 			"expected password %q, got %q",
-			"password123",
+			testPassword,
 			service.input.Password,
 		)
 	}
 
 	var response LoginResult
 
-	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+	err := json.NewDecoder(rec.Body).Decode(&response)
+	if err != nil {
 		t.Fatalf(
 			"failed to decode response: %v",
 			err,
 		)
 	}
 
-	if response.AccessToken != "test-access-token" {
+	if response.AccessToken != testAccessToken {
 		t.Errorf(
 			"expected token %q, got %q",
-			"test-access-token",
+			testAccessToken,
 			response.AccessToken,
 		)
 	}
@@ -136,6 +139,8 @@ func TestHandler_Login(t *testing.T) {
 }
 
 func TestHandler_Login_InvalidJSON(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeLoginService{}
 
 	handler := NewHandler(
@@ -143,7 +148,8 @@ func TestHandler_Login_InvalidJSON(t *testing.T) {
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/login",
 		bytes.NewBufferString(`{"email":`),
@@ -169,6 +175,8 @@ func TestHandler_Login_InvalidJSON(t *testing.T) {
 }
 
 func TestHandler_Login_ValidationError(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeLoginService{
 		err: user.ErrUserValidation,
 	}
@@ -183,7 +191,8 @@ func TestHandler_Login_ValidationError(t *testing.T) {
 		"password": ""
 	}`)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/login",
 		bytes.NewReader(body),
@@ -203,6 +212,8 @@ func TestHandler_Login_ValidationError(t *testing.T) {
 }
 
 func TestHandler_Login_InvalidCredentials(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeLoginService{
 		err: user.ErrInvalidCredentials,
 	}
@@ -217,7 +228,8 @@ func TestHandler_Login_InvalidCredentials(t *testing.T) {
 		"password": "wrong-password"
 	}`)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/login",
 		bytes.NewReader(body),
@@ -237,6 +249,8 @@ func TestHandler_Login_InvalidCredentials(t *testing.T) {
 }
 
 func TestHandler_Login_InternalError(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeLoginService{
 		err: errors.New("database unavailable"),
 	}
@@ -260,7 +274,8 @@ func TestHandler_Login_InternalError(t *testing.T) {
 		"password": "password123"
 	}`)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/login",
 		bytes.NewReader(body),
@@ -283,9 +298,10 @@ func TestHandler_Login_InternalError(t *testing.T) {
 
 	var response map[string]string
 
-	if err := json.NewDecoder(
+	err := json.NewDecoder(
 		rec.Body,
-	).Decode(&response); err != nil {
+	).Decode(&response)
+	if err != nil {
 		t.Fatalf(
 			"failed to decode response: %v",
 			err,
@@ -311,10 +327,11 @@ func TestHandler_Login_InternalError(t *testing.T) {
 
 	var logEntry map[string]any
 
-	if err := json.Unmarshal(
+	err = json.Unmarshal(
 		logBuffer.Bytes(),
 		&logEntry,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf(
 			"failed to decode log entry: %v",
 			err,
@@ -344,11 +361,13 @@ func TestHandler_Login_InternalError(t *testing.T) {
 }
 
 func TestHandler_Register(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeLoginService{
 		registerUser: &user.User{
 			ID:       10,
-			Username: "alex",
-			Email:    "alex@example.com",
+			Username: testUsername,
+			Email:    testEmail,
 			Role:     user.RoleUser,
 		},
 	}
@@ -364,7 +383,8 @@ func TestHandler_Register(t *testing.T) {
 		"password": "password123"
 	}`)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/register",
 		bytes.NewReader(body),
@@ -388,39 +408,42 @@ func TestHandler_Register(t *testing.T) {
 		)
 	}
 
-	if service.registerInput.Username != "alex" {
+	if service.registerInput.Username != testUsername {
 		t.Errorf(
 			"expected username %q, got %q",
-			"alex",
+			testUsername,
 			service.registerInput.Username,
 		)
 	}
 
-	if service.registerInput.Email != "alex@example.com" {
+	if service.registerInput.Email != testEmail {
 		t.Errorf(
 			"expected email %q, got %q",
-			"alex@example.com",
+			testEmail,
 			service.registerInput.Email,
 		)
 	}
 
-	if service.registerInput.Password != "password123" {
+	if service.registerInput.Password != testPassword {
 		t.Errorf(
 			"expected password %q, got %q",
-			"password123",
+			testPassword,
 			service.registerInput.Password,
 		)
 	}
 }
 
 func TestHandler_Register_InvalidJSON(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeLoginService{}
 	handler := NewHandler(
 		service,
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/register",
 		bytes.NewBufferString(`{"username":`),
@@ -446,6 +469,8 @@ func TestHandler_Register_InvalidJSON(t *testing.T) {
 }
 
 func TestHandler_Register_ValidationError(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeLoginService{
 		registerErr: user.ErrUserValidation,
 	}
@@ -461,7 +486,8 @@ func TestHandler_Register_ValidationError(t *testing.T) {
 		"password": ""
 	}`)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/register",
 		bytes.NewReader(body),
@@ -481,6 +507,8 @@ func TestHandler_Register_ValidationError(t *testing.T) {
 }
 
 func TestHandler_Register_Conflict(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeLoginService{
 		registerErr: user.ErrUserConflict,
 	}
@@ -496,7 +524,8 @@ func TestHandler_Register_Conflict(t *testing.T) {
 		"password": "password123"
 	}`)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/register",
 		bytes.NewReader(body),
@@ -516,6 +545,8 @@ func TestHandler_Register_Conflict(t *testing.T) {
 }
 
 func TestHandler_Register_InternalError(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeLoginService{
 		registerErr: errors.New("database unavailable"),
 	}
@@ -540,7 +571,8 @@ func TestHandler_Register_InternalError(t *testing.T) {
 		"password": "password123"
 	}`)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/register",
 		bytes.NewReader(body),
@@ -563,9 +595,10 @@ func TestHandler_Register_InternalError(t *testing.T) {
 
 	var response map[string]string
 
-	if err := json.NewDecoder(
+	err := json.NewDecoder(
 		rec.Body,
-	).Decode(&response); err != nil {
+	).Decode(&response)
+	if err != nil {
 		t.Fatalf(
 			"failed to decode response: %v",
 			err,
@@ -591,10 +624,11 @@ func TestHandler_Register_InternalError(t *testing.T) {
 
 	var logEntry map[string]any
 
-	if err := json.Unmarshal(
+	err = json.Unmarshal(
 		logBuffer.Bytes(),
 		&logEntry,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf(
 			"failed to decode log entry: %v",
 			err,
@@ -624,10 +658,5 @@ func TestHandler_Register_InternalError(t *testing.T) {
 }
 
 func newTestLogger() *slog.Logger {
-	return slog.New(
-		slog.NewJSONHandler(
-			io.Discard,
-			nil,
-		),
-	)
+	return slog.New(slog.DiscardHandler)
 }

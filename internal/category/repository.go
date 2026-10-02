@@ -53,6 +53,7 @@ func (r *Repository) List(ctx context.Context) ([]Category, error) {
 
 	for rows.Next() {
 		var category Category
+
 		err := rows.Scan(
 			&category.ID,
 			&category.Name,
@@ -63,10 +64,12 @@ func (r *Repository) List(ctx context.Context) ([]Category, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		categories = append(categories, category)
 	}
 
-	if err := rows.Err(); err != nil {
+	err = rows.Err()
+	if err != nil {
 		return nil, err
 	}
 
@@ -74,7 +77,6 @@ func (r *Repository) List(ctx context.Context) ([]Category, error) {
 }
 
 func (r *Repository) Create(ctx context.Context, name, slug string) (*Category, error) {
-
 	category := &Category{
 		Name: name,
 		Slug: slug,
@@ -100,7 +102,6 @@ func (r *Repository) Create(ctx context.Context, name, slug string) (*Category, 
 }
 
 func (r *Repository) Update(ctx context.Context, category *Category) error {
-
 	err := r.db.QueryRow(
 		ctx,
 		`UPDATE categories

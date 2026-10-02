@@ -64,7 +64,6 @@ func (s *Service) Register(ctx context.Context, input *user.RegisterUser) (*user
 		ctx,
 		input,
 	)
-
 	if err != nil {
 		return nil, err
 	}

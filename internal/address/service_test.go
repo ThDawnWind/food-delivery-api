@@ -33,7 +33,7 @@ type fakeRepository struct {
 	updateErr       error
 }
 
-func (f *fakeRepository) Create(ctx context.Context, input *CreateAddress) (*Address, error) {
+func (f *fakeRepository) Create(_ context.Context, input *CreateAddress) (*Address, error) {
 	f.createInput = input
 
 	if f.createErr != nil {
@@ -43,7 +43,7 @@ func (f *fakeRepository) Create(ctx context.Context, input *CreateAddress) (*Add
 	return f.createAddress, nil
 }
 
-func (f *fakeRepository) GetByID(ctx context.Context, addressID int64, userID int64) (*Address, error) {
+func (f *fakeRepository) GetByID(_ context.Context, addressID, userID int64) (*Address, error) {
 	f.getByIDID = addressID
 	f.getByIDUserID = userID
 
@@ -54,7 +54,7 @@ func (f *fakeRepository) GetByID(ctx context.Context, addressID int64, userID in
 	return f.getByIDAddress, nil
 }
 
-func (f *fakeRepository) ListByUser(ctx context.Context, userID int64) ([]Address, error) {
+func (f *fakeRepository) ListByUser(_ context.Context, userID int64) ([]Address, error) {
 	f.listByUserID = userID
 
 	if f.listByUserErr != nil {
@@ -64,7 +64,7 @@ func (f *fakeRepository) ListByUser(ctx context.Context, userID int64) ([]Addres
 	return f.listByUserAddresses, nil
 }
 
-func (f *fakeRepository) Update(ctx context.Context, addressID int64, userID int64, input *UpdateAddress) (*Address, error) {
+func (f *fakeRepository) Update(_ context.Context, addressID, userID int64, input *UpdateAddress) (*Address, error) {
 	f.updateAddressID = addressID
 	f.updateUserID = userID
 	f.updateInput = input
@@ -76,7 +76,7 @@ func (f *fakeRepository) Update(ctx context.Context, addressID int64, userID int
 	return f.updateAddress, nil
 }
 
-func (f *fakeRepository) Delete(ctx context.Context, addressID int64, userID int64) error {
+func (f *fakeRepository) Delete(_ context.Context, addressID, userID int64) error {
 	f.deleteAddressID = addressID
 	f.deleteUserID = userID
 
@@ -84,12 +84,14 @@ func (f *fakeRepository) Delete(ctx context.Context, addressID int64, userID int
 }
 
 func TestService_Create(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{
 		createAddress: &Address{
 			ID:          1,
 			UserID:      10,
-			City:        "Amsterdam",
-			Street:      "Test Street",
+			City:        testCityAmsterdam,
+			Street:      testStreetTest,
 			HouseNumber: "10",
 		},
 	}
@@ -120,18 +122,18 @@ func TestService_Create(t *testing.T) {
 		t.Fatal("expected input to be passed to repository")
 	}
 
-	if repository.createInput.City != "Amsterdam" {
+	if repository.createInput.City != testCityAmsterdam {
 		t.Errorf(
 			"expected city %q, got %q",
-			"Amsterdam",
+			testCityAmsterdam,
 			repository.createInput.City,
 		)
 	}
 
-	if repository.createInput.Street != "Test Street" {
+	if repository.createInput.Street != testStreetTest {
 		t.Errorf(
 			"expected street %q, got %q",
-			"Test Street",
+			testStreetTest,
 			repository.createInput.Street,
 		)
 	}
@@ -146,6 +148,8 @@ func TestService_Create(t *testing.T) {
 }
 
 func TestService_Create_Validation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		input *CreateAddress
@@ -158,8 +162,8 @@ func TestService_Create_Validation(t *testing.T) {
 			name: "invalid user id",
 			input: &CreateAddress{
 				UserID:      0,
-				City:        "Amsterdam",
-				Street:      "Test Street",
+				City:        testCityAmsterdam,
+				Street:      testStreetTest,
 				HouseNumber: "10",
 			},
 		},
@@ -167,8 +171,8 @@ func TestService_Create_Validation(t *testing.T) {
 			name: "empty city",
 			input: &CreateAddress{
 				UserID:      10,
-				City:        "   ",
-				Street:      "Test Street",
+				City:        testBlankValue,
+				Street:      testStreetTest,
 				HouseNumber: "10",
 			},
 		},
@@ -176,8 +180,8 @@ func TestService_Create_Validation(t *testing.T) {
 			name: "empty street",
 			input: &CreateAddress{
 				UserID:      10,
-				City:        "Amsterdam",
-				Street:      "   ",
+				City:        testCityAmsterdam,
+				Street:      testBlankValue,
 				HouseNumber: "10",
 			},
 		},
@@ -185,15 +189,17 @@ func TestService_Create_Validation(t *testing.T) {
 			name: "empty house number",
 			input: &CreateAddress{
 				UserID:      10,
-				City:        "Amsterdam",
-				Street:      "Test Street",
-				HouseNumber: "   ",
+				City:        testCityAmsterdam,
+				Street:      testStreetTest,
+				HouseNumber: testBlankValue,
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			repository := &fakeRepository{}
 			service := NewService(repository)
 
@@ -229,6 +235,8 @@ func TestService_Create_Validation(t *testing.T) {
 }
 
 func TestService_Create_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New(
 		"database unavailable",
 	)
@@ -243,8 +251,8 @@ func TestService_Create_RepositoryError(t *testing.T) {
 		context.Background(),
 		&CreateAddress{
 			UserID:      10,
-			City:        "Amsterdam",
-			Street:      "Test Street",
+			City:        testCityAmsterdam,
+			Street:      testStreetTest,
 			HouseNumber: "10",
 		},
 	)
@@ -265,12 +273,14 @@ func TestService_Create_RepositoryError(t *testing.T) {
 }
 
 func TestService_GetByID(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{
 		getByIDAddress: &Address{
 			ID:          5,
 			UserID:      10,
-			City:        "Amsterdam",
-			Street:      "Test Street",
+			City:        testCityAmsterdam,
+			Street:      testStreetTest,
 			HouseNumber: "10",
 		},
 	}
@@ -316,18 +326,20 @@ func TestService_GetByID(t *testing.T) {
 }
 
 func TestService_GetByID_Validation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		addressID int64
 		userID    int64
 	}{
 		{
-			name:      "invalid address id",
+			name:      testInvalidAddressID,
 			addressID: 0,
 			userID:    10,
 		},
 		{
-			name:      "invalid user id",
+			name:      testInvalidUserID,
 			addressID: 5,
 			userID:    0,
 		},
@@ -335,6 +347,8 @@ func TestService_GetByID_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			repository := &fakeRepository{}
 			service := NewService(repository)
 
@@ -362,6 +376,8 @@ func TestService_GetByID_Validation(t *testing.T) {
 }
 
 func TestService_GetByID_NotFound(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{
 		getByIDErr: pgx.ErrNoRows,
 	}
@@ -390,6 +406,8 @@ func TestService_GetByID_NotFound(t *testing.T) {
 }
 
 func TestService_GetByID_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New("database unavailable")
 
 	repository := &fakeRepository{
@@ -420,20 +438,22 @@ func TestService_GetByID_RepositoryError(t *testing.T) {
 }
 
 func TestService_ListByUser(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{
 		listByUserAddresses: []Address{
 			{
 				ID:          1,
 				UserID:      10,
-				City:        "Amsterdam",
-				Street:      "First Street",
+				City:        testCityAmsterdam,
+				Street:      testStreetFirst,
 				HouseNumber: "1",
 			},
 			{
 				ID:          2,
 				UserID:      10,
-				City:        "Amsterdam",
-				Street:      "Second Street",
+				City:        testCityAmsterdam,
+				Street:      testStreetSecond,
 				HouseNumber: "2",
 			},
 		},
@@ -467,6 +487,8 @@ func TestService_ListByUser(t *testing.T) {
 }
 
 func TestService_ListByUser_InvalidUserID(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{}
 	service := NewService(repository)
 
@@ -491,6 +513,8 @@ func TestService_ListByUser_InvalidUserID(t *testing.T) {
 }
 
 func TestService_ListByUser_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New("database unavailable")
 
 	repository := &fakeRepository{
@@ -520,6 +544,8 @@ func TestService_ListByUser_RepositoryError(t *testing.T) {
 }
 
 func TestService_Delete(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{}
 	service := NewService(repository)
 
@@ -553,18 +579,20 @@ func TestService_Delete(t *testing.T) {
 }
 
 func TestService_Delete_Validation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		addressID int64
 		userID    int64
 	}{
 		{
-			name:      "invalid address id",
+			name:      testInvalidAddressID,
 			addressID: 0,
 			userID:    10,
 		},
 		{
-			name:      "invalid user id",
+			name:      testInvalidUserID,
 			addressID: 5,
 			userID:    0,
 		},
@@ -572,6 +600,8 @@ func TestService_Delete_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			repository := &fakeRepository{}
 			service := NewService(repository)
 
@@ -601,6 +631,8 @@ func TestService_Delete_Validation(t *testing.T) {
 }
 
 func TestService_Delete_NotFound(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{
 		deleteErr: ErrAddressNotFound,
 	}
@@ -622,6 +654,8 @@ func TestService_Delete_NotFound(t *testing.T) {
 }
 
 func TestService_Delete_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New(
 		"database unavailable",
 	)
@@ -647,12 +681,14 @@ func TestService_Delete_RepositoryError(t *testing.T) {
 }
 
 func TestService_Update(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{
 		updateAddress: &Address{
 			ID:          5,
 			UserID:      10,
-			City:        "Rotterdam",
-			Street:      "New Street",
+			City:        testCityRotterdam,
+			Street:      testStreetNew,
 			HouseNumber: "20",
 		},
 	}
@@ -704,18 +740,18 @@ func TestService_Update(t *testing.T) {
 		t.Fatal("expected update input")
 	}
 
-	if *repository.updateInput.City != "Rotterdam" {
+	if *repository.updateInput.City != testCityRotterdam {
 		t.Errorf(
 			"expected city %q, got %q",
-			"Rotterdam",
+			testCityRotterdam,
 			*repository.updateInput.City,
 		)
 	}
 
-	if *repository.updateInput.Street != "New Street" {
+	if *repository.updateInput.Street != testStreetNew {
 		t.Errorf(
 			"expected street %q, got %q",
-			"New Street",
+			testStreetNew,
 			*repository.updateInput.Street,
 		)
 	}
@@ -730,7 +766,11 @@ func TestService_Update(t *testing.T) {
 }
 
 func TestService_Update_Validation(t *testing.T) {
-	empty := "   "
+	t.Parallel()
+
+	emptyCity := testBlankValue
+	emptyStreet := "   "
+	emptyHouseNumber := "   "
 
 	tests := []struct {
 		name      string
@@ -739,13 +779,13 @@ func TestService_Update_Validation(t *testing.T) {
 		input     *UpdateAddress
 	}{
 		{
-			name:      "invalid address id",
+			name:      testInvalidAddressID,
 			addressID: 0,
 			userID:    10,
 			input:     &UpdateAddress{},
 		},
 		{
-			name:      "invalid user id",
+			name:      testInvalidUserID,
 			addressID: 5,
 			userID:    0,
 			input:     &UpdateAddress{},
@@ -761,7 +801,7 @@ func TestService_Update_Validation(t *testing.T) {
 			addressID: 5,
 			userID:    10,
 			input: &UpdateAddress{
-				City: &empty,
+				City: &emptyCity,
 			},
 		},
 		{
@@ -769,7 +809,7 @@ func TestService_Update_Validation(t *testing.T) {
 			addressID: 5,
 			userID:    10,
 			input: &UpdateAddress{
-				Street: &empty,
+				Street: &emptyStreet,
 			},
 		},
 		{
@@ -777,13 +817,15 @@ func TestService_Update_Validation(t *testing.T) {
 			addressID: 5,
 			userID:    10,
 			input: &UpdateAddress{
-				HouseNumber: &empty,
+				HouseNumber: &emptyHouseNumber,
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			repository := &fakeRepository{}
 			service := NewService(repository)
 
@@ -821,13 +863,15 @@ func TestService_Update_Validation(t *testing.T) {
 }
 
 func TestService_Update_NotFound(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{
 		updateErr: pgx.ErrNoRows,
 	}
 
 	service := NewService(repository)
 
-	city := "Rotterdam"
+	city := testCityRotterdam
 
 	address, err := service.Update(
 		context.Background(),
@@ -854,6 +898,8 @@ func TestService_Update_NotFound(t *testing.T) {
 }
 
 func TestService_Update_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New(
 		"database unavailable",
 	)
@@ -864,7 +910,7 @@ func TestService_Update_RepositoryError(t *testing.T) {
 
 	service := NewService(repository)
 
-	city := "Rotterdam"
+	city := testCityRotterdam
 
 	address, err := service.Update(
 		context.Background(),

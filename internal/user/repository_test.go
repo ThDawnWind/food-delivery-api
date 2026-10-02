@@ -8,10 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ThDawnWind/food-delivery-api/internal/database"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/ThDawnWind/food-delivery-api/internal/database"
 )
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_Create(t *testing.T) {
 	ctx := context.Background()
 
@@ -113,6 +115,7 @@ func TestRepository_Create(t *testing.T) {
 	})
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_Create_DuplicateUsername(t *testing.T) {
 	ctx := context.Background()
 
@@ -141,7 +144,7 @@ func TestRepository_Create_DuplicateUsername(t *testing.T) {
 		&CreateUser{
 			Username:     fmt.Sprintf("duplicate-%d", suffix),
 			Email:        fmt.Sprintf("first-%d@example.com", suffix),
-			PasswordHash: "hash",
+			PasswordHash: testPasswordHash,
 			Role:         RoleUser,
 		},
 	)
@@ -150,11 +153,17 @@ func TestRepository_Create_DuplicateUsername(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = dbPool.Exec(
+		_, err := dbPool.Exec(
 			context.Background(),
 			`DELETE FROM users WHERE id = $1`,
 			firstUser.ID,
 		)
+		if err != nil {
+			t.Errorf(
+				"failed to clean up user: %v",
+				err,
+			)
+		}
 	})
 
 	secondUser, err := repo.Create(
@@ -162,7 +171,7 @@ func TestRepository_Create_DuplicateUsername(t *testing.T) {
 		&CreateUser{
 			Username:     firstUser.Username,
 			Email:        fmt.Sprintf("second-%d@example.com", suffix),
-			PasswordHash: "hash",
+			PasswordHash: testPasswordHash,
 			Role:         RoleUser,
 		},
 	)
@@ -182,6 +191,7 @@ func TestRepository_Create_DuplicateUsername(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_Create_DuplicateEmail(t *testing.T) {
 	ctx := context.Background()
 
@@ -210,7 +220,7 @@ func TestRepository_Create_DuplicateEmail(t *testing.T) {
 		&CreateUser{
 			Username:     fmt.Sprintf("first-%d", suffix),
 			Email:        fmt.Sprintf("duplicate-%d@example.com", suffix),
-			PasswordHash: "hash",
+			PasswordHash: testPasswordHash,
 			Role:         RoleUser,
 		},
 	)
@@ -219,11 +229,17 @@ func TestRepository_Create_DuplicateEmail(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = dbPool.Exec(
+		_, err := dbPool.Exec(
 			context.Background(),
 			`DELETE FROM users WHERE id = $1`,
 			firstUser.ID,
 		)
+		if err != nil {
+			t.Errorf(
+				"failed to clean up user: %v",
+				err,
+			)
+		}
 	})
 
 	secondUser, err := repo.Create(
@@ -231,7 +247,7 @@ func TestRepository_Create_DuplicateEmail(t *testing.T) {
 		&CreateUser{
 			Username:     fmt.Sprintf("second-%d", suffix),
 			Email:        firstUser.Email,
-			PasswordHash: "hash",
+			PasswordHash: testPasswordHash,
 			Role:         RoleUser,
 		},
 	)
@@ -251,6 +267,7 @@ func TestRepository_Create_DuplicateEmail(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_GetByID(t *testing.T) {
 	ctx := context.Background()
 
@@ -279,7 +296,7 @@ func TestRepository_GetByID(t *testing.T) {
 		&CreateUser{
 			Username:     fmt.Sprintf("get-by-id-%d", suffix),
 			Email:        fmt.Sprintf("get-by-id-%d@example.com", suffix),
-			PasswordHash: "test-hash",
+			PasswordHash: testPasswordHashValue,
 			Role:         RoleUser,
 		},
 	)
@@ -288,11 +305,17 @@ func TestRepository_GetByID(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = dbPool.Exec(
+		_, err := dbPool.Exec(
 			context.Background(),
 			`DELETE FROM users WHERE id = $1`,
 			createdUser.ID,
 		)
+		if err != nil {
+			t.Errorf(
+				"failed to clean up user: %v",
+				err,
+			)
+		}
 	})
 
 	user, err := repo.GetByID(
@@ -331,7 +354,7 @@ func TestRepository_GetByID(t *testing.T) {
 		)
 	}
 
-	if user.PasswordHash != "test-hash" {
+	if user.PasswordHash != testPasswordHashValue {
 		t.Errorf(
 			"expected password hash %q, got %q",
 			"test-hash",
@@ -348,6 +371,7 @@ func TestRepository_GetByID(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_GetByEmail(t *testing.T) {
 	ctx := context.Background()
 
@@ -376,7 +400,7 @@ func TestRepository_GetByEmail(t *testing.T) {
 		&CreateUser{
 			Username:     fmt.Sprintf("get-by-email-%d", suffix),
 			Email:        fmt.Sprintf("get-by-email-%d@example.com", suffix),
-			PasswordHash: "test-hash",
+			PasswordHash: testPasswordHashValue,
 			Role:         RoleUser,
 		},
 	)
@@ -385,11 +409,17 @@ func TestRepository_GetByEmail(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = dbPool.Exec(
+		_, err := dbPool.Exec(
 			context.Background(),
 			`DELETE FROM users WHERE id = $1`,
 			createdUser.ID,
 		)
+		if err != nil {
+			t.Errorf(
+				"failed to clean up user: %v",
+				err,
+			)
+		}
 	})
 
 	user, err := repo.GetByEmail(
@@ -421,6 +451,7 @@ func TestRepository_GetByEmail(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_GetByID_NotFound(t *testing.T) {
 	ctx := context.Background()
 
@@ -462,6 +493,7 @@ func TestRepository_GetByID_NotFound(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_GetByEmail_NotFound(t *testing.T) {
 	ctx := context.Background()
 

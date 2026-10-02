@@ -8,13 +8,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ThDawnWind/food-delivery-api/internal/database"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+
+	"github.com/ThDawnWind/food-delivery-api/internal/database"
 )
 
 func TestRepository_Create(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
@@ -54,7 +57,6 @@ func TestRepository_Create(t *testing.T) {
 		fmt.Sprintf("order-test-%d@example.com", suffix),
 		"test-password-hash",
 	).Scan(&userID)
-
 	if err != nil {
 		t.Fatalf("failed to create user: %v", err)
 	}
@@ -71,12 +73,12 @@ func TestRepository_Create(t *testing.T) {
 		fmt.Sprintf("Order Category %d", suffix),
 		fmt.Sprintf("order-category-%d", suffix),
 	).Scan(&categoryID)
-
 	if err != nil {
 		t.Fatalf("failed to create category: %v", err)
 	}
 
 	var pizzaID int64
+
 	var burgerID int64
 
 	err = dbPool.QueryRow(
@@ -96,7 +98,6 @@ func TestRepository_Create(t *testing.T) {
 		450,
 		categoryID,
 	).Scan(&pizzaID)
-
 	if err != nil {
 		t.Fatalf("failed to create pizza: %v", err)
 	}
@@ -118,10 +119,170 @@ func TestRepository_Create(t *testing.T) {
 		300,
 		categoryID,
 	).Scan(&burgerID)
-
 	if err != nil {
 		t.Fatalf("failed to create burger: %v", err)
 	}
+
+	registerCreateCleanup(
+		t,
+		dbPool,
+		userID,
+		categoryID,
+		pizzaID,
+		burgerID,
+	)
+
+	order := &Order{
+		UserID:          userID,
+		Status:          StatusNew,
+		TotalPrice:      159700,
+		DeliveryAddress: testDeliveryAddress,
+		Items: []OrderItem{
+			{
+				ProductID:     pizzaID,
+				NameSnapshot:  testProductPepperoni,
+				PriceSnapshot: 59900,
+				Quantity:      2,
+			},
+			{
+				ProductID:     burgerID,
+				NameSnapshot:  testProductBurger,
+				PriceSnapshot: 39900,
+				Quantity:      1,
+			},
+		},
+	}
+
+	createdOrder, err := repo.Create(ctx, order)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertCreatedRepositoryOrder(t, createdOrder)
+
+	for i, item := range createdOrder.Items {
+		if item.ID == 0 {
+			t.Errorf(
+				"expected item %d ID to be set",
+				i,
+			)
+		}
+
+		if item.OrderID != createdOrder.ID {
+			t.Errorf(
+				"expected item %d order ID %d, got %d",
+				i,
+				createdOrder.ID,
+				item.OrderID,
+			)
+		}
+
+		if item.CreatedAt.IsZero() {
+			t.Errorf(
+				"expected item %d created_at to be set",
+				i,
+			)
+		}
+	}
+
+	var savedTotalPrice int64
+
+	var savedStatus Status
+
+	var savedAddress string
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		SELECT
+			total_price,
+			status,
+			delivery_address
+		FROM orders
+		WHERE id = $1
+		`,
+		createdOrder.ID,
+	).Scan(
+		&savedTotalPrice,
+		&savedStatus,
+		&savedAddress,
+	)
+	if err != nil {
+		t.Fatalf("failed to get saved order: %v", err)
+	}
+
+	assertSavedOrder(
+		t,
+		savedTotalPrice,
+		savedStatus,
+		savedAddress,
+	)
+
+	var itemCount int
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+		SELECT COUNT(*)
+		FROM order_items
+		WHERE order_id = $1
+		`,
+		createdOrder.ID,
+	).Scan(&itemCount)
+	if err != nil {
+		t.Fatalf("failed to count order items: %v", err)
+	}
+
+	if itemCount != 2 {
+		t.Errorf(
+			"expected %d order items in database, got %d",
+			2,
+			itemCount,
+		)
+	}
+
+	var (
+		savedNameSnapshot  string
+		savedPriceSnapshot int64
+		savedQuantity      int
+	)
+
+	err = dbPool.QueryRow(
+		ctx,
+		`
+	SELECT
+		name_snapshot,
+		price_snapshot,
+		quantity
+	FROM order_items
+	WHERE order_id = $1
+	  AND product_id = $2
+	`,
+		createdOrder.ID,
+		pizzaID,
+	).Scan(
+		&savedNameSnapshot,
+		&savedPriceSnapshot,
+		&savedQuantity,
+	)
+	if err != nil {
+		t.Fatalf("failed to get saved order item: %v", err)
+	}
+
+	assertSavedOrderItem(
+		t,
+		savedNameSnapshot,
+		savedPriceSnapshot,
+		savedQuantity,
+	)
+}
+
+func registerCreateCleanup(
+	t *testing.T,
+	dbPool *pgxpool.Pool,
+	userID, categoryID, pizzaID, burgerID int64,
+) {
+	t.Helper()
 
 	t.Cleanup(func() {
 		ctx := context.Background()
@@ -162,70 +323,78 @@ func TestRepository_Create(t *testing.T) {
 			t.Errorf("failed to clean up user: %v", err)
 		}
 	})
+}
 
-	order := &Order{
-		UserID:          userID,
-		Status:          StatusNew,
-		TotalPrice:      159700,
-		DeliveryAddress: "Test street 1",
-		Items: []OrderItem{
-			{
-				ProductID:     pizzaID,
-				NameSnapshot:  "Pepperoni",
-				PriceSnapshot: 59900,
-				Quantity:      2,
-			},
-			{
-				ProductID:     burgerID,
-				NameSnapshot:  "Burger",
-				PriceSnapshot: 39900,
-				Quantity:      1,
-			},
-		},
-	}
+func assertSavedOrder(
+	t *testing.T,
+	totalPrice int64,
+	status Status,
+	address string,
+) {
+	t.Helper()
 
-	createdOrder, err := repo.Create(ctx, order)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if createdOrder == nil {
-		t.Fatal("expected created order, got nil")
-	}
-
-	if createdOrder.ID == 0 {
-		t.Error("expected order ID to be set")
-	}
-
-	if createdOrder.CreatedAt.IsZero() {
-		t.Error("expected order created_at to be set")
-	}
-
-	if createdOrder.UpdatedAt.IsZero() {
-		t.Error("expected order updated_at to be set")
-	}
-
-	if len(createdOrder.Items) != 2 {
-		t.Fatalf(
-			"expected %d order items, got %d",
-			2,
-			len(createdOrder.Items),
+	if totalPrice != 159700 {
+		t.Errorf(
+			"expected total price %d, got %d",
+			159700,
+			totalPrice,
 		)
 	}
 
-	for i, item := range createdOrder.Items {
+	if status != StatusNew {
+		t.Errorf(
+			"expected status %q, got %q",
+			StatusNew,
+			status,
+		)
+	}
+
+	if address != testDeliveryAddress {
+		t.Errorf(
+			"expected delivery address %q, got %q",
+			testDeliveryAddress,
+			address,
+		)
+	}
+}
+
+func assertCreatedRepositoryOrder(t *testing.T, order *Order) {
+	t.Helper()
+
+	if order == nil {
+		t.Fatal("expected created order, got nil")
+	}
+
+	if order.ID == 0 {
+		t.Error("expected order ID to be set")
+	}
+
+	if order.CreatedAt.IsZero() {
+		t.Error("expected order created_at to be set")
+	}
+
+	if order.UpdatedAt.IsZero() {
+		t.Error("expected order updated_at to be set")
+	}
+
+	if len(order.Items) != 2 {
+		t.Fatalf(
+			"expected %d order items, got %d",
+			2,
+			len(order.Items),
+		)
+	}
+
+	for i, item := range order.Items {
 		if item.ID == 0 {
-			t.Errorf(
-				"expected item %d ID to be set",
-				i,
-			)
+			t.Errorf("expected item %d ID to be set", i)
 		}
 
-		if item.OrderID != createdOrder.ID {
+		if item.OrderID != order.ID {
 			t.Errorf(
 				"expected item %d order ID %d, got %d",
 				i,
-				createdOrder.ID,
+				order.ID,
 				item.OrderID,
 			)
 		}
@@ -237,134 +406,44 @@ func TestRepository_Create(t *testing.T) {
 			)
 		}
 	}
+}
 
-	var savedTotalPrice int64
-	var savedStatus Status
-	var savedAddress string
+func assertSavedOrderItem(
+	t *testing.T,
+	name string,
+	price int64,
+	quantity int,
+) {
+	t.Helper()
 
-	err = dbPool.QueryRow(
-		ctx,
-		`
-		SELECT
-			total_price,
-			status,
-			delivery_address
-		FROM orders
-		WHERE id = $1
-		`,
-		createdOrder.ID,
-	).Scan(
-		&savedTotalPrice,
-		&savedStatus,
-		&savedAddress,
-	)
-
-	if err != nil {
-		t.Fatalf("failed to get saved order: %v", err)
-	}
-
-	if savedTotalPrice != 159700 {
-		t.Errorf(
-			"expected total price %d, got %d",
-			159700,
-			savedTotalPrice,
-		)
-	}
-
-	if savedStatus != StatusNew {
-		t.Errorf(
-			"expected status %q, got %q",
-			StatusNew,
-			savedStatus,
-		)
-	}
-
-	if savedAddress != "Test street 1" {
-		t.Errorf(
-			"expected delivery address %q, got %q",
-			"Test street 1",
-			savedAddress,
-		)
-	}
-
-	var itemCount int
-
-	err = dbPool.QueryRow(
-		ctx,
-		`
-		SELECT COUNT(*)
-		FROM order_items
-		WHERE order_id = $1
-		`,
-		createdOrder.ID,
-	).Scan(&itemCount)
-
-	if err != nil {
-		t.Fatalf("failed to count order items: %v", err)
-	}
-
-	if itemCount != 2 {
-		t.Errorf(
-			"expected %d order items in database, got %d",
-			2,
-			itemCount,
-		)
-	}
-	var (
-		savedNameSnapshot  string
-		savedPriceSnapshot int64
-		savedQuantity      int
-	)
-
-	err = dbPool.QueryRow(
-		ctx,
-		`
-	SELECT
-		name_snapshot,
-		price_snapshot,
-		quantity
-	FROM order_items
-	WHERE order_id = $1
-	  AND product_id = $2
-	`,
-		createdOrder.ID,
-		pizzaID,
-	).Scan(
-		&savedNameSnapshot,
-		&savedPriceSnapshot,
-		&savedQuantity,
-	)
-
-	if err != nil {
-		t.Fatalf("failed to get saved order item: %v", err)
-	}
-
-	if savedNameSnapshot != "Pepperoni" {
+	if name != testProductPepperoni {
 		t.Errorf(
 			"expected name snapshot %q, got %q",
-			"Pepperoni",
-			savedNameSnapshot,
+			testProductPepperoni,
+			name,
 		)
 	}
 
-	if savedPriceSnapshot != 59900 {
+	if price != 59900 {
 		t.Errorf(
 			"expected price snapshot %d, got %d",
 			59900,
-			savedPriceSnapshot,
+			price,
 		)
 	}
 
-	if savedQuantity != 2 {
+	if quantity != 2 {
 		t.Errorf(
 			"expected quantity %d, got %d",
 			2,
-			savedQuantity,
+			quantity,
 		)
 	}
 }
 
 func TestRepository_Create_RollbackOnItemError(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
@@ -404,7 +483,6 @@ func TestRepository_Create_RollbackOnItemError(t *testing.T) {
 		fmt.Sprintf("rollback-user-%d@example.com", suffix),
 		"test-password-hash",
 	).Scan(&userID)
-
 	if err != nil {
 		t.Fatalf("failed to create user: %v", err)
 	}
@@ -421,7 +499,6 @@ func TestRepository_Create_RollbackOnItemError(t *testing.T) {
 		fmt.Sprintf("Rollback Category %d", suffix),
 		fmt.Sprintf("rollback-category-%d", suffix),
 	).Scan(&categoryID)
-
 	if err != nil {
 		t.Fatalf("failed to create category: %v", err)
 	}
@@ -445,7 +522,6 @@ func TestRepository_Create_RollbackOnItemError(t *testing.T) {
 		450,
 		categoryID,
 	).Scan(&productID)
-
 	if err != nil {
 		t.Fatalf("failed to create product: %v", err)
 	}
@@ -512,7 +588,6 @@ func TestRepository_Create_RollbackOnItemError(t *testing.T) {
 	}
 
 	createdOrder, err := repo.Create(ctx, order)
-
 	if err == nil {
 		t.Fatal("expected create error, got nil")
 	}
@@ -537,7 +612,6 @@ func TestRepository_Create_RollbackOnItemError(t *testing.T) {
 		userID,
 		"Rollback street 1",
 	).Scan(&orderCount)
-
 	if err != nil {
 		t.Fatalf("failed to count orders: %v", err)
 	}
@@ -563,7 +637,6 @@ func TestRepository_Create_RollbackOnItemError(t *testing.T) {
 		userID,
 		"Rollback street 1",
 	).Scan(&itemCount)
-
 	if err != nil {
 		t.Fatalf("failed to count order items: %v", err)
 	}
@@ -577,6 +650,8 @@ func TestRepository_Create_RollbackOnItemError(t *testing.T) {
 }
 
 func TestRepository_GetByID(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
@@ -616,7 +691,6 @@ func TestRepository_GetByID(t *testing.T) {
 		fmt.Sprintf("get-order-user-%d@example.com", suffix),
 		"test-password-hash",
 	).Scan(&userID)
-
 	if err != nil {
 		t.Fatalf("failed to create user: %v", err)
 	}
@@ -633,12 +707,12 @@ func TestRepository_GetByID(t *testing.T) {
 		fmt.Sprintf("Get Order Category %d", suffix),
 		fmt.Sprintf("get-order-category-%d", suffix),
 	).Scan(&categoryID)
-
 	if err != nil {
 		t.Fatalf("failed to create category: %v", err)
 	}
 
 	var pizzaID int64
+
 	var burgerID int64
 
 	err = dbPool.QueryRow(
@@ -658,7 +732,6 @@ func TestRepository_GetByID(t *testing.T) {
 		450,
 		categoryID,
 	).Scan(&pizzaID)
-
 	if err != nil {
 		t.Fatalf("failed to create pizza: %v", err)
 	}
@@ -680,34 +753,35 @@ func TestRepository_GetByID(t *testing.T) {
 		300,
 		categoryID,
 	).Scan(&burgerID)
-
 	if err != nil {
 		t.Fatalf("failed to create burger: %v", err)
 	}
 
 	t.Cleanup(func() {
-		ctx := context.Background()
-
-		_, _ = dbPool.Exec(
-			ctx,
+		cleanupExec(
+			t,
+			dbPool,
 			`DELETE FROM orders WHERE user_id = $1`,
 			userID,
 		)
 
-		_, _ = dbPool.Exec(
-			ctx,
+		cleanupExec(
+			t,
+			dbPool,
 			`DELETE FROM products WHERE id = ANY($1::bigint[])`,
 			[]int64{pizzaID, burgerID},
 		)
 
-		_, _ = dbPool.Exec(
-			ctx,
+		cleanupExec(
+			t,
+			dbPool,
 			`DELETE FROM categories WHERE id = $1`,
 			categoryID,
 		)
 
-		_, _ = dbPool.Exec(
-			ctx,
+		cleanupExec(
+			t,
+			dbPool,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)
@@ -719,24 +793,23 @@ func TestRepository_GetByID(t *testing.T) {
 			UserID:          userID,
 			Status:          StatusNew,
 			TotalPrice:      159700,
-			DeliveryAddress: "Test street 1",
+			DeliveryAddress: testDeliveryAddress,
 			Items: []OrderItem{
 				{
 					ProductID:     pizzaID,
-					NameSnapshot:  "Pepperoni",
+					NameSnapshot:  testProductPepperoni,
 					PriceSnapshot: 59900,
 					Quantity:      2,
 				},
 				{
 					ProductID:     burgerID,
-					NameSnapshot:  "Burger",
+					NameSnapshot:  testProductBurger,
 					PriceSnapshot: 39900,
 					Quantity:      1,
 				},
 			},
 		},
 	)
-
 	if err != nil {
 		t.Fatalf("failed to create order: %v", err)
 	}
@@ -749,80 +822,96 @@ func TestRepository_GetByID(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if gotOrder == nil {
+	assertRetrievedOrder(
+		t,
+		gotOrder,
+		createdOrder.ID,
+		userID,
+		pizzaID,
+	)
+}
+
+func assertRetrievedOrder(
+	t *testing.T,
+	order *Order,
+	expectedOrderID, expectedUserID, expectedProductID int64,
+) {
+	t.Helper()
+
+	if order == nil {
 		t.Fatal("expected order, got nil")
 	}
 
-	if gotOrder.ID != createdOrder.ID {
+	if order.ID != expectedOrderID {
 		t.Errorf(
 			"expected order ID %d, got %d",
-			createdOrder.ID,
-			gotOrder.ID,
+			expectedOrderID,
+			order.ID,
 		)
 	}
 
-	if gotOrder.UserID != userID {
+	if order.UserID != expectedUserID {
 		t.Errorf(
 			"expected user ID %d, got %d",
-			userID,
-			gotOrder.UserID,
+			expectedUserID,
+			order.UserID,
 		)
 	}
 
-	if gotOrder.Status != StatusNew {
+	if order.Status != StatusNew {
 		t.Errorf(
 			"expected status %q, got %q",
 			StatusNew,
-			gotOrder.Status,
+			order.Status,
 		)
 	}
 
-	if gotOrder.TotalPrice != 159700 {
+	if order.TotalPrice != 159700 {
 		t.Errorf(
 			"expected total price %d, got %d",
 			159700,
-			gotOrder.TotalPrice,
+			order.TotalPrice,
 		)
 	}
 
-	if gotOrder.DeliveryAddress != "Test street 1" {
+	if order.DeliveryAddress != testDeliveryAddress {
 		t.Errorf(
 			"expected address %q, got %q",
-			"Test street 1",
-			gotOrder.DeliveryAddress,
+			testDeliveryAddress,
+			order.DeliveryAddress,
 		)
 	}
 
-	if len(gotOrder.Items) != 2 {
+	if len(order.Items) != 2 {
 		t.Fatalf(
 			"expected %d items, got %d",
 			2,
-			len(gotOrder.Items),
+			len(order.Items),
 		)
 	}
 
-	firstItem := gotOrder.Items[0]
+	firstItem := order.Items[0]
 
-	if firstItem.OrderID != gotOrder.ID {
+	if firstItem.OrderID != order.ID {
 		t.Errorf(
 			"expected order ID %d, got %d",
-			gotOrder.ID,
+			order.ID,
 			firstItem.OrderID,
 		)
 	}
 
-	if firstItem.ProductID != pizzaID {
+	if firstItem.ProductID != expectedProductID {
 		t.Errorf(
 			"expected product ID %d, got %d",
-			pizzaID,
+			expectedProductID,
 			firstItem.ProductID,
 		)
 	}
 
-	if firstItem.NameSnapshot != "Pepperoni" {
+	if firstItem.NameSnapshot != testProductPepperoni {
 		t.Errorf(
 			"expected name snapshot %q, got %q",
-			"Pepperoni",
+			testProductPepperoni,
 			firstItem.NameSnapshot,
 		)
 	}
@@ -845,6 +934,8 @@ func TestRepository_GetByID(t *testing.T) {
 }
 
 func TestRepository_GetByID_NotFound(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
@@ -883,6 +974,8 @@ func TestRepository_GetByID_NotFound(t *testing.T) {
 }
 
 func TestRepository_ListByUser(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
@@ -906,6 +999,7 @@ func TestRepository_ListByUser(t *testing.T) {
 	suffix := time.Now().UnixNano()
 
 	var userID int64
+
 	var otherUserID int64
 
 	err = dbPool.QueryRow(
@@ -976,7 +1070,7 @@ func TestRepository_ListByUser(t *testing.T) {
 		VALUES ($1, $2, $3, $4)
 		RETURNING id
 		`,
-		"Pepperoni",
+		testProductPepperoni,
 		int64(59900),
 		450,
 		categoryID,
@@ -986,28 +1080,30 @@ func TestRepository_ListByUser(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		ctx := context.Background()
-
-		_, _ = dbPool.Exec(
-			ctx,
+		cleanupExec(
+			t,
+			dbPool,
 			`DELETE FROM orders WHERE user_id = ANY($1::bigint[])`,
 			[]int64{userID, otherUserID},
 		)
 
-		_, _ = dbPool.Exec(
-			ctx,
+		cleanupExec(
+			t,
+			dbPool,
 			`DELETE FROM products WHERE id = $1`,
 			productID,
 		)
 
-		_, _ = dbPool.Exec(
-			ctx,
+		cleanupExec(
+			t,
+			dbPool,
 			`DELETE FROM categories WHERE id = $1`,
 			categoryID,
 		)
 
-		_, _ = dbPool.Exec(
-			ctx,
+		cleanupExec(
+			t,
+			dbPool,
 			`DELETE FROM users WHERE id = ANY($1::bigint[])`,
 			[]int64{userID, otherUserID},
 		)
@@ -1023,7 +1119,7 @@ func TestRepository_ListByUser(t *testing.T) {
 			Items: []OrderItem{
 				{
 					ProductID:     productID,
-					NameSnapshot:  "Pepperoni",
+					NameSnapshot:  testProductPepperoni,
 					PriceSnapshot: 59900,
 					Quantity:      1,
 				},
@@ -1044,7 +1140,7 @@ func TestRepository_ListByUser(t *testing.T) {
 			Items: []OrderItem{
 				{
 					ProductID:     productID,
-					NameSnapshot:  "Pepperoni",
+					NameSnapshot:  testProductPepperoni,
 					PriceSnapshot: 59900,
 					Quantity:      2,
 				},
@@ -1065,7 +1161,7 @@ func TestRepository_ListByUser(t *testing.T) {
 			Items: []OrderItem{
 				{
 					ProductID:     productID,
-					NameSnapshot:  "Pepperoni",
+					NameSnapshot:  testProductPepperoni,
 					PriceSnapshot: 59900,
 					Quantity:      1,
 				},
@@ -1086,6 +1182,46 @@ func TestRepository_ListByUser(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	assertUserOrders(
+		t,
+		orders,
+		userID,
+		firstOrder.ID,
+		secondOrder.ID,
+	)
+
+	firstPage, err := repo.ListByUser(
+		ctx,
+		userID,
+		1,
+		0,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertOrderPage(t, firstPage, secondOrder.ID)
+
+	secondPage, err := repo.ListByUser(
+		ctx,
+		userID,
+		1,
+		1,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertOrderPage(t, secondPage, firstOrder.ID)
+}
+
+func assertUserOrders(
+	t *testing.T,
+	orders []Order,
+	userID, firstOrderID, secondOrderID int64,
+) {
+	t.Helper()
+
 	if len(orders) != 2 {
 		t.Fatalf(
 			"expected %d orders, got %d",
@@ -1094,18 +1230,18 @@ func TestRepository_ListByUser(t *testing.T) {
 		)
 	}
 
-	if orders[0].ID != secondOrder.ID {
+	if orders[0].ID != secondOrderID {
 		t.Errorf(
 			"expected first order ID %d, got %d",
-			secondOrder.ID,
+			secondOrderID,
 			orders[0].ID,
 		)
 	}
 
-	if orders[1].ID != firstOrder.ID {
+	if orders[1].ID != firstOrderID {
 		t.Errorf(
 			"expected second order ID %d, got %d",
-			firstOrder.ID,
+			firstOrderID,
 			orders[1].ID,
 		)
 	}
@@ -1128,10 +1264,10 @@ func TestRepository_ListByUser(t *testing.T) {
 		)
 	}
 
-	if orders[0].Items[0].OrderID != secondOrder.ID {
+	if orders[0].Items[0].OrderID != secondOrderID {
 		t.Errorf(
 			"expected item order ID %d, got %d",
-			secondOrder.ID,
+			secondOrderID,
 			orders[0].Items[0].OrderID,
 		)
 	}
@@ -1143,61 +1279,35 @@ func TestRepository_ListByUser(t *testing.T) {
 			orders[0].Items[0].Quantity,
 		)
 	}
+}
 
-	firstPage, err := repo.ListByUser(
-		ctx,
-		userID,
-		1,
-		0,
-	)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+func assertOrderPage(
+	t *testing.T,
+	orders []Order,
+	expectedOrderID int64,
+) {
+	t.Helper()
 
-	if len(firstPage) != 1 {
+	if len(orders) != 1 {
 		t.Fatalf(
 			"expected %d order, got %d",
 			1,
-			len(firstPage),
+			len(orders),
 		)
 	}
 
-	if firstPage[0].ID != secondOrder.ID {
+	if orders[0].ID != expectedOrderID {
 		t.Errorf(
 			"expected order ID %d, got %d",
-			secondOrder.ID,
-			firstPage[0].ID,
-		)
-	}
-
-	secondPage, err := repo.ListByUser(
-		ctx,
-		userID,
-		1,
-		1,
-	)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(secondPage) != 1 {
-		t.Fatalf(
-			"expected %d order, got %d",
-			1,
-			len(secondPage),
-		)
-	}
-
-	if secondPage[0].ID != firstOrder.ID {
-		t.Errorf(
-			"expected order ID %d, got %d",
-			firstOrder.ID,
-			secondPage[0].ID,
+			expectedOrderID,
+			orders[0].ID,
 		)
 	}
 }
 
 func TestRepository_ListByUser_Empty(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
@@ -1246,6 +1356,8 @@ func TestRepository_ListByUser_Empty(t *testing.T) {
 }
 
 func TestRepository_UpdateStatus_NotFound(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
@@ -1285,6 +1397,8 @@ func TestRepository_UpdateStatus_NotFound(t *testing.T) {
 }
 
 func TestRepository_UpdateStatus(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
@@ -1335,6 +1449,7 @@ func TestRepository_UpdateStatus(t *testing.T) {
 	}
 
 	var orderID int64
+
 	var createdAt time.Time
 
 	err = dbPool.QueryRow(
@@ -1365,16 +1480,16 @@ func TestRepository_UpdateStatus(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		ctx := context.Background()
-
-		_, _ = dbPool.Exec(
-			ctx,
+		cleanupExec(
+			t,
+			dbPool,
 			`DELETE FROM orders WHERE id = $1`,
 			orderID,
 		)
 
-		_, _ = dbPool.Exec(
-			ctx,
+		cleanupExec(
+			t,
+			dbPool,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)
@@ -1428,13 +1543,13 @@ func TestRepository_UpdateStatus(t *testing.T) {
 	}
 
 	if updatedAt.Before(createdAt) {
-		t.Errorf(
-			"expected updated_at not to be before created_at",
-		)
+		t.Error("expected updated_at not to be before created_at")
 	}
 }
 
 func TestRepository_UpdateStatus_StatusChanged(t *testing.T) {
+	t.Parallel()
+
 	pool := newTestPool(t)
 
 	ctx := context.Background()
@@ -1482,7 +1597,7 @@ func TestRepository_UpdateStatus_StatusChanged(t *testing.T) {
 		userID,
 		StatusCancelled,
 		1000,
-		"Test street 1",
+		testDeliveryAddress,
 	).Scan(&orderID)
 	if err != nil {
 		t.Fatalf(
@@ -1492,14 +1607,16 @@ func TestRepository_UpdateStatus_StatusChanged(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = pool.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			pool,
 			`DELETE FROM orders WHERE id = $1`,
 			orderID,
 		)
 
-		_, _ = pool.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			pool,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)
@@ -1549,6 +1666,8 @@ func TestRepository_UpdateStatus_StatusChanged(t *testing.T) {
 }
 
 func TestRepository_ListAll(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	db := newTestPool(t)
@@ -1661,22 +1780,24 @@ func TestRepository_ListAll(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`
-			DELETE FROM orders
-			WHERE id = $1 OR id = $2
-			`,
+		DELETE FROM orders
+		WHERE id = $1 OR id = $2
+		`,
 			firstOrderID,
 			secondOrderID,
 		)
 
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`
-			DELETE FROM users
-			WHERE id = $1 OR id = $2
-			`,
+		DELETE FROM users
+		WHERE id = $1 OR id = $2
+		`,
 			firstUserID,
 			secondUserID,
 		)
@@ -1697,6 +1818,7 @@ func TestRepository_ListAll(t *testing.T) {
 	}
 
 	var firstFound bool
+
 	var secondFound bool
 
 	for _, order := range orders {
@@ -1722,6 +1844,9 @@ func TestRepository_ListAll(t *testing.T) {
 					order.UserID,
 				)
 			}
+
+		default:
+			continue
 		}
 	}
 
@@ -1744,7 +1869,13 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
 	if os.Getenv("TEST_DATABASE_URL") == "" {
-		_ = godotenv.Load("../../.env.test")
+		err := godotenv.Load("../../.env.test")
+		if err != nil {
+			t.Logf(
+				"failed to load .env.test: %v",
+				err,
+			)
+		}
 	}
 
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
@@ -1773,6 +1904,8 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 }
 
 func TestRepository_ListAll_FilterByStatus(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	db := newTestPool(t)
@@ -1859,22 +1992,24 @@ func TestRepository_ListAll_FilterByStatus(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`
-			DELETE FROM orders
-			WHERE id = $1 OR id = $2
-			`,
+		DELETE FROM orders
+		WHERE id = $1 OR id = $2
+		`,
 			newOrderID,
 			confirmedOrderID,
 		)
 
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`
-			DELETE FROM users
-			WHERE id = $1
-			`,
+		DELETE FROM users
+		WHERE id = $1
+		`,
 			userID,
 		)
 	})
@@ -1882,7 +2017,7 @@ func TestRepository_ListAll_FilterByStatus(t *testing.T) {
 	orders, err := repository.ListAll(
 		ctx,
 		ListOrdersFilter{
-			Status: "confirmed",
+			Status: string(StatusConfirmed),
 			Limit:  100,
 			Offset: 0,
 		},
@@ -1897,7 +2032,7 @@ func TestRepository_ListAll_FilterByStatus(t *testing.T) {
 	var confirmedFound bool
 
 	for _, order := range orders {
-		if order.Status != "confirmed" {
+		if order.Status != StatusConfirmed {
 			t.Fatalf(
 				"expected only confirmed orders, got status %q",
 				order.Status,
@@ -1925,6 +2060,8 @@ func TestRepository_ListAll_FilterByStatus(t *testing.T) {
 }
 
 func TestRepository_ListAll_FilterByUserID(t *testing.T) {
+	t.Parallel()
+
 	pool := newTestPool(t)
 	repository := NewRepository(pool)
 
@@ -1974,15 +2111,17 @@ func TestRepository_ListAll_FilterByUserID(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = pool.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			pool,
 			`DELETE FROM orders WHERE user_id IN ($1, $2)`,
 			userID1,
 			userID2,
 		)
 
-		_, _ = pool.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			pool,
 			`DELETE FROM users WHERE id IN ($1, $2)`,
 			userID1,
 			userID2,
@@ -2070,7 +2209,10 @@ func TestRepository_ListAll_FilterByUserID(t *testing.T) {
 		)
 	}
 }
+
 func TestRepository_ListAll_FilterByCreatedAt(t *testing.T) {
+	t.Parallel()
+
 	pool := newTestPool(t)
 	repository := NewRepository(pool)
 
@@ -2117,6 +2259,8 @@ func TestRepository_ListAll_FilterByCreatedAt(t *testing.T) {
 }
 
 func TestRepository_CountAll(t *testing.T) {
+	t.Parallel()
+
 	pool := newTestPool(t)
 	repository := NewRepository(pool)
 
@@ -2142,6 +2286,8 @@ func TestRepository_CountAll(t *testing.T) {
 }
 
 func TestRepository_CountAll_FilterByStatus(t *testing.T) {
+	t.Parallel()
+
 	pool := newTestPool(t)
 	repository := NewRepository(pool)
 
@@ -2184,6 +2330,7 @@ func TestRepository_CountAll_FilterByStatus(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_CancelByUser(t *testing.T) {
 	pool := newTestPool(t)
 
@@ -2232,7 +2379,7 @@ func TestRepository_CancelByUser(t *testing.T) {
 		userID,
 		StatusNew,
 		1000,
-		"Test street 1",
+		testDeliveryAddress,
 	).Scan(&orderID)
 	if err != nil {
 		t.Fatalf(
@@ -2242,18 +2389,21 @@ func TestRepository_CancelByUser(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = pool.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			pool,
 			`DELETE FROM orders WHERE id = $1`,
 			orderID,
 		)
 
-		_, _ = pool.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			pool,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)
 	})
+
 	repository := NewRepository(pool)
 
 	err = repository.CancelByUser(
@@ -2295,6 +2445,7 @@ func TestRepository_CancelByUser(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_CancelByUser_Confirmed(t *testing.T) {
 	pool := newTestPool(t)
 
@@ -2343,7 +2494,7 @@ func TestRepository_CancelByUser_Confirmed(t *testing.T) {
 		userID,
 		StatusNew,
 		1000,
-		"Test street 1",
+		testDeliveryAddress,
 	).Scan(&orderID)
 	if err != nil {
 		t.Fatalf(
@@ -2353,14 +2504,16 @@ func TestRepository_CancelByUser_Confirmed(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = pool.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			pool,
 			`DELETE FROM orders WHERE id = $1`,
 			orderID,
 		)
 
-		_, _ = pool.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			pool,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)
@@ -2381,6 +2534,7 @@ func TestRepository_CancelByUser_Confirmed(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_CancelByUser_InvalidStatus(t *testing.T) {
 	pool := newTestPool(t)
 
@@ -2429,7 +2583,7 @@ func TestRepository_CancelByUser_InvalidStatus(t *testing.T) {
 		userID,
 		StatusCooking,
 		1000,
-		"Test street 1",
+		testDeliveryAddress,
 	).Scan(&orderID)
 	if err != nil {
 		t.Fatalf(
@@ -2439,14 +2593,16 @@ func TestRepository_CancelByUser_InvalidStatus(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = pool.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			pool,
 			`DELETE FROM orders WHERE id = $1`,
 			orderID,
 		)
 
-		_, _ = pool.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			pool,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)
@@ -2497,6 +2653,7 @@ func TestRepository_CancelByUser_InvalidStatus(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_CancelByUser_OtherUser(t *testing.T) {
 	pool := newTestPool(t)
 
@@ -2545,7 +2702,7 @@ func TestRepository_CancelByUser_OtherUser(t *testing.T) {
 		userID,
 		StatusNew,
 		1000,
-		"Test street 1",
+		testDeliveryAddress,
 	).Scan(&orderID)
 	if err != nil {
 		t.Fatalf(
@@ -2555,18 +2712,21 @@ func TestRepository_CancelByUser_OtherUser(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = pool.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			pool,
 			`DELETE FROM orders WHERE id = $1`,
 			orderID,
 		)
 
-		_, _ = pool.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			pool,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)
 	})
+
 	repository := NewRepository(pool)
 
 	err = repository.CancelByUser(
@@ -2584,6 +2744,8 @@ func TestRepository_CancelByUser_OtherUser(t *testing.T) {
 }
 
 func TestRepository_GetByIDForUser_OtherUser(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
@@ -2610,6 +2772,7 @@ func TestRepository_GetByIDForUser_OtherUser(t *testing.T) {
 	suffix := time.Now().UnixNano()
 
 	var ownerID int64
+
 	var otherUserID int64
 
 	err = dbPool.QueryRow(
@@ -2695,16 +2858,16 @@ func TestRepository_GetByIDForUser_OtherUser(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		ctx := context.Background()
-
-		_, _ = dbPool.Exec(
-			ctx,
+		cleanupExec(
+			t,
+			dbPool,
 			`DELETE FROM orders WHERE id = $1`,
 			orderID,
 		)
 
-		_, _ = dbPool.Exec(
-			ctx,
+		cleanupExec(
+			t,
+			dbPool,
 			`DELETE FROM users WHERE id = ANY($1::bigint[])`,
 			[]int64{
 				ownerID,
@@ -2738,6 +2901,8 @@ func TestRepository_GetByIDForUser_OtherUser(t *testing.T) {
 }
 
 func TestRepository_GetByIDForUser_Owner(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
@@ -2820,16 +2985,16 @@ func TestRepository_GetByIDForUser_Owner(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		ctx := context.Background()
-
-		_, _ = dbPool.Exec(
-			ctx,
+		cleanupExec(
+			t,
+			dbPool,
 			`DELETE FROM orders WHERE id = $1`,
 			orderID,
 		)
 
-		_, _ = dbPool.Exec(
-			ctx,
+		cleanupExec(
+			t,
+			dbPool,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)
@@ -2866,6 +3031,27 @@ func TestRepository_GetByIDForUser_Owner(t *testing.T) {
 			"expected user ID %d, got %d",
 			userID,
 			order.UserID,
+		)
+	}
+}
+
+func cleanupExec(
+	t *testing.T,
+	pool *pgxpool.Pool,
+	query string,
+	args ...any,
+) {
+	t.Helper()
+
+	_, err := pool.Exec(
+		context.Background(),
+		query,
+		args...,
+	)
+	if err != nil {
+		t.Errorf(
+			"failed to clean up test data: %v",
+			err,
 		)
 	}
 }
