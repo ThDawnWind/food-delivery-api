@@ -1,8 +1,9 @@
 package openapi
 
 import (
-	_ "embed"
 	"net/http"
+
+	_ "embed"
 )
 
 //go:embed openapi.yaml
@@ -30,16 +31,22 @@ const scalarHTML = `<!doctype html>
 </body>
 </html>`
 
-func SpecHandler(w http.ResponseWriter, r *http.Request) {
+func SpecHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
-	_, _ = w.Write(spec)
+	_, err := w.Write(spec)
+	if err != nil {
+		return
+	}
 }
 
-func DocsHandler(w http.ResponseWriter, r *http.Request) {
+func DocsHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
-	_, _ = w.Write([]byte(scalarHTML))
+	_, err := w.Write([]byte(scalarHTML))
+	if err != nil {
+		return
+	}
 }

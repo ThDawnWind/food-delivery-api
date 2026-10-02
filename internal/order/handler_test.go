@@ -5,15 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/ThDawnWind/food-delivery-api/internal/auth"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/ThDawnWind/food-delivery-api/internal/auth"
 )
 
 type fakeOrderService struct {
@@ -49,7 +49,7 @@ type fakeOrderService struct {
 }
 
 func (f *fakeOrderService) Create(
-	ctx context.Context,
+	_ context.Context,
 	input *CreateOrder,
 ) (*Order, error) {
 	f.createInput = input
@@ -62,7 +62,7 @@ func (f *fakeOrderService) Create(
 }
 
 func (f *fakeOrderService) GetByID(
-	ctx context.Context,
+	_ context.Context,
 	id int64,
 ) (*Order, error) {
 	f.getID = id
@@ -75,7 +75,7 @@ func (f *fakeOrderService) GetByID(
 }
 
 func (f *fakeOrderService) ListByUser(
-	ctx context.Context,
+	_ context.Context,
 	userID int64,
 	limit int,
 	offset int,
@@ -92,7 +92,7 @@ func (f *fakeOrderService) ListByUser(
 }
 
 func (f *fakeOrderService) ListAll(
-	ctx context.Context,
+	_ context.Context,
 	filter ListOrdersFilter,
 ) (*ListOrdersResult, error) {
 	f.listAllFilter = filter
@@ -110,7 +110,7 @@ func (f *fakeOrderService) ListAll(
 }
 
 func (f *fakeOrderService) UpdateStatus(
-	ctx context.Context,
+	_ context.Context,
 	id int64,
 	status Status,
 ) error {
@@ -121,7 +121,7 @@ func (f *fakeOrderService) UpdateStatus(
 }
 
 func (f *fakeOrderService) Cancel(
-	ctx context.Context,
+	_ context.Context,
 	orderID int64,
 	userID int64,
 ) error {
@@ -132,7 +132,7 @@ func (f *fakeOrderService) Cancel(
 }
 
 func (f *fakeOrderService) GetByIDForUser(
-	ctx context.Context,
+	_ context.Context,
 	orderID int64,
 	userID int64,
 ) (*Order, error) {
@@ -156,7 +156,7 @@ type fakeTokenParser struct {
 }
 
 func (f *fakeTokenParser) Parse(
-	tokenString string,
+	_ string,
 ) (*auth.Claims, error) {
 	return f.claims, nil
 }
@@ -164,12 +164,11 @@ func (f *fakeTokenParser) Parse(
 func authenticatedHandler(
 	handler http.Handler,
 	userID int64,
-	role string,
 ) http.Handler {
 	parser := &fakeTokenParser{
 		claims: &auth.Claims{
 			UserID: userID,
-			Role:   role,
+			Role:   "user",
 		},
 	}
 
@@ -192,26 +191,23 @@ func updateStatusRouter(
 }
 
 func newTestLogger() *slog.Logger {
-	return slog.New(
-		slog.NewJSONHandler(
-			io.Discard,
-			nil,
-		),
-	)
+	return slog.New(slog.DiscardHandler)
 }
 
 func TestHandler_Create(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		createOrder: &Order{
 			ID:              100,
 			UserID:          10,
 			Status:          StatusNew,
 			TotalPrice:      159700,
-			DeliveryAddress: "Test street 1",
+			DeliveryAddress: testDeliveryAddress,
 			Items: []OrderItem{
 				{
 					ProductID:     1,
-					NameSnapshot:  "Pepperoni",
+					NameSnapshot:  testProductPepperoni,
 					PriceSnapshot: 59900,
 					Quantity:      2,
 				},
@@ -234,7 +230,8 @@ func TestHandler_Create(t *testing.T) {
 		]
 	}`
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/",
 		bytes.NewReader(
@@ -252,7 +249,6 @@ func TestHandler_Create(t *testing.T) {
 	protected := authenticatedHandler(
 		handler.Routes(),
 		10,
-		"user",
 	)
 
 	protected.ServeHTTP(
@@ -319,7 +315,6 @@ func TestHandler_Create(t *testing.T) {
 	err := json.NewDecoder(
 		rec.Body,
 	).Decode(&response)
-
 	if err != nil {
 		t.Fatalf(
 			"failed to decode response: %v",
@@ -355,6 +350,8 @@ func TestHandler_Create(t *testing.T) {
 func TestHandler_Create_InvalidJSON(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{}
 
 	handler := NewHandler(
@@ -362,7 +359,8 @@ func TestHandler_Create_InvalidJSON(
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/",
 		bytes.NewBufferString(
@@ -395,6 +393,8 @@ func TestHandler_Create_InvalidJSON(
 func TestHandler_Create_ValidationError(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		createErr: ErrOrderValidation,
 	}
@@ -411,7 +411,8 @@ func TestHandler_Create_ValidationError(
 	}
 	`)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/",
 		bytes.NewReader(body),
@@ -427,7 +428,6 @@ func TestHandler_Create_ValidationError(
 	protected := authenticatedHandler(
 		handler.Routes(),
 		10,
-		"user",
 	)
 
 	protected.ServeHTTP(
@@ -447,6 +447,8 @@ func TestHandler_Create_ValidationError(
 func TestHandler_Create_InternalError(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		createErr: errors.New(
 			"database unavailable",
@@ -470,7 +472,8 @@ func TestHandler_Create_InternalError(
 	}
 	`)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/",
 		bytes.NewReader(body),
@@ -486,7 +489,6 @@ func TestHandler_Create_InternalError(
 	protected := authenticatedHandler(
 		handler.Routes(),
 		10,
-		"user",
 	)
 
 	protected.ServeHTTP(
@@ -504,6 +506,8 @@ func TestHandler_Create_InternalError(
 }
 
 func TestHandler_GetByID(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		getOrder: &Order{
 			ID:              10,
@@ -519,7 +523,8 @@ func TestHandler_GetByID(t *testing.T) {
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/10",
 		nil,
@@ -535,7 +540,6 @@ func TestHandler_GetByID(t *testing.T) {
 	protected := authenticatedHandler(
 		handler.Routes(),
 		5,
-		"user",
 	)
 
 	protected.ServeHTTP(
@@ -571,6 +575,8 @@ func TestHandler_GetByID(t *testing.T) {
 func TestHandler_GetByID_OtherUserOrder(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		getOrder: &Order{
 			ID:     10,
@@ -584,7 +590,8 @@ func TestHandler_GetByID_OtherUserOrder(
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/10",
 		nil,
@@ -600,7 +607,6 @@ func TestHandler_GetByID_OtherUserOrder(
 	protected := authenticatedHandler(
 		handler.Routes(),
 		5,
-		"user",
 	)
 
 	protected.ServeHTTP(
@@ -620,6 +626,8 @@ func TestHandler_GetByID_OtherUserOrder(
 func TestHandler_GetByID_InvalidID(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{}
 
 	handler := NewHandler(
@@ -627,7 +635,8 @@ func TestHandler_GetByID_InvalidID(
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/abc",
 		nil,
@@ -658,6 +667,8 @@ func TestHandler_GetByID_InvalidID(
 func TestHandler_GetByID_NotFound(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		getErr: ErrOrderNotFound,
 	}
@@ -667,7 +678,8 @@ func TestHandler_GetByID_NotFound(
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/999",
 		nil,
@@ -683,7 +695,6 @@ func TestHandler_GetByID_NotFound(
 	protected := authenticatedHandler(
 		handler.Routes(),
 		10,
-		"user",
 	)
 
 	protected.ServeHTTP(
@@ -703,6 +714,8 @@ func TestHandler_GetByID_NotFound(
 func TestHandler_GetByID_InternalError(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		getErr: errors.New(
 			"database unavailable",
@@ -714,7 +727,8 @@ func TestHandler_GetByID_InternalError(
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/10",
 		nil,
@@ -730,7 +744,6 @@ func TestHandler_GetByID_InternalError(
 	protected := authenticatedHandler(
 		handler.Routes(),
 		10,
-		"user",
 	)
 
 	protected.ServeHTTP(
@@ -748,6 +761,8 @@ func TestHandler_GetByID_InternalError(
 }
 
 func TestHandler_ListByUser(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		listOrders: []Order{
 			{
@@ -770,7 +785,8 @@ func TestHandler_ListByUser(t *testing.T) {
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/?limit=50&offset=5",
 		nil,
@@ -786,7 +802,6 @@ func TestHandler_ListByUser(t *testing.T) {
 	protected := authenticatedHandler(
 		handler.Routes(),
 		10,
-		"user",
 	)
 
 	protected.ServeHTTP(
@@ -828,9 +843,10 @@ func TestHandler_ListByUser(t *testing.T) {
 
 	var response []Order
 
-	if err := json.NewDecoder(
+	err := json.NewDecoder(
 		rec.Body,
-	).Decode(&response); err != nil {
+	).Decode(&response)
+	if err != nil {
 		t.Fatalf(
 			"failed to decode response: %v",
 			err,
@@ -849,6 +865,8 @@ func TestHandler_ListByUser(t *testing.T) {
 func TestHandler_ListByUser_Unauthorized(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{}
 
 	handler := NewHandler(
@@ -856,7 +874,8 @@ func TestHandler_ListByUser_Unauthorized(
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/",
 		nil,
@@ -881,6 +900,8 @@ func TestHandler_ListByUser_Unauthorized(
 func TestHandler_ListByUser_InvalidLimit(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{}
 
 	handler := NewHandler(
@@ -888,7 +909,8 @@ func TestHandler_ListByUser_InvalidLimit(
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/?limit=abc",
 		nil,
@@ -904,7 +926,6 @@ func TestHandler_ListByUser_InvalidLimit(
 	protected := authenticatedHandler(
 		handler.Routes(),
 		10,
-		"user",
 	)
 
 	protected.ServeHTTP(
@@ -924,6 +945,8 @@ func TestHandler_ListByUser_InvalidLimit(
 func TestHandler_ListByUser_InvalidOffset(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{}
 
 	handler := NewHandler(
@@ -931,7 +954,8 @@ func TestHandler_ListByUser_InvalidOffset(
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/?offset=abc",
 		nil,
@@ -947,7 +971,6 @@ func TestHandler_ListByUser_InvalidOffset(
 	protected := authenticatedHandler(
 		handler.Routes(),
 		10,
-		"user",
 	)
 
 	protected.ServeHTTP(
@@ -967,6 +990,8 @@ func TestHandler_ListByUser_InvalidOffset(
 func TestHandler_ListByUser_InternalError(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		listErr: errors.New(
 			"database unavailable",
@@ -978,7 +1003,8 @@ func TestHandler_ListByUser_InternalError(
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/",
 		nil,
@@ -994,7 +1020,6 @@ func TestHandler_ListByUser_InternalError(
 	protected := authenticatedHandler(
 		handler.Routes(),
 		10,
-		"user",
 	)
 
 	protected.ServeHTTP(
@@ -1012,6 +1037,8 @@ func TestHandler_ListByUser_InternalError(
 }
 
 func TestHandler_UpdateStatus(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeOrderService{}
 
 	handler := NewHandler(
@@ -1023,7 +1050,8 @@ func TestHandler_UpdateStatus(t *testing.T) {
 		"status": "confirmed"
 	}`)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPatch,
 		"/api/v1/admin/orders/10/status",
 		bytes.NewReader(body),
@@ -1066,6 +1094,8 @@ func TestHandler_UpdateStatus(t *testing.T) {
 func TestHandler_UpdateStatus_InvalidID(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{}
 
 	handler := NewHandler(
@@ -1077,7 +1107,8 @@ func TestHandler_UpdateStatus_InvalidID(
 		"status": "confirmed"
 	}`)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPatch,
 		"/api/v1/admin/orders/abc/status",
 		bytes.NewReader(body),
@@ -1110,6 +1141,8 @@ func TestHandler_UpdateStatus_InvalidID(
 func TestHandler_UpdateStatus_InvalidJSON(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{}
 
 	handler := NewHandler(
@@ -1117,7 +1150,8 @@ func TestHandler_UpdateStatus_InvalidJSON(
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPatch,
 		"/api/v1/admin/orders/10/status",
 		bytes.NewBufferString(
@@ -1152,6 +1186,8 @@ func TestHandler_UpdateStatus_InvalidJSON(
 func TestHandler_UpdateStatus_ValidationError(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		updateErr: ErrOrderValidation,
 	}
@@ -1165,7 +1201,8 @@ func TestHandler_UpdateStatus_ValidationError(
 		"status": "completed"
 	}`)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPatch,
 		"/api/v1/admin/orders/10/status",
 		bytes.NewReader(body),
@@ -1200,6 +1237,8 @@ func TestHandler_UpdateStatus_ValidationError(
 func TestHandler_UpdateStatus_NotFound(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		updateErr: ErrOrderNotFound,
 	}
@@ -1213,7 +1252,8 @@ func TestHandler_UpdateStatus_NotFound(
 		"status": "confirmed"
 	}`)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPatch,
 		"/api/v1/admin/orders/999/status",
 		bytes.NewReader(body),
@@ -1248,6 +1288,8 @@ func TestHandler_UpdateStatus_NotFound(
 func TestHandler_UpdateStatus_InternalError(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		updateErr: errors.New(
 			"database unavailable",
@@ -1263,7 +1305,8 @@ func TestHandler_UpdateStatus_InternalError(
 		"status": "confirmed"
 	}`)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPatch,
 		"/api/v1/admin/orders/10/status",
 		bytes.NewReader(body),
@@ -1298,6 +1341,8 @@ func TestHandler_UpdateStatus_InternalError(
 func TestHandler_ListAll_DefaultPagination(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		listAllOrders: []*Order{
 			{
@@ -1318,7 +1363,8 @@ func TestHandler_ListAll_DefaultPagination(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/admin/orders",
 		nil,
@@ -1369,9 +1415,10 @@ func TestHandler_ListAll_DefaultPagination(
 
 	var response ListOrdersResult
 
-	if err := json.NewDecoder(
+	err := json.NewDecoder(
 		recorder.Body,
-	).Decode(&response); err != nil {
+	).Decode(&response)
+	if err != nil {
 		t.Fatalf(
 			"failed to decode response: %v",
 			err,
@@ -1414,6 +1461,8 @@ func TestHandler_ListAll_DefaultPagination(
 func TestHandler_ListAll_CustomPagination(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		listAllOrders: []*Order{},
 	}
@@ -1423,7 +1472,8 @@ func TestHandler_ListAll_CustomPagination(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/admin/orders?limit=50&offset=25",
 		nil,
@@ -1464,6 +1514,8 @@ func TestHandler_ListAll_CustomPagination(
 func TestHandler_ListAll_InvalidPagination(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		url  string
@@ -1482,6 +1534,8 @@ func TestHandler_ListAll_InvalidPagination(
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
+				t.Parallel()
+
 				service := &fakeOrderService{}
 
 				handler := NewHandler(
@@ -1489,7 +1543,8 @@ func TestHandler_ListAll_InvalidPagination(
 					newTestLogger(),
 				)
 
-				request := httptest.NewRequest(
+				request := httptest.NewRequestWithContext(
+					t.Context(),
 					http.MethodGet,
 					tt.url,
 					nil,
@@ -1517,6 +1572,8 @@ func TestHandler_ListAll_InvalidPagination(
 func TestHandler_ListAll_InternalError(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		listAllErr: errors.New(
 			"database unavailable",
@@ -1528,7 +1585,8 @@ func TestHandler_ListAll_InternalError(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/admin/orders",
 		nil,
@@ -1553,6 +1611,8 @@ func TestHandler_ListAll_InternalError(
 func TestHandler_ListAll_ValidationError(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		listAllErr: ErrOrderValidation,
 	}
@@ -1562,7 +1622,8 @@ func TestHandler_ListAll_ValidationError(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/admin/orders?limit=101",
 		nil,
@@ -1587,6 +1648,8 @@ func TestHandler_ListAll_ValidationError(
 func TestHandler_ListAll_ServiceValidationError(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		url  string
@@ -1605,6 +1668,8 @@ func TestHandler_ListAll_ServiceValidationError(
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
+				t.Parallel()
+
 				service := &fakeOrderService{
 					listAllErr: ErrOrderValidation,
 				}
@@ -1614,7 +1679,8 @@ func TestHandler_ListAll_ServiceValidationError(
 					newTestLogger(),
 				)
 
-				request := httptest.NewRequest(
+				request := httptest.NewRequestWithContext(
+					t.Context(),
 					http.MethodGet,
 					tt.url,
 					nil,
@@ -1642,6 +1708,8 @@ func TestHandler_ListAll_ServiceValidationError(
 func TestHandler_ListAll_FilterByUserID(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		listAllOrders: []*Order{},
 	}
@@ -1651,7 +1719,8 @@ func TestHandler_ListAll_FilterByUserID(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/admin/orders?user_id=5",
 		nil,
@@ -1690,6 +1759,8 @@ func TestHandler_ListAll_FilterByUserID(
 func TestHandler_ListAll_InvalidUserID(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{}
 
 	handler := NewHandler(
@@ -1697,7 +1768,8 @@ func TestHandler_ListAll_InvalidUserID(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/admin/orders?user_id=abc",
 		nil,
@@ -1722,6 +1794,8 @@ func TestHandler_ListAll_InvalidUserID(
 func TestHandler_ListAll_FilterByDate(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		listAllOrders: []*Order{},
 	}
@@ -1731,7 +1805,8 @@ func TestHandler_ListAll_FilterByDate(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/admin/orders?from=2026-09-01&to=2026-09-20",
 		nil,
@@ -1810,6 +1885,8 @@ func TestHandler_ListAll_FilterByDate(
 func TestHandler_ListAll_InvalidDate(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		url  string
@@ -1828,6 +1905,8 @@ func TestHandler_ListAll_InvalidDate(
 		t.Run(
 			tt.name,
 			func(t *testing.T) {
+				t.Parallel()
+
 				service := &fakeOrderService{}
 
 				handler := NewHandler(
@@ -1835,7 +1914,8 @@ func TestHandler_ListAll_InvalidDate(
 					newTestLogger(),
 				)
 
-				request := httptest.NewRequest(
+				request := httptest.NewRequestWithContext(
+					t.Context(),
 					http.MethodGet,
 					tt.url,
 					nil,
@@ -1863,6 +1943,8 @@ func TestHandler_ListAll_InvalidDate(
 func TestHandler_ListAll_DateUsesLocation(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	location := time.FixedZone(
 		"TEST",
 		3*60*60,
@@ -1878,7 +1960,8 @@ func TestHandler_ListAll_DateUsesLocation(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/admin/orders?from=2026-09-20&to=2026-09-20",
 		nil,
@@ -1941,6 +2024,8 @@ func TestHandler_ListAll_DateUsesLocation(
 }
 
 func TestHandler_Cancel(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeOrderService{}
 
 	handler := NewHandler(
@@ -1948,7 +2033,8 @@ func TestHandler_Cancel(t *testing.T) {
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPatch,
 		"/10/cancel",
 		nil,
@@ -1964,7 +2050,6 @@ func TestHandler_Cancel(t *testing.T) {
 	protected := authenticatedHandler(
 		handler.Routes(),
 		5,
-		"user",
 	)
 
 	protected.ServeHTTP(
@@ -2000,6 +2085,8 @@ func TestHandler_Cancel(t *testing.T) {
 func TestHandler_Cancel_InvalidID(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{}
 
 	handler := NewHandler(
@@ -2007,7 +2094,8 @@ func TestHandler_Cancel_InvalidID(
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPatch,
 		"/abc/cancel",
 		nil,
@@ -2023,7 +2111,6 @@ func TestHandler_Cancel_InvalidID(
 	protected := authenticatedHandler(
 		handler.Routes(),
 		5,
-		"user",
 	)
 
 	protected.ServeHTTP(
@@ -2049,6 +2136,8 @@ func TestHandler_Cancel_InvalidID(
 func TestHandler_Cancel_NotFound(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		cancelErr: ErrOrderNotFound,
 	}
@@ -2058,7 +2147,8 @@ func TestHandler_Cancel_NotFound(
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPatch,
 		"/999/cancel",
 		nil,
@@ -2074,7 +2164,6 @@ func TestHandler_Cancel_NotFound(
 	protected := authenticatedHandler(
 		handler.Routes(),
 		5,
-		"user",
 	)
 
 	protected.ServeHTTP(
@@ -2094,6 +2183,8 @@ func TestHandler_Cancel_NotFound(
 func TestHandler_Cancel_ValidationError(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		cancelErr: ErrOrderValidation,
 	}
@@ -2103,7 +2194,8 @@ func TestHandler_Cancel_ValidationError(
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPatch,
 		"/10/cancel",
 		nil,
@@ -2119,7 +2211,6 @@ func TestHandler_Cancel_ValidationError(
 	protected := authenticatedHandler(
 		handler.Routes(),
 		5,
-		"user",
 	)
 
 	protected.ServeHTTP(
@@ -2139,6 +2230,8 @@ func TestHandler_Cancel_ValidationError(
 func TestHandler_Cancel_Unauthorized(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{}
 
 	handler := NewHandler(
@@ -2146,7 +2239,8 @@ func TestHandler_Cancel_Unauthorized(
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPatch,
 		"/10/cancel",
 		nil,
@@ -2171,6 +2265,8 @@ func TestHandler_Cancel_Unauthorized(
 func TestHandler_Cancel_InternalError(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeOrderService{
 		cancelErr: errors.New(
 			"database unavailable",
@@ -2182,7 +2278,8 @@ func TestHandler_Cancel_InternalError(
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPatch,
 		"/10/cancel",
 		nil,
@@ -2198,7 +2295,6 @@ func TestHandler_Cancel_InternalError(
 	protected := authenticatedHandler(
 		handler.Routes(),
 		5,
-		"user",
 	)
 
 	protected.ServeHTTP(

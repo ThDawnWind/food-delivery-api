@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -40,7 +39,7 @@ type fakeAddressService struct {
 }
 
 func (f *fakeAddressService) Create(
-	ctx context.Context,
+	_ context.Context,
 	input *CreateAddress,
 ) (*Address, error) {
 	f.createInput = input
@@ -53,7 +52,7 @@ func (f *fakeAddressService) Create(
 }
 
 func (f *fakeAddressService) GetByID(
-	ctx context.Context,
+	_ context.Context,
 	addressID int64,
 	userID int64,
 ) (*Address, error) {
@@ -68,7 +67,7 @@ func (f *fakeAddressService) GetByID(
 }
 
 func (f *fakeAddressService) ListByUser(
-	ctx context.Context,
+	_ context.Context,
 	userID int64,
 ) ([]Address, error) {
 	f.listByUserID = userID
@@ -81,7 +80,7 @@ func (f *fakeAddressService) ListByUser(
 }
 
 func (f *fakeAddressService) Update(
-	ctx context.Context,
+	_ context.Context,
 	addressID int64,
 	userID int64,
 	input *UpdateAddress,
@@ -98,7 +97,7 @@ func (f *fakeAddressService) Update(
 }
 
 func (f *fakeAddressService) Delete(
-	ctx context.Context,
+	_ context.Context,
 	addressID int64,
 	userID int64,
 ) error {
@@ -114,7 +113,7 @@ type fakeTokenParser struct {
 }
 
 func (f *fakeTokenParser) Parse(
-	token string,
+	_ string,
 ) (*auth.Claims, error) {
 	if f.err != nil {
 		return nil, f.err
@@ -125,13 +124,11 @@ func (f *fakeTokenParser) Parse(
 
 func authenticatedAddressHandler(
 	handler http.Handler,
-	userID int64,
-	role string,
 ) http.Handler {
 	parser := &fakeTokenParser{
 		claims: &auth.Claims{
-			UserID: userID,
-			Role:   role,
+			UserID: 10,
+			Role:   "user",
 		},
 	}
 
@@ -141,21 +138,18 @@ func authenticatedAddressHandler(
 }
 
 func newTestLogger() *slog.Logger {
-	return slog.New(
-		slog.NewJSONHandler(
-			io.Discard,
-			nil,
-		),
-	)
+	return slog.New(slog.DiscardHandler)
 }
 
 func TestHandler_Create(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeAddressService{
 		createAddress: &Address{
 			ID:          1,
 			UserID:      10,
-			City:        "Amsterdam",
-			Street:      "Test Street",
+			City:        testCityAmsterdam,
+			Street:      testStreetTest,
 			HouseNumber: "10",
 		},
 	}
@@ -173,7 +167,8 @@ func TestHandler_Create(t *testing.T) {
 		"apartment_number": "42"
 	}`)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/",
 		bytes.NewReader(body),
@@ -188,8 +183,6 @@ func TestHandler_Create(t *testing.T) {
 
 	authenticatedAddressHandler(
 		handler.Routes(),
-		10,
-		"user",
 	).ServeHTTP(
 		recorder,
 		request,
@@ -217,18 +210,18 @@ func TestHandler_Create(t *testing.T) {
 		)
 	}
 
-	if service.createInput.City != "Amsterdam" {
+	if service.createInput.City != testCityAmsterdam {
 		t.Errorf(
 			"expected city %q, got %q",
-			"Amsterdam",
+			testCityAmsterdam,
 			service.createInput.City,
 		)
 	}
 
-	if service.createInput.Street != "Test Street" {
+	if service.createInput.Street != testStreetTest {
 		t.Errorf(
 			"expected street %q, got %q",
-			"Test Street",
+			testStreetTest,
 			service.createInput.Street,
 		)
 	}
@@ -243,9 +236,10 @@ func TestHandler_Create(t *testing.T) {
 
 	var response Address
 
-	if err := json.NewDecoder(
+	err := json.NewDecoder(
 		recorder.Body,
-	).Decode(&response); err != nil {
+	).Decode(&response)
+	if err != nil {
 		t.Fatalf(
 			"failed to decode response: %v",
 			err,
@@ -264,6 +258,8 @@ func TestHandler_Create(t *testing.T) {
 func TestHandler_Create_Unauthorized(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeAddressService{}
 
 	handler := NewHandler(
@@ -277,7 +273,8 @@ func TestHandler_Create_Unauthorized(
 		"house_number": "10"
 	}`)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/",
 		bytes.NewReader(body),
@@ -308,6 +305,8 @@ func TestHandler_Create_Unauthorized(
 func TestHandler_Create_InvalidJSON(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeAddressService{}
 
 	handler := NewHandler(
@@ -315,7 +314,8 @@ func TestHandler_Create_InvalidJSON(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/",
 		bytes.NewBufferString(
@@ -332,8 +332,6 @@ func TestHandler_Create_InvalidJSON(
 
 	authenticatedAddressHandler(
 		handler.Routes(),
-		10,
-		"user",
 	).ServeHTTP(
 		recorder,
 		request,
@@ -357,6 +355,8 @@ func TestHandler_Create_InvalidJSON(
 func TestHandler_Create_ValidationError(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeAddressService{
 		createErr: ErrAddressValidation,
 	}
@@ -372,7 +372,8 @@ func TestHandler_Create_ValidationError(
 		"house_number": "10"
 	}`)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/",
 		bytes.NewReader(body),
@@ -387,8 +388,6 @@ func TestHandler_Create_ValidationError(
 
 	authenticatedAddressHandler(
 		handler.Routes(),
-		10,
-		"user",
 	).ServeHTTP(
 		recorder,
 		request,
@@ -406,6 +405,8 @@ func TestHandler_Create_ValidationError(
 func TestHandler_Create_InternalError(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeAddressService{
 		createErr: errors.New(
 			"database unavailable",
@@ -423,7 +424,8 @@ func TestHandler_Create_InternalError(
 		"house_number": "10"
 	}`)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/",
 		bytes.NewReader(body),
@@ -438,8 +440,6 @@ func TestHandler_Create_InternalError(
 
 	authenticatedAddressHandler(
 		handler.Routes(),
-		10,
-		"user",
 	).ServeHTTP(
 		recorder,
 		request,
@@ -455,20 +455,22 @@ func TestHandler_Create_InternalError(
 }
 
 func TestHandler_ListByUser(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeAddressService{
 		listByUserAddresses: []Address{
 			{
 				ID:          1,
 				UserID:      10,
-				City:        "Amsterdam",
-				Street:      "First Street",
+				City:        testCityAmsterdam,
+				Street:      testStreetFirst,
 				HouseNumber: "1",
 			},
 			{
 				ID:          2,
 				UserID:      10,
-				City:        "Amsterdam",
-				Street:      "Second Street",
+				City:        testCityAmsterdam,
+				Street:      testStreetSecond,
 				HouseNumber: "2",
 			},
 		},
@@ -479,7 +481,8 @@ func TestHandler_ListByUser(t *testing.T) {
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/",
 		nil,
@@ -494,8 +497,6 @@ func TestHandler_ListByUser(t *testing.T) {
 
 	authenticatedAddressHandler(
 		handler.Routes(),
-		10,
-		"user",
 	).ServeHTTP(
 		recorder,
 		request,
@@ -519,9 +520,10 @@ func TestHandler_ListByUser(t *testing.T) {
 
 	var response []Address
 
-	if err := json.NewDecoder(
+	err := json.NewDecoder(
 		recorder.Body,
-	).Decode(&response); err != nil {
+	).Decode(&response)
+	if err != nil {
 		t.Fatalf(
 			"failed to decode response: %v",
 			err,
@@ -540,6 +542,8 @@ func TestHandler_ListByUser(t *testing.T) {
 func TestHandler_ListByUser_Unauthorized(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeAddressService{}
 
 	handler := NewHandler(
@@ -547,7 +551,8 @@ func TestHandler_ListByUser_Unauthorized(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/",
 		nil,
@@ -578,6 +583,8 @@ func TestHandler_ListByUser_Unauthorized(
 func TestHandler_ListByUser_InternalError(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeAddressService{
 		listByUserErr: errors.New(
 			"database unavailable",
@@ -589,7 +596,8 @@ func TestHandler_ListByUser_InternalError(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/",
 		nil,
@@ -604,8 +612,6 @@ func TestHandler_ListByUser_InternalError(
 
 	authenticatedAddressHandler(
 		handler.Routes(),
-		10,
-		"user",
 	).ServeHTTP(
 		recorder,
 		request,
@@ -621,12 +627,14 @@ func TestHandler_ListByUser_InternalError(
 }
 
 func TestHandler_GetByID(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeAddressService{
 		getByIDAddress: &Address{
 			ID:          5,
 			UserID:      10,
-			City:        "Amsterdam",
-			Street:      "Test Street",
+			City:        testCityAmsterdam,
+			Street:      testStreetTest,
 			HouseNumber: "10",
 		},
 	}
@@ -636,7 +644,8 @@ func TestHandler_GetByID(t *testing.T) {
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/5",
 		nil,
@@ -651,8 +660,6 @@ func TestHandler_GetByID(t *testing.T) {
 
 	authenticatedAddressHandler(
 		handler.Routes(),
-		10,
-		"user",
 	).ServeHTTP(
 		recorder,
 		request,
@@ -684,9 +691,10 @@ func TestHandler_GetByID(t *testing.T) {
 
 	var response Address
 
-	if err := json.NewDecoder(
+	err := json.NewDecoder(
 		recorder.Body,
-	).Decode(&response); err != nil {
+	).Decode(&response)
+	if err != nil {
 		t.Fatalf(
 			"failed to decode response: %v",
 			err,
@@ -705,6 +713,8 @@ func TestHandler_GetByID(t *testing.T) {
 func TestHandler_GetByID_InvalidID(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeAddressService{}
 
 	handler := NewHandler(
@@ -712,7 +722,8 @@ func TestHandler_GetByID_InvalidID(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/abc",
 		nil,
@@ -737,6 +748,8 @@ func TestHandler_GetByID_InvalidID(
 func TestHandler_GetByID_NotFound(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeAddressService{
 		getByIDErr: ErrAddressNotFound,
 	}
@@ -746,7 +759,8 @@ func TestHandler_GetByID_NotFound(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/999",
 		nil,
@@ -761,8 +775,6 @@ func TestHandler_GetByID_NotFound(
 
 	authenticatedAddressHandler(
 		handler.Routes(),
-		10,
-		"user",
 	).ServeHTTP(
 		recorder,
 		request,
@@ -780,6 +792,8 @@ func TestHandler_GetByID_NotFound(
 func TestHandler_GetByID_Unauthorized(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeAddressService{}
 
 	handler := NewHandler(
@@ -787,7 +801,8 @@ func TestHandler_GetByID_Unauthorized(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/5",
 		nil,
@@ -810,12 +825,14 @@ func TestHandler_GetByID_Unauthorized(
 }
 
 func TestHandler_Update(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeAddressService{
 		updateAddress: &Address{
 			ID:          5,
 			UserID:      10,
-			City:        "Rotterdam",
-			Street:      "New Street",
+			City:        testCityRotterdam,
+			Street:      testStreetNew,
 			HouseNumber: "20",
 		},
 	}
@@ -830,7 +847,8 @@ func TestHandler_Update(t *testing.T) {
 		"street": "New Street"
 	}`)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPatch,
 		"/5",
 		bytes.NewReader(body),
@@ -845,8 +863,6 @@ func TestHandler_Update(t *testing.T) {
 
 	authenticatedAddressHandler(
 		handler.Routes(),
-		10,
-		"user",
 	).ServeHTTP(
 		recorder,
 		request,
@@ -888,10 +904,10 @@ func TestHandler_Update(t *testing.T) {
 		)
 	}
 
-	if *service.updateInput.City != "Rotterdam" {
+	if *service.updateInput.City != testCityRotterdam {
 		t.Errorf(
 			"expected city %q, got %q",
-			"Rotterdam",
+			testCityRotterdam,
 			*service.updateInput.City,
 		)
 	}
@@ -900,6 +916,8 @@ func TestHandler_Update(t *testing.T) {
 func TestHandler_Update_NotFound(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeAddressService{
 		updateErr: ErrAddressNotFound,
 	}
@@ -909,7 +927,8 @@ func TestHandler_Update_NotFound(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPatch,
 		"/999",
 		bytes.NewBufferString(
@@ -926,8 +945,6 @@ func TestHandler_Update_NotFound(
 
 	authenticatedAddressHandler(
 		handler.Routes(),
-		10,
-		"user",
 	).ServeHTTP(
 		recorder,
 		request,
@@ -945,6 +962,8 @@ func TestHandler_Update_NotFound(
 func TestHandler_Update_InvalidJSON(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeAddressService{}
 
 	handler := NewHandler(
@@ -952,7 +971,8 @@ func TestHandler_Update_InvalidJSON(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPatch,
 		"/5",
 		bytes.NewBufferString(
@@ -969,8 +989,6 @@ func TestHandler_Update_InvalidJSON(
 
 	authenticatedAddressHandler(
 		handler.Routes(),
-		10,
-		"user",
 	).ServeHTTP(
 		recorder,
 		request,
@@ -986,6 +1004,8 @@ func TestHandler_Update_InvalidJSON(
 }
 
 func TestHandler_Delete(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeAddressService{}
 
 	handler := NewHandler(
@@ -993,7 +1013,8 @@ func TestHandler_Delete(t *testing.T) {
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodDelete,
 		"/5",
 		nil,
@@ -1008,8 +1029,6 @@ func TestHandler_Delete(t *testing.T) {
 
 	authenticatedAddressHandler(
 		handler.Routes(),
-		10,
-		"user",
 	).ServeHTTP(
 		recorder,
 		request,
@@ -1043,6 +1062,8 @@ func TestHandler_Delete(t *testing.T) {
 func TestHandler_Delete_NotFound(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeAddressService{
 		deleteErr: ErrAddressNotFound,
 	}
@@ -1052,7 +1073,8 @@ func TestHandler_Delete_NotFound(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodDelete,
 		"/999",
 		nil,
@@ -1067,8 +1089,6 @@ func TestHandler_Delete_NotFound(
 
 	authenticatedAddressHandler(
 		handler.Routes(),
-		10,
-		"user",
 	).ServeHTTP(
 		recorder,
 		request,
@@ -1086,6 +1106,8 @@ func TestHandler_Delete_NotFound(
 func TestHandler_Delete_Unauthorized(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	service := &fakeAddressService{}
 
 	handler := NewHandler(
@@ -1093,7 +1115,8 @@ func TestHandler_Delete_Unauthorized(
 		newTestLogger(),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodDelete,
 		"/5",
 		nil,

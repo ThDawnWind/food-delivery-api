@@ -13,10 +13,10 @@ import (
 var ErrInvalidToken = errors.New("invalid token")
 
 type Claims struct {
+	jwt.RegisteredClaims
+
 	UserID int64  `json:"user_id"`
 	Role   string `json:"role"`
-
-	jwt.RegisteredClaims
 }
 
 type TokenManager struct {
@@ -110,7 +110,7 @@ func (m *TokenManager) Parse(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(
 		tokenString,
 		claims,
-		func(t *jwt.Token) (any, error) {
+		func(_ *jwt.Token) (any, error) {
 			return m.secret, nil
 		},
 		jwt.WithValidMethods(
@@ -122,7 +122,7 @@ func (m *TokenManager) Parse(tokenString string) (*Claims, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"%w: %v",
+			"%w: %w",
 			ErrInvalidToken,
 			err,
 		)

@@ -15,32 +15,43 @@ type fakeRepository struct {
 	err             error
 }
 
-func (f *fakeRepository) GetByID(ctx context.Context, id int64) (*Category, error) {
-	return f.category, f.err
+func (f *fakeRepository) GetByID(_ context.Context, _ int64) (*Category, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	return f.category, nil
 }
 
-func (f *fakeRepository) List(ctx context.Context) ([]Category, error) {
+func (f *fakeRepository) List(_ context.Context) ([]Category, error) {
 	return f.categories, f.err
 }
 
-func (f *fakeRepository) Create(ctx context.Context, name, slug string) (*Category, error) {
-	return f.category, f.err
+func (f *fakeRepository) Create(_ context.Context, _, _ string) (*Category, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	return f.category, nil
 }
 
-func (f *fakeRepository) Update(ctx context.Context, category *Category) error {
+func (f *fakeRepository) Update(_ context.Context, category *Category) error {
 	f.updatedCategory = category
+
 	return f.err
 }
 
-func (f *fakeRepository) Delete(ctx context.Context, id int64) error {
+func (f *fakeRepository) Delete(_ context.Context, _ int64) error {
 	return f.err
 }
 
 func TestService_GetByID(t *testing.T) {
+	t.Parallel()
+
 	expected := &Category{
 		ID:   1,
-		Name: "Pizza",
-		Slug: "pizza",
+		Name: testCategoryName,
+		Slug: testCategorySlug,
 	}
 
 	repo := &fakeRepository{
@@ -72,6 +83,8 @@ func TestService_GetByID(t *testing.T) {
 }
 
 func TestService_GetByID_NotFound(t *testing.T) {
+	t.Parallel()
+
 	repo := &fakeRepository{
 		err: pgx.ErrNoRows,
 	}
@@ -90,8 +103,10 @@ func TestService_GetByID_NotFound(t *testing.T) {
 }
 
 func TestService_List(t *testing.T) {
+	t.Parallel()
+
 	expected := []Category{
-		{ID: 1, Name: "Pizza", Slug: "pizza"},
+		{ID: 1, Name: testCategoryName, Slug: testCategorySlug},
 		{ID: 2, Name: "Sushi", Slug: "sushi"},
 	}
 
@@ -107,7 +122,7 @@ func TestService_List(t *testing.T) {
 	}
 
 	if categories == nil {
-		t.Errorf("expected categories, got nil")
+		t.Error("expected categories, got nil")
 	}
 
 	if len(categories) != len(expected) {
@@ -149,6 +164,8 @@ func TestService_List(t *testing.T) {
 }
 
 func TestService_List_Error(t *testing.T) {
+	t.Parallel()
+
 	expectedErr := errors.New("repository failure")
 
 	repo := &fakeRepository{
@@ -173,10 +190,12 @@ func TestService_List_Error(t *testing.T) {
 }
 
 func TestService_Create(t *testing.T) {
+	t.Parallel()
+
 	expected := &Category{
 		ID:   1,
-		Name: "Pizzas",
-		Slug: "pizzas",
+		Name: testCategoryName,
+		Slug: testCategorySlug,
 	}
 
 	repo := &fakeRepository{
@@ -187,10 +206,9 @@ func TestService_Create(t *testing.T) {
 
 	category, err := service.Create(
 		context.Background(),
-		"Pizzas",
-		"pizzas",
+		testCategoryName,
+		testCategorySlug,
 	)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -210,10 +228,11 @@ func TestService_Create(t *testing.T) {
 	if category.Slug != expected.Slug {
 		t.Errorf("expected slug %q, got %q", expected.Slug, category.Slug)
 	}
-
 }
 
 func TestService_Create_EmptyName(t *testing.T) {
+	t.Parallel()
+
 	repo := &fakeRepository{}
 
 	service := NewService(repo)
@@ -234,6 +253,8 @@ func TestService_Create_EmptyName(t *testing.T) {
 }
 
 func TestService_Create_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	expectedErr := errors.New("repository failure")
 
 	repo := &fakeRepository{
@@ -253,7 +274,7 @@ func TestService_Create_RepositoryError(t *testing.T) {
 	}
 
 	if err == nil {
-		t.Fatalf("expected error, got nil")
+		t.Fatal("expected error, got nil")
 	}
 
 	if !errors.Is(err, expectedErr) {
@@ -262,6 +283,8 @@ func TestService_Create_RepositoryError(t *testing.T) {
 }
 
 func TestService_Update(t *testing.T) {
+	t.Parallel()
+
 	category := &Category{
 		ID:   1,
 		Name: "  Pizza  ",
@@ -280,24 +303,26 @@ func TestService_Update(t *testing.T) {
 		t.Fatal("expected repository Update to be called")
 	}
 
-	if repo.updatedCategory.Name != "Pizza" {
+	if repo.updatedCategory.Name != testCategoryName {
 		t.Errorf(
 			"expected name %q, got %q",
-			"Pizza",
+			testCategoryName,
 			repo.category.Name,
 		)
 	}
 
-	if repo.updatedCategory.Slug != "pizza" {
+	if repo.updatedCategory.Slug != testCategorySlug {
 		t.Errorf(
-			"expected name %q, got %q",
-			"pizza",
+			"expected slug %q, got %q",
+			testCategorySlug,
 			repo.category.Slug,
 		)
 	}
 }
 
 func TestService_Update_NilCategory(t *testing.T) {
+	t.Parallel()
+
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
@@ -305,7 +330,6 @@ func TestService_Update_NilCategory(t *testing.T) {
 		context.Background(),
 		nil,
 	)
-
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -319,6 +343,8 @@ func TestService_Update_NilCategory(t *testing.T) {
 }
 
 func TestService_Update_EmptyName(t *testing.T) {
+	t.Parallel()
+
 	category := &Category{
 		ID:   1,
 		Name: "   ",
@@ -329,7 +355,6 @@ func TestService_Update_EmptyName(t *testing.T) {
 	service := NewService(repo)
 
 	err := service.Update(context.Background(), category)
-
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -343,9 +368,11 @@ func TestService_Update_EmptyName(t *testing.T) {
 }
 
 func TestService_Update_EmptySlug(t *testing.T) {
+	t.Parallel()
+
 	category := &Category{
 		ID:   1,
-		Name: "Pizza",
+		Name: testCategoryName,
 		Slug: "   ",
 	}
 
@@ -353,7 +380,6 @@ func TestService_Update_EmptySlug(t *testing.T) {
 	service := NewService(repo)
 
 	err := service.Update(context.Background(), category)
-
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -367,10 +393,12 @@ func TestService_Update_EmptySlug(t *testing.T) {
 }
 
 func TestService_Update_NotFound(t *testing.T) {
+	t.Parallel()
+
 	category := &Category{
 		ID:   999,
-		Name: "Pizza",
-		Slug: "pizza",
+		Name: testCategoryName,
+		Slug: testCategorySlug,
 	}
 
 	repo := &fakeRepository{
@@ -380,7 +408,6 @@ func TestService_Update_NotFound(t *testing.T) {
 	service := NewService(repo)
 
 	err := service.Update(context.Background(), category)
-
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -394,12 +421,14 @@ func TestService_Update_NotFound(t *testing.T) {
 }
 
 func TestService_Update_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	expectedErr := errors.New("repository failure")
 
 	category := &Category{
 		ID:   1,
-		Name: "Pizza",
-		Slug: "pizza",
+		Name: testCategoryName,
+		Slug: testCategorySlug,
 	}
 
 	repo := &fakeRepository{
@@ -409,7 +438,6 @@ func TestService_Update_RepositoryError(t *testing.T) {
 	service := NewService(repo)
 
 	err := service.Update(context.Background(), category)
-
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -423,6 +451,8 @@ func TestService_Update_RepositoryError(t *testing.T) {
 }
 
 func TestService_Delete(t *testing.T) {
+	t.Parallel()
+
 	repo := &fakeRepository{}
 	service := NewService(repo)
 
@@ -430,13 +460,14 @@ func TestService_Delete(t *testing.T) {
 		context.Background(),
 		1,
 	)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestService_Delete_NotFound(t *testing.T) {
+	t.Parallel()
+
 	repo := &fakeRepository{
 		err: pgx.ErrNoRows,
 	}
@@ -447,7 +478,6 @@ func TestService_Delete_NotFound(t *testing.T) {
 		context.Background(),
 		999,
 	)
-
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -461,6 +491,8 @@ func TestService_Delete_NotFound(t *testing.T) {
 }
 
 func TestService_Delete_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	expectedErr := errors.New("repository failure")
 
 	repo := &fakeRepository{
@@ -473,7 +505,6 @@ func TestService_Delete_RepositoryError(t *testing.T) {
 		context.Background(),
 		1,
 	)
-
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

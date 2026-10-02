@@ -13,6 +13,8 @@ import (
 )
 
 func TestLogInternalError(t *testing.T) {
+	t.Parallel()
+
 	var buffer bytes.Buffer
 
 	logger := slog.New(
@@ -22,7 +24,8 @@ func TestLogInternalError(t *testing.T) {
 		),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/api/v1/auth/register?token=secret",
 		nil,
@@ -30,13 +33,13 @@ func TestLogInternalError(t *testing.T) {
 
 	request.Header.Set(
 		middleware.RequestIDHeader,
-		"test-request-id",
+		testRequestID,
 	)
 
 	handler := middleware.RequestID(
 		http.HandlerFunc(
 			func(
-				w http.ResponseWriter,
+				_ http.ResponseWriter,
 				r *http.Request,
 			) {
 				LogInternalError(
@@ -60,10 +63,11 @@ func TestLogInternalError(t *testing.T) {
 
 	var entry map[string]any
 
-	if err := json.Unmarshal(
+	err := json.Unmarshal(
 		buffer.Bytes(),
 		&entry,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf(
 			"failed to decode log entry: %v",
 			err,
@@ -84,7 +88,7 @@ func TestLogInternalError(t *testing.T) {
 		)
 	}
 
-	if entry["request_id"] != "test-request-id" {
+	if entry["request_id"] != testRequestID {
 		t.Errorf(
 			"unexpected request ID: %v",
 			entry["request_id"],
@@ -123,6 +127,8 @@ func TestLogInternalError(t *testing.T) {
 }
 
 func TestWriteInternalError(t *testing.T) {
+	t.Parallel()
+
 	var buffer bytes.Buffer
 
 	logger := slog.New(
@@ -132,7 +138,8 @@ func TestWriteInternalError(t *testing.T) {
 		),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/api/v1/test",
 		nil,
@@ -140,7 +147,7 @@ func TestWriteInternalError(t *testing.T) {
 
 	request.Header.Set(
 		middleware.RequestIDHeader,
-		"test-request-id",
+		testRequestID,
 	)
 
 	response := httptest.NewRecorder()
@@ -179,9 +186,10 @@ func TestWriteInternalError(t *testing.T) {
 
 	var body map[string]string
 
-	if err := json.NewDecoder(
+	err := json.NewDecoder(
 		response.Body,
-	).Decode(&body); err != nil {
+	).Decode(&body)
+	if err != nil {
 		t.Fatalf(
 			"failed to decode response: %v",
 			err,

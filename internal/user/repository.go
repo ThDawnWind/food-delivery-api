@@ -54,7 +54,6 @@ func (r *Repository) Create(ctx context.Context, input *CreateUser) (*User, erro
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
-
 	if err != nil {
 		var pgErr *pgconn.PgError
 
@@ -99,7 +98,6 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (*User, error) {
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
-
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to get user by id: %w",
@@ -137,7 +135,6 @@ func (r *Repository) GetByEmail(ctx context.Context, email string) (*User, error
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
-
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to get user by email: %w",

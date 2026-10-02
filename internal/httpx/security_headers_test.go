@@ -7,15 +7,18 @@ import (
 )
 
 func TestSecurityHeaders(t *testing.T) {
+	t.Parallel()
+
 	next := http.HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request) {
+		func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		},
 	)
 
 	handler := SecurityHeaders(next)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/test",
 		nil,

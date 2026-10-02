@@ -19,11 +19,13 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 
-	if err := decoder.Decode(dst); err != nil {
+	err := decoder.Decode(dst)
+	if err != nil {
 		return err
 	}
 
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+	err = decoder.Decode(&struct{}{})
+	if err != io.EOF {
 		if err == nil {
 			return errors.New("request body must contain a single JSON value")
 		}

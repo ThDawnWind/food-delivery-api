@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -22,16 +21,21 @@ type fakeService struct {
 	listFilter    ListFilter
 }
 
-func (f *fakeService) GetByID(ctx context.Context, id int64) (*Product, error) {
-	return f.product, f.err
+func (f *fakeService) GetByID(_ context.Context, _ int64) (*Product, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	return f.product, nil
 }
 
-func (f *fakeService) List(ctx context.Context, filter ListFilter) ([]Product, error) {
+func (f *fakeService) List(_ context.Context, filter ListFilter) ([]Product, error) {
 	f.listFilter = filter
+
 	return f.products, f.err
 }
 
-func (f *fakeService) Create(ctx context.Context, product *Product) (*Product, error) {
+func (f *fakeService) Create(_ context.Context, product *Product) (*Product, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -41,7 +45,7 @@ func (f *fakeService) Create(ctx context.Context, product *Product) (*Product, e
 	return product, nil
 }
 
-func (f *fakeService) Update(ctx context.Context, product *Product) (*Product, error) {
+func (f *fakeService) Update(_ context.Context, product *Product) (*Product, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -51,7 +55,7 @@ func (f *fakeService) Update(ctx context.Context, product *Product) (*Product, e
 	return product, nil
 }
 
-func (f *fakeService) Deactivate(ctx context.Context, id int64) error {
+func (f *fakeService) Deactivate(_ context.Context, id int64) error {
 	if f.err != nil {
 		return f.err
 	}
@@ -59,14 +63,15 @@ func (f *fakeService) Deactivate(ctx context.Context, id int64) error {
 	f.deactivatedID = id
 
 	return nil
-
 }
 
 func TestHandler_GetByID(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{
 		product: &Product{
 			ID:         1,
-			Name:       "Pepperoni",
+			Name:       testProductNamePepperoni,
 			Price:      59900,
 			Weight:     450,
 			CategoryID: 1,
@@ -83,7 +88,8 @@ func TestHandler_GetByID(t *testing.T) {
 	router := chi.NewRouter()
 	router.Get("/products/{id}", handler.GetByID)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/products/1",
 		nil,
@@ -103,7 +109,8 @@ func TestHandler_GetByID(t *testing.T) {
 
 	var product Product
 
-	if err := json.NewDecoder(rec.Body).Decode(&product); err != nil {
+	err := json.NewDecoder(rec.Body).Decode(&product)
+	if err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
@@ -115,16 +122,18 @@ func TestHandler_GetByID(t *testing.T) {
 		)
 	}
 
-	if product.Name != "Pepperoni" {
+	if product.Name != testProductNamePepperoni {
 		t.Errorf(
 			"expected name %q, got %q",
-			"Pepperoni",
+			testProductNamePepperoni,
 			product.Name,
 		)
 	}
 }
 
 func TestHandler_GetByID_InvalidID(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{}
 	handler := NewHandler(
 		service,
@@ -134,7 +143,8 @@ func TestHandler_GetByID_InvalidID(t *testing.T) {
 	router := chi.NewRouter()
 	router.Get("/products/{id}", handler.GetByID)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/products/abc",
 		nil,
@@ -154,6 +164,8 @@ func TestHandler_GetByID_InvalidID(t *testing.T) {
 }
 
 func TestHandler_GetByID_NotFound(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{
 		err: ErrProductNotFound,
 	}
@@ -166,7 +178,8 @@ func TestHandler_GetByID_NotFound(t *testing.T) {
 	router := chi.NewRouter()
 	router.Get("/products/{id}", handler.GetByID)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/products/999",
 		nil,
@@ -186,6 +199,8 @@ func TestHandler_GetByID_NotFound(t *testing.T) {
 }
 
 func TestHandler_GetByID_ServiceError(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{
 		err: errors.New("service unavailable"),
 	}
@@ -198,7 +213,8 @@ func TestHandler_GetByID_ServiceError(t *testing.T) {
 	router := chi.NewRouter()
 	router.Get("/products/{id}", handler.GetByID)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/products/1",
 		nil,
@@ -218,11 +234,13 @@ func TestHandler_GetByID_ServiceError(t *testing.T) {
 }
 
 func TestHandler_List(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{
 		products: []Product{
 			{
 				ID:         1,
-				Name:       "Pepperoni",
+				Name:       testProductNamePepperoni,
 				Price:      59900,
 				Weight:     450,
 				CategoryID: 1,
@@ -243,7 +261,8 @@ func TestHandler_List(t *testing.T) {
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/products",
 		nil,
@@ -263,7 +282,8 @@ func TestHandler_List(t *testing.T) {
 
 	var products []Product
 
-	if err := json.NewDecoder(rec.Body).Decode(&products); err != nil {
+	err := json.NewDecoder(rec.Body).Decode(&products)
+	if err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
@@ -275,16 +295,18 @@ func TestHandler_List(t *testing.T) {
 		)
 	}
 
-	if products[0].Name != "Pepperoni" {
+	if products[0].Name != testProductNamePepperoni {
 		t.Errorf(
 			"expected first product name %q, got %q",
-			"Pepperoni",
+			testProductNamePepperoni,
 			products[0].Name,
 		)
 	}
 }
 
 func TestHandler_List_ServiceError(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{
 		err: errors.New("service unavailable"),
 	}
@@ -293,7 +315,8 @@ func TestHandler_List_ServiceError(t *testing.T) {
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/products",
 		nil,
@@ -313,6 +336,8 @@ func TestHandler_List_ServiceError(t *testing.T) {
 }
 
 func TestHandler_Create(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{}
 	handler := NewHandler(
 		service,
@@ -334,7 +359,8 @@ func TestHandler_Create(t *testing.T) {
 		]
 	}`
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/products",
 		strings.NewReader(body),
@@ -356,10 +382,10 @@ func TestHandler_Create(t *testing.T) {
 		t.Fatal("expected product to be passed to service")
 	}
 
-	if service.product.Name != "Pepperoni" {
+	if service.product.Name != testProductNamePepperoni {
 		t.Errorf(
 			"expected name %q, got %q",
-			"Pepperoni",
+			testProductNamePepperoni,
 			service.product.Name,
 		)
 	}
@@ -386,13 +412,16 @@ func TestHandler_Create(t *testing.T) {
 }
 
 func TestHandler_Create_InvalidJSON(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{}
 	handler := NewHandler(
 		service,
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/products",
 		strings.NewReader(`{"name":`),
@@ -416,6 +445,8 @@ func TestHandler_Create_InvalidJSON(t *testing.T) {
 }
 
 func TestHandler_Create_ValidationError(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{
 		err: ErrProductValidation,
 	}
@@ -431,7 +462,8 @@ func TestHandler_Create_ValidationError(t *testing.T) {
 		"category_id": 0
 	}`
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/products",
 		strings.NewReader(body),
@@ -451,6 +483,8 @@ func TestHandler_Create_ValidationError(t *testing.T) {
 }
 
 func TestHandler_Create_ServiceError(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{
 		err: errors.New("service unavailable"),
 	}
@@ -466,7 +500,8 @@ func TestHandler_Create_ServiceError(t *testing.T) {
 		"category_id": 1
 	}`
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/products",
 		strings.NewReader(body),
@@ -486,6 +521,8 @@ func TestHandler_Create_ServiceError(t *testing.T) {
 }
 
 func TestHandler_Update(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{}
 	handler := NewHandler(
 		service,
@@ -511,7 +548,8 @@ func TestHandler_Update(t *testing.T) {
 		]
 	}`
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPut,
 		"/products/10",
 		strings.NewReader(body),
@@ -559,6 +597,8 @@ func TestHandler_Update(t *testing.T) {
 }
 
 func TestHandler_Update_InvalidID(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{}
 	handler := NewHandler(
 		service,
@@ -568,7 +608,8 @@ func TestHandler_Update_InvalidID(t *testing.T) {
 	router := chi.NewRouter()
 	router.Put("/products/{id}", handler.Update)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPut,
 		"/products/abc",
 		strings.NewReader(`{}`),
@@ -592,6 +633,8 @@ func TestHandler_Update_InvalidID(t *testing.T) {
 }
 
 func TestHandler_Update_InvalidJSON(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{}
 	handler := NewHandler(
 		service,
@@ -601,7 +644,8 @@ func TestHandler_Update_InvalidJSON(t *testing.T) {
 	router := chi.NewRouter()
 	router.Put("/products/{id}", handler.Update)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPut,
 		"/products/1",
 		strings.NewReader(`{"name":`),
@@ -621,6 +665,8 @@ func TestHandler_Update_InvalidJSON(t *testing.T) {
 }
 
 func TestHandler_Update_ValidationError(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{
 		err: ErrProductValidation,
 	}
@@ -641,7 +687,8 @@ func TestHandler_Update_ValidationError(t *testing.T) {
 		"is_active": true
 	}`
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPut,
 		"/products/1",
 		strings.NewReader(body),
@@ -661,6 +708,8 @@ func TestHandler_Update_ValidationError(t *testing.T) {
 }
 
 func TestHandler_Update_NotFound(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{
 		err: ErrProductNotFound,
 	}
@@ -681,7 +730,8 @@ func TestHandler_Update_NotFound(t *testing.T) {
 		"is_active": true
 	}`
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPut,
 		"/products/999",
 		strings.NewReader(body),
@@ -701,6 +751,8 @@ func TestHandler_Update_NotFound(t *testing.T) {
 }
 
 func TestHandler_Update_ServiceError(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{
 		err: errors.New("service unavailable"),
 	}
@@ -721,7 +773,8 @@ func TestHandler_Update_ServiceError(t *testing.T) {
 		"is_active": true
 	}`
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPut,
 		"/products/1",
 		strings.NewReader(body),
@@ -741,6 +794,8 @@ func TestHandler_Update_ServiceError(t *testing.T) {
 }
 
 func TestHandler_Delete(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{}
 	handler := NewHandler(
 		service,
@@ -750,7 +805,8 @@ func TestHandler_Delete(t *testing.T) {
 	router := chi.NewRouter()
 	router.Delete("/products/{id}", handler.Delete)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodDelete,
 		"/products/10",
 		nil,
@@ -778,6 +834,8 @@ func TestHandler_Delete(t *testing.T) {
 }
 
 func TestHandler_Delete_InvalidID(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{}
 	handler := NewHandler(
 		service,
@@ -787,7 +845,8 @@ func TestHandler_Delete_InvalidID(t *testing.T) {
 	router := chi.NewRouter()
 	router.Delete("/products/{id}", handler.Delete)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodDelete,
 		"/products/abc",
 		nil,
@@ -811,6 +870,8 @@ func TestHandler_Delete_InvalidID(t *testing.T) {
 }
 
 func TestHandler_Delete_NotFound(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{
 		err: ErrProductNotFound,
 	}
@@ -823,7 +884,8 @@ func TestHandler_Delete_NotFound(t *testing.T) {
 	router := chi.NewRouter()
 	router.Delete("/products/{id}", handler.Delete)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodDelete,
 		"/products/999",
 		nil,
@@ -843,6 +905,8 @@ func TestHandler_Delete_NotFound(t *testing.T) {
 }
 
 func TestHandler_Delete_ServiceError(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{
 		err: errors.New("service unavailable"),
 	}
@@ -855,7 +919,8 @@ func TestHandler_Delete_ServiceError(t *testing.T) {
 	router := chi.NewRouter()
 	router.Delete("/products/{id}", handler.Delete)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodDelete,
 		"/products/1",
 		nil,
@@ -875,6 +940,8 @@ func TestHandler_Delete_ServiceError(t *testing.T) {
 }
 
 func TestHandler_List_WithFilters(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{
 		products: []Product{},
 	}
@@ -884,7 +951,8 @@ func TestHandler_List_WithFilters(t *testing.T) {
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/products?category_id=3&search=pizza&limit=10&offset=20",
 		nil,
@@ -917,7 +985,7 @@ func TestHandler_List_WithFilters(t *testing.T) {
 	if service.listFilter.Search != "pizza" {
 		t.Errorf(
 			"expected search %q, got %q",
-			"pizza",
+			testProductSearchPizza,
 			service.listFilter.Search,
 		)
 	}
@@ -940,13 +1008,16 @@ func TestHandler_List_WithFilters(t *testing.T) {
 }
 
 func TestHandler_List_InvalidCategoryID(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{}
 	handler := NewHandler(
 		service,
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/products?category_id=abc",
 		nil,
@@ -966,13 +1037,16 @@ func TestHandler_List_InvalidCategoryID(t *testing.T) {
 }
 
 func TestHandler_List_InvalidLimit(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{}
 	handler := NewHandler(
 		service,
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/products?limit=abc",
 		nil,
@@ -992,13 +1066,16 @@ func TestHandler_List_InvalidLimit(t *testing.T) {
 }
 
 func TestHandler_List_InvalidOffset(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{}
 	handler := NewHandler(
 		service,
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/products?offset=abc",
 		nil,
@@ -1018,6 +1095,8 @@ func TestHandler_List_InvalidOffset(t *testing.T) {
 }
 
 func TestHandler_List_ValidationError(t *testing.T) {
+	t.Parallel()
+
 	service := &fakeService{
 		err: ErrProductValidation,
 	}
@@ -1027,7 +1106,8 @@ func TestHandler_List_ValidationError(t *testing.T) {
 		newTestLogger(),
 	)
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/products?offset=-1",
 		nil,
@@ -1047,10 +1127,5 @@ func TestHandler_List_ValidationError(t *testing.T) {
 }
 
 func newTestLogger() *slog.Logger {
-	return slog.New(
-		slog.NewJSONHandler(
-			io.Discard,
-			nil,
-		),
-	)
+	return slog.New(slog.DiscardHandler)
 }

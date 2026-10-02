@@ -8,10 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ThDawnWind/food-delivery-api/internal/database"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/ThDawnWind/food-delivery-api/internal/database"
 )
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_GetByID(t *testing.T) {
 	ctx := context.Background()
 
@@ -71,7 +73,6 @@ func TestRepository_GetByID(t *testing.T) {
 		450,
 		categoryID,
 	).Scan(&productID)
-
 	if err != nil {
 		t.Fatalf("failed to create product: %v", err)
 	}
@@ -107,7 +108,6 @@ func TestRepository_GetByID(t *testing.T) {
 		"/images/pepperoni-1.webp",
 		"/images/pepperoni-2.webp",
 	)
-
 	if err != nil {
 		t.Fatalf("failed to create product images: %v", err)
 	}
@@ -117,6 +117,17 @@ func TestRepository_GetByID(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	assertProductFields(t, product, productID, categoryID)
+	assertProductImages(t, product)
+}
+
+func assertProductFields(
+	t *testing.T,
+	product *Product,
+	productID, categoryID int64,
+) {
+	t.Helper()
+
 	if product == nil {
 		t.Fatal("expected product, got nil")
 	}
@@ -125,8 +136,8 @@ func TestRepository_GetByID(t *testing.T) {
 		t.Errorf("expected ID %d, got %d", productID, product.ID)
 	}
 
-	if product.Name != "Pepperoni" {
-		t.Errorf("expected name %q, got %q", "Pepperoni", product.Name)
+	if product.Name != testProductNamePepperoni {
+		t.Errorf("expected name %q, got %q", testProductNamePepperoni, product.Name)
 	}
 
 	if product.Description == nil {
@@ -160,6 +171,11 @@ func TestRepository_GetByID(t *testing.T) {
 	if !product.IsActive {
 		t.Error("expected product to be active")
 	}
+}
+
+//nolint:paralleltest // integration test uses shared test database
+func assertProductImages(t *testing.T, product *Product) {
+	t.Helper()
 
 	if len(product.Images) != 2 {
 		t.Fatalf(
@@ -210,6 +226,7 @@ func TestRepository_GetByID(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_GetByID_NotFound(t *testing.T) {
 	ctx := context.Background()
 
@@ -245,6 +262,7 @@ func TestRepository_GetByID_NotFound(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_List(t *testing.T) {
 	ctx := context.Background()
 
@@ -280,12 +298,12 @@ func TestRepository_List(t *testing.T) {
 		fmt.Sprintf("Test Category %d", suffix),
 		fmt.Sprintf("test-category-%d", suffix),
 	).Scan(&categoryID)
-
 	if err != nil {
 		t.Fatalf("failed to create category: %v", err)
 	}
 
 	var product1ID int64
+
 	var product2ID int64
 
 	err = dbPool.QueryRow(
@@ -307,7 +325,6 @@ func TestRepository_List(t *testing.T) {
 		400,
 		categoryID,
 	).Scan(&product1ID)
-
 	if err != nil {
 		t.Fatalf("failed to create first product: %v", err)
 	}
@@ -331,7 +348,6 @@ func TestRepository_List(t *testing.T) {
 		300,
 		categoryID,
 	).Scan(&product2ID)
-
 	if err != nil {
 		t.Fatalf("failed to create second product: %v", err)
 	}
@@ -375,7 +391,6 @@ func TestRepository_List(t *testing.T) {
 		product1ID,
 		product2ID,
 	)
-
 	if err != nil {
 		t.Fatalf("failed to create product images: %v", err)
 	}
@@ -391,96 +406,108 @@ func TestRepository_List(t *testing.T) {
 		t.Fatalf("expected at least 2 products, got %d", len(products))
 	}
 
-	var product1 *Product
-	var product2 *Product
+	product1 := findProductByID(products, product1ID)
+	product2 := findProductByID(products, product2ID)
 
+	assertListedPizza(t, product1)
+	assertListedBurger(t, product2)
+}
+
+func findProductByID(products []Product, productID int64) *Product {
 	for i := range products {
-		switch products[i].ID {
-		case product1ID:
-			product1 = &products[i]
-		case product2ID:
-			product2 = &products[i]
+		if products[i].ID == productID {
+			return &products[i]
 		}
 	}
 
-	if product1 == nil {
+	return nil
+}
+
+func assertListedPizza(t *testing.T, product *Product) {
+	t.Helper()
+
+	if product == nil {
 		t.Fatal("expected first product in list")
 	}
 
-	if product2 == nil {
-		t.Fatal("expected second product in list")
-	}
-
-	if len(product1.Images) != 2 {
+	if len(product.Images) != 2 {
 		t.Fatalf(
 			"expected first product to have %d images, got %d",
 			2,
-			len(product1.Images),
+			len(product.Images),
 		)
 	}
 
-	if len(product2.Images) != 1 {
-		t.Fatalf(
-			"expected second product to have %d image, got %d",
-			1,
-			len(product2.Images),
-		)
-	}
-
-	if product1.Images[0].URL != "/images/pizza-1.webp" {
+	if product.Images[0].URL != "/images/pizza-1.webp" {
 		t.Errorf(
 			"expected first image URL %q, got %q",
 			"/images/pizza-1.webp",
-			product1.Images[0].URL,
+			product.Images[0].URL,
 		)
 	}
 
-	if product1.Images[0].SortOrder != 0 {
+	if product.Images[0].SortOrder != 0 {
 		t.Errorf(
 			"expected first image sort order %d, got %d",
 			0,
-			product1.Images[0].SortOrder,
+			product.Images[0].SortOrder,
 		)
 	}
 
-	if !product1.Images[0].IsPrimary {
+	if !product.Images[0].IsPrimary {
 		t.Error("expected first image to be primary")
 	}
 
-	if product1.Images[1].URL != "/images/pizza-2.webp" {
+	if product.Images[1].URL != "/images/pizza-2.webp" {
 		t.Errorf(
 			"expected second image URL %q, got %q",
 			"/images/pizza-2.webp",
-			product1.Images[1].URL,
+			product.Images[1].URL,
 		)
 	}
 
-	if product1.Images[1].SortOrder != 1 {
+	if product.Images[1].SortOrder != 1 {
 		t.Errorf(
 			"expected second image sort order %d, got %d",
 			1,
-			product1.Images[1].SortOrder,
+			product.Images[1].SortOrder,
 		)
 	}
 
-	if product1.Images[1].IsPrimary {
+	if product.Images[1].IsPrimary {
 		t.Error("expected second image not to be primary")
 	}
+}
 
-	if product2.Images[0].URL != "/images/burger-1.webp" {
+func assertListedBurger(t *testing.T, product *Product) {
+	t.Helper()
+
+	if product == nil {
+		t.Fatal("expected second product in list")
+	}
+
+	if len(product.Images) != 1 {
+		t.Fatalf(
+			"expected second product to have %d image, got %d",
+			1,
+			len(product.Images),
+		)
+	}
+
+	if product.Images[0].URL != "/images/burger-1.webp" {
 		t.Errorf(
 			"expected burger image URL %q, got %q",
 			"/images/burger-1.webp",
-			product2.Images[0].URL,
+			product.Images[0].URL,
 		)
 	}
 
-	if !product2.Images[0].IsPrimary {
+	if !product.Images[0].IsPrimary {
 		t.Error("expected burger image to be primary")
 	}
-
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_Create(t *testing.T) {
 	ctx := context.Background()
 
@@ -516,7 +543,6 @@ func TestRepository_Create(t *testing.T) {
 		fmt.Sprintf("Create Category %d", suffix),
 		fmt.Sprintf("create-category-%d", suffix),
 	).Scan(&categoryID)
-
 	if err != nil {
 		t.Fatalf("failed to create category: %v", err)
 	}
@@ -549,10 +575,6 @@ func TestRepository_Create(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if createdProduct == nil {
-		t.Fatal("expected created product, got nil")
-	}
-
 	t.Cleanup(func() {
 		ctx := context.Background()
 
@@ -575,14 +597,35 @@ func TestRepository_Create(t *testing.T) {
 		}
 	})
 
+	assertCreatedProduct(t, createdProduct, product)
+
+	savedProduct, err := repo.GetByID(ctx, createdProduct.ID)
+	if err != nil {
+		t.Fatalf("failed to get created product: %v", err)
+	}
+
+	assertSavedCreatedProduct(t, savedProduct, product)
+}
+
+func assertCreatedProduct(
+	t *testing.T,
+	createdProduct *Product,
+	expectedProduct *Product,
+) {
+	t.Helper()
+
+	if createdProduct == nil {
+		t.Fatal("expected created product, got nil")
+	}
+
 	if createdProduct.ID == 0 {
 		t.Error("expected product ID to be set")
 	}
 
-	if createdProduct.Name != product.Name {
+	if createdProduct.Name != expectedProduct.Name {
 		t.Errorf(
 			"expected name %q, got %q",
-			product.Name,
+			expectedProduct.Name,
 			createdProduct.Name,
 		)
 	}
@@ -618,18 +661,25 @@ func TestRepository_Create(t *testing.T) {
 		}
 
 		if image.CreatedAt.IsZero() {
-			t.Errorf("expected image %d created_at to be set", i)
+			t.Errorf(
+				"expected image %d created_at to be set",
+				i,
+			)
 		}
 	}
-	savedProduct, err := repo.GetByID(ctx, createdProduct.ID)
-	if err != nil {
-		t.Fatalf("failed to get created product: %v", err)
-	}
+}
 
-	if savedProduct.Name != product.Name {
+func assertSavedCreatedProduct(
+	t *testing.T,
+	savedProduct *Product,
+	expectedProduct *Product,
+) {
+	t.Helper()
+
+	if savedProduct.Name != expectedProduct.Name {
 		t.Errorf(
 			"expected saved name %q, got %q",
-			product.Name,
+			expectedProduct.Name,
 			savedProduct.Name,
 		)
 	}
@@ -643,6 +693,7 @@ func TestRepository_Create(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_Create_RollbackOnImageError(t *testing.T) {
 	ctx := context.Background()
 
@@ -678,7 +729,6 @@ func TestRepository_Create_RollbackOnImageError(t *testing.T) {
 		fmt.Sprintf("Rollback Category %d", suffix),
 		fmt.Sprintf("rollback-category-%d", suffix),
 	).Scan(&categoryID)
-
 	if err != nil {
 		t.Fatalf("failed to create category: %v", err)
 	}
@@ -722,7 +772,6 @@ func TestRepository_Create_RollbackOnImageError(t *testing.T) {
 	}
 
 	createdProduct, err := repo.Create(ctx, product)
-
 	if err == nil {
 		t.Fatal("expected create error, got nil")
 	}
@@ -745,7 +794,6 @@ func TestRepository_Create_RollbackOnImageError(t *testing.T) {
 	`,
 		productName,
 	).Scan(&productCount)
-
 	if err != nil {
 		t.Fatalf("failed to count products: %v", err)
 	}
@@ -758,6 +806,7 @@ func TestRepository_Create_RollbackOnImageError(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_Update(t *testing.T) {
 	ctx := context.Background()
 
@@ -793,7 +842,6 @@ func TestRepository_Update(t *testing.T) {
 		fmt.Sprintf("Update Category %d", suffix),
 		fmt.Sprintf("update-category-%d", suffix),
 	).Scan(&categoryID)
-
 	if err != nil {
 		t.Fatalf("failed to create category: %v", err)
 	}
@@ -858,12 +906,12 @@ func TestRepository_Update(t *testing.T) {
 
 	createdProduct.Images = []ProductImage{
 		{
-			URL:       "/images/new-1.webp",
+			URL:       testImageNew1,
 			SortOrder: 0,
 			IsPrimary: true,
 		},
 		{
-			URL:       "/images/new-2.webp",
+			URL:       testImageNew2,
 			SortOrder: 1,
 			IsPrimary: false,
 		},
@@ -883,10 +931,20 @@ func TestRepository_Update(t *testing.T) {
 		t.Fatalf("failed to get updated product: %v", err)
 	}
 
-	if savedProduct.Name != createdProduct.Name {
+	assertUpdatedProduct(t, savedProduct, createdProduct)
+}
+
+func assertUpdatedProduct(
+	t *testing.T,
+	savedProduct *Product,
+	expectedProduct *Product,
+) {
+	t.Helper()
+
+	if savedProduct.Name != expectedProduct.Name {
 		t.Errorf(
 			"expected name %q, got %q",
-			createdProduct.Name,
+			expectedProduct.Name,
 			savedProduct.Name,
 		)
 	}
@@ -919,24 +977,24 @@ func TestRepository_Update(t *testing.T) {
 		)
 	}
 
-	if savedProduct.Images[0].URL != "/images/new-1.webp" {
+	if savedProduct.Images[0].URL != testImageNew1 {
 		t.Errorf(
 			"expected first image URL %q, got %q",
-			"/images/new-1.webp",
+			testImageNew1,
 			savedProduct.Images[0].URL,
 		)
 	}
 
-	if savedProduct.Images[1].URL != "/images/new-2.webp" {
+	if savedProduct.Images[1].URL != testImageNew2 {
 		t.Errorf(
 			"expected second image URL %q, got %q",
-			"/images/new-2.webp",
+			testImageNew2,
 			savedProduct.Images[1].URL,
 		)
 	}
-
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_Deactivate(t *testing.T) {
 	ctx := context.Background()
 
@@ -972,7 +1030,6 @@ func TestRepository_Deactivate(t *testing.T) {
 		fmt.Sprintf("Deactivate Category %d", suffix),
 		fmt.Sprintf("deactivate-category-%d", suffix),
 	).Scan(&categoryID)
-
 	if err != nil {
 		t.Fatalf("failed to create category: %v", err)
 	}
@@ -1053,6 +1110,7 @@ func TestRepository_Deactivate(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_Deactivate_NotFound(t *testing.T) {
 	ctx := context.Background()
 
@@ -1084,6 +1142,7 @@ func TestRepository_Deactivate_NotFound(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_List_ExcludesInactiveProducts(t *testing.T) {
 	ctx := context.Background()
 
@@ -1119,7 +1178,6 @@ func TestRepository_List_ExcludesInactiveProducts(t *testing.T) {
 		fmt.Sprintf("Inactive Category %d", suffix),
 		fmt.Sprintf("inactive-category-%d", suffix),
 	).Scan(&categoryID)
-
 	if err != nil {
 		t.Fatalf("failed to create category: %v", err)
 	}
@@ -1152,7 +1210,8 @@ func TestRepository_List_ExcludesInactiveProducts(t *testing.T) {
 		t.Fatalf("failed to create inactive product: %v", err)
 	}
 
-	if err := repo.Deactivate(ctx, inactiveProduct.ID); err != nil {
+	err = repo.Deactivate(ctx, inactiveProduct.ID)
+	if err != nil {
 		t.Fatalf("failed to deactivate product: %v", err)
 	}
 
@@ -1189,6 +1248,7 @@ func TestRepository_List_ExcludesInactiveProducts(t *testing.T) {
 	}
 
 	var activeFound bool
+
 	var inactiveFound bool
 
 	for _, product := range products {
@@ -1198,6 +1258,9 @@ func TestRepository_List_ExcludesInactiveProducts(t *testing.T) {
 
 		case inactiveProduct.ID:
 			inactiveFound = true
+
+		default:
+			continue
 		}
 	}
 
@@ -1210,6 +1273,7 @@ func TestRepository_List_ExcludesInactiveProducts(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_List_FilterByCategory(t *testing.T) {
 	ctx := context.Background()
 
@@ -1234,6 +1298,7 @@ func TestRepository_List_FilterByCategory(t *testing.T) {
 	suffix := time.Now().UnixNano()
 
 	var category1ID int64
+
 	var category2ID int64
 
 	err = dbPool.QueryRow(
@@ -1246,7 +1311,6 @@ func TestRepository_List_FilterByCategory(t *testing.T) {
 		fmt.Sprintf("Category One %d", suffix),
 		fmt.Sprintf("category-one-%d", suffix),
 	).Scan(&category1ID)
-
 	if err != nil {
 		t.Fatalf("failed to create first category: %v", err)
 	}
@@ -1261,12 +1325,12 @@ func TestRepository_List_FilterByCategory(t *testing.T) {
 		fmt.Sprintf("Category Two %d", suffix),
 		fmt.Sprintf("category-two-%d", suffix),
 	).Scan(&category2ID)
-
 	if err != nil {
 		t.Fatalf("failed to create second category: %v", err)
 	}
 
 	var product1ID int64
+
 	var product2ID int64
 
 	err = dbPool.QueryRow(
@@ -1286,7 +1350,6 @@ func TestRepository_List_FilterByCategory(t *testing.T) {
 		400,
 		category1ID,
 	).Scan(&product1ID)
-
 	if err != nil {
 		t.Fatalf("failed to create first product: %v", err)
 	}
@@ -1308,7 +1371,6 @@ func TestRepository_List_FilterByCategory(t *testing.T) {
 		500,
 		category2ID,
 	).Scan(&product2ID)
-
 	if err != nil {
 		t.Fatalf("failed to create second product: %v", err)
 	}
@@ -1347,6 +1409,7 @@ func TestRepository_List_FilterByCategory(t *testing.T) {
 	}
 
 	var product1Found bool
+
 	var product2Found bool
 
 	for _, product := range products {
@@ -1356,6 +1419,8 @@ func TestRepository_List_FilterByCategory(t *testing.T) {
 
 		case product2ID:
 			product2Found = true
+		default:
+			continue
 		}
 	}
 
@@ -1368,6 +1433,7 @@ func TestRepository_List_FilterByCategory(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_List_Search(t *testing.T) {
 	ctx := context.Background()
 
@@ -1403,12 +1469,12 @@ func TestRepository_List_Search(t *testing.T) {
 		fmt.Sprintf("Search Category %d", suffix),
 		fmt.Sprintf("search-category-%d", suffix),
 	).Scan(&categoryID)
-
 	if err != nil {
 		t.Fatalf("failed to create category: %v", err)
 	}
 
 	var pizzaID int64
+
 	var burgerID int64
 
 	err = dbPool.QueryRow(
@@ -1428,7 +1494,6 @@ func TestRepository_List_Search(t *testing.T) {
 		450,
 		categoryID,
 	).Scan(&pizzaID)
-
 	if err != nil {
 		t.Fatalf("failed to create pizza: %v", err)
 	}
@@ -1450,7 +1515,6 @@ func TestRepository_List_Search(t *testing.T) {
 		300,
 		categoryID,
 	).Scan(&burgerID)
-
 	if err != nil {
 		t.Fatalf("failed to create burger: %v", err)
 	}
@@ -1489,6 +1553,7 @@ func TestRepository_List_Search(t *testing.T) {
 	}
 
 	var pizzaFound bool
+
 	var burgerFound bool
 
 	for _, product := range products {
@@ -1498,6 +1563,8 @@ func TestRepository_List_Search(t *testing.T) {
 
 		case burgerID:
 			burgerFound = true
+		default:
+			continue
 		}
 	}
 
@@ -1510,6 +1577,7 @@ func TestRepository_List_Search(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_List_LimitOffset(t *testing.T) {
 	ctx := context.Background()
 
@@ -1545,7 +1613,6 @@ func TestRepository_List_LimitOffset(t *testing.T) {
 		fmt.Sprintf("Pagination Category %d", suffix),
 		fmt.Sprintf("pagination-category-%d", suffix),
 	).Scan(&categoryID)
-
 	if err != nil {
 		t.Fatalf("failed to create category: %v", err)
 	}
@@ -1572,7 +1639,6 @@ func TestRepository_List_LimitOffset(t *testing.T) {
 			100*i,
 			categoryID,
 		).Scan(&productID)
-
 		if err != nil {
 			t.Fatalf(
 				"failed to create product %d: %v",
@@ -1614,7 +1680,6 @@ func TestRepository_List_LimitOffset(t *testing.T) {
 			Offset:     1,
 		},
 	)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1636,6 +1701,7 @@ func TestRepository_List_LimitOffset(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_Update_NotFound(t *testing.T) {
 	ctx := context.Background()
 
@@ -1683,6 +1749,7 @@ func TestRepository_Update_NotFound(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // integration test uses shared test database
 func TestRepository_Update_RollbackOnImageError(t *testing.T) {
 	ctx := context.Background()
 
@@ -1718,7 +1785,6 @@ func TestRepository_Update_RollbackOnImageError(t *testing.T) {
 		fmt.Sprintf("Rollback Update Category %d", suffix),
 		fmt.Sprintf("rollback-update-category-%d", suffix),
 	).Scan(&categoryID)
-
 	if err != nil {
 		t.Fatalf("failed to create category: %v", err)
 	}
@@ -1777,19 +1843,18 @@ func TestRepository_Update_RollbackOnImageError(t *testing.T) {
 
 	createdProduct.Images = []ProductImage{
 		{
-			URL:       "/images/new-1.webp",
+			URL:       testImageNew1,
 			SortOrder: 0,
 			IsPrimary: true,
 		},
 		{
-			URL:       "/images/new-2.webp",
+			URL:       testImageNew2,
 			SortOrder: 1,
 			IsPrimary: true,
 		},
 	}
 
 	updatedProduct, err := repo.Update(ctx, createdProduct)
-
 	if err == nil {
 		t.Fatal("expected update error, got nil")
 	}

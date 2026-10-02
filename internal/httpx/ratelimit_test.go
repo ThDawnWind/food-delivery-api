@@ -11,6 +11,8 @@ import (
 )
 
 func TestIPRateLimiter(t *testing.T) {
+	t.Parallel()
+
 	limiter := NewIPRateLimiter(
 		rate.Every(time.Hour),
 		2,
@@ -20,20 +22,21 @@ func TestIPRateLimiter(t *testing.T) {
 
 	handler := limiter.Middleware(
 		http.HandlerFunc(
-			func(w http.ResponseWriter, r *http.Request) {
+			func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			},
 		),
 	)
 
-	for i := 0; i < 2; i++ {
-		req := httptest.NewRequest(
+	for range 2 {
+		req := httptest.NewRequestWithContext(
+			t.Context(),
 			http.MethodPost,
 			"/login",
 			nil,
 		)
 
-		req.RemoteAddr = "192.0.2.1:12345"
+		req.RemoteAddr = testRemoteAddr
 
 		rec := httptest.NewRecorder()
 
@@ -48,13 +51,14 @@ func TestIPRateLimiter(t *testing.T) {
 		}
 	}
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/login",
 		nil,
 	)
 
-	req.RemoteAddr = "192.0.2.1:12345"
+	req.RemoteAddr = testRemoteAddr
 
 	rec := httptest.NewRecorder()
 
@@ -70,6 +74,8 @@ func TestIPRateLimiter(t *testing.T) {
 }
 
 func TestIPRateLimiter_SeparateIPs(t *testing.T) {
+	t.Parallel()
+
 	limiter := NewIPRateLimiter(
 		rate.Every(time.Hour),
 		1,
@@ -79,13 +85,14 @@ func TestIPRateLimiter_SeparateIPs(t *testing.T) {
 
 	handler := limiter.Middleware(
 		http.HandlerFunc(
-			func(w http.ResponseWriter, r *http.Request) {
+			func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			},
 		),
 	)
 
-	firstRequest := httptest.NewRequest(
+	firstRequest := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/login",
 		nil,
@@ -95,7 +102,8 @@ func TestIPRateLimiter_SeparateIPs(t *testing.T) {
 	firstRecorder := httptest.NewRecorder()
 	handler.ServeHTTP(firstRecorder, firstRequest)
 
-	secondRequest := httptest.NewRequest(
+	secondRequest := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/login",
 		nil,
@@ -123,7 +131,10 @@ func TestIPRateLimiter_SeparateIPs(t *testing.T) {
 }
 
 func TestClientIPIgnoresForwardedForFromUntrustedPeer(t *testing.T) {
-	request := httptest.NewRequest(
+	t.Parallel()
+
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/login",
 		nil,
@@ -154,13 +165,16 @@ func TestClientIPIgnoresForwardedForFromUntrustedPeer(t *testing.T) {
 }
 
 func TestClientIPUsesForwardedForFromTrustedProxy(t *testing.T) {
-	request := httptest.NewRequest(
+	t.Parallel()
+
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/login",
 		nil,
 	)
 
-	request.RemoteAddr = "172.18.0.5:12345"
+	request.RemoteAddr = testForwardedAddr
 
 	request.Header.Set(
 		"X-Forwarded-For",
@@ -185,13 +199,16 @@ func TestClientIPUsesForwardedForFromTrustedProxy(t *testing.T) {
 }
 
 func TestClientIPSkipsTrustedProxyChain(t *testing.T) {
-	request := httptest.NewRequest(
+	t.Parallel()
+
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/login",
 		nil,
 	)
 
-	request.RemoteAddr = "172.18.0.5:12345"
+	request.RemoteAddr = testForwardedAddr
 
 	request.Header.Set(
 		"X-Forwarded-For",
@@ -216,13 +233,16 @@ func TestClientIPSkipsTrustedProxyChain(t *testing.T) {
 }
 
 func TestClientIPInvalidForwardedForFallsBackToRemote(t *testing.T) {
-	request := httptest.NewRequest(
+	t.Parallel()
+
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodPost,
 		"/login",
 		nil,
 	)
 
-	request.RemoteAddr = "172.18.0.5:12345"
+	request.RemoteAddr = testForwardedAddr
 
 	request.Header.Set(
 		"X-Forwarded-For",

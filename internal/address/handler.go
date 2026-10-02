@@ -7,9 +7,10 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/ThDawnWind/food-delivery-api/internal/auth"
 	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
-	"github.com/go-chi/chi/v5"
 )
 
 type AddressService interface {
@@ -105,21 +106,24 @@ func (h *Handler) Create(
 			http.StatusUnauthorized,
 			"unauthorized",
 		)
+
 		return
 	}
 
 	var request createAddressRequest
 
-	if err := httpx.DecodeJSON(
+	err := httpx.DecodeJSON(
 		w,
 		r,
 		&request,
-	); err != nil {
+	)
+	if err != nil {
 		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
 			"invalid request body",
 		)
+
 		return
 	}
 
@@ -147,6 +151,7 @@ func (h *Handler) Create(
 				http.StatusBadRequest,
 				"invalid address data",
 			)
+
 			return
 		}
 
@@ -157,6 +162,7 @@ func (h *Handler) Create(
 			"failed to create address",
 			err,
 		)
+
 		return
 	}
 
@@ -180,6 +186,7 @@ func (h *Handler) ListByUser(
 			http.StatusUnauthorized,
 			"unauthorized",
 		)
+
 		return
 	}
 
@@ -197,6 +204,7 @@ func (h *Handler) ListByUser(
 				http.StatusBadRequest,
 				"invalid address data",
 			)
+
 			return
 		}
 
@@ -207,6 +215,7 @@ func (h *Handler) ListByUser(
 			"failed to list addresses",
 			err,
 		)
+
 		return
 	}
 
@@ -235,6 +244,7 @@ func (h *Handler) GetByID(
 			http.StatusBadRequest,
 			"invalid address id",
 		)
+
 		return
 	}
 
@@ -247,6 +257,7 @@ func (h *Handler) GetByID(
 			http.StatusUnauthorized,
 			"unauthorized",
 		)
+
 		return
 	}
 
@@ -315,6 +326,7 @@ func (h *Handler) Update(
 			http.StatusBadRequest,
 			"invalid address id",
 		)
+
 		return
 	}
 
@@ -327,21 +339,24 @@ func (h *Handler) Update(
 			http.StatusUnauthorized,
 			"unauthorized",
 		)
+
 		return
 	}
 
 	var request updateAddressRequest
 
-	if err := httpx.DecodeJSON(
+	err = httpx.DecodeJSON(
 		w,
 		r,
 		&request,
-	); err != nil {
+	)
+	if err != nil {
 		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
 			"invalid request body",
 		)
+
 		return
 	}
 
@@ -420,6 +435,7 @@ func (h *Handler) Delete(
 			http.StatusBadRequest,
 			"invalid address id",
 		)
+
 		return
 	}
 
@@ -432,6 +448,7 @@ func (h *Handler) Delete(
 			http.StatusUnauthorized,
 			"unauthorized",
 		)
+
 		return
 	}
 

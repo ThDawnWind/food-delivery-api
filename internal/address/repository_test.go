@@ -14,11 +14,20 @@ import (
 func newTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	if os.Getenv("TEST_DATABASE_URL") == "" {
-		_ = godotenv.Load("../../.env.test")
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+
+	if databaseURL == "" {
+		env, err := godotenv.Read("../../.env.test")
+		if err != nil {
+			t.Fatalf(
+				"failed to read .env.test: %v",
+				err,
+			)
+		}
+
+		databaseURL = env["TEST_DATABASE_URL"]
 	}
 
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Fatal("TEST_DATABASE_URL is not set")
 	}
@@ -41,7 +50,30 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
+func cleanupExec(
+	t *testing.T,
+	db *pgxpool.Pool,
+	query string,
+	args ...any,
+) {
+	t.Helper()
+
+	_, err := db.Exec(
+		context.Background(),
+		query,
+		args...,
+	)
+	if err != nil {
+		t.Errorf(
+			"failed to clean up test data: %v",
+			err,
+		)
+	}
+}
+
 func TestRepository_Create(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	db := newTestPool(t)
@@ -74,8 +106,9 @@ func TestRepository_Create(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)
@@ -87,8 +120,8 @@ func TestRepository_Create(t *testing.T) {
 	input := &CreateAddress{
 		UserID:          userID,
 		Label:           &label,
-		City:            "Amsterdam",
-		Street:          "Test Street",
+		City:            testCityAmsterdam,
+		Street:          testStreetTest,
 		HouseNumber:     "10",
 		ApartmentNumber: &apartment,
 	}
@@ -123,18 +156,18 @@ func TestRepository_Create(t *testing.T) {
 		)
 	}
 
-	if address.City != "Amsterdam" {
+	if address.City != testCityAmsterdam {
 		t.Errorf(
 			"expected city %q, got %q",
-			"Amsterdam",
+			testCityAmsterdam,
 			address.City,
 		)
 	}
 
-	if address.Street != "Test Street" {
+	if address.Street != testStreetTest {
 		t.Errorf(
 			"expected street %q, got %q",
-			"Test Street",
+			testStreetTest,
 			address.Street,
 		)
 	}
@@ -174,6 +207,8 @@ func TestRepository_Create(t *testing.T) {
 }
 
 func TestRepository_Create_NullableFields(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	db := newTestPool(t)
@@ -206,14 +241,16 @@ func TestRepository_Create_NullableFields(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM addresses WHERE user_id = $1`,
 			userID,
 		)
 
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)
@@ -221,8 +258,8 @@ func TestRepository_Create_NullableFields(t *testing.T) {
 
 	input := &CreateAddress{
 		UserID:      userID,
-		City:        "Amsterdam",
-		Street:      "Test Street",
+		City:        testCityAmsterdam,
+		Street:      testStreetTest,
 		HouseNumber: "20",
 	}
 
@@ -274,6 +311,8 @@ func TestRepository_Create_NullableFields(t *testing.T) {
 }
 
 func TestRepository_GetByID(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	db := newTestPool(t)
@@ -306,14 +345,16 @@ func TestRepository_GetByID(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM addresses WHERE user_id = $1`,
 			userID,
 		)
 
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)
@@ -323,8 +364,8 @@ func TestRepository_GetByID(t *testing.T) {
 		ctx,
 		&CreateAddress{
 			UserID:      userID,
-			City:        "Amsterdam",
-			Street:      "Test Street",
+			City:        testCityAmsterdam,
+			Street:      testStreetTest,
 			HouseNumber: "30",
 		},
 	)
@@ -365,6 +406,8 @@ func TestRepository_GetByID(t *testing.T) {
 }
 
 func TestRepository_GetByID_OtherUser(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	db := newTestPool(t)
@@ -397,14 +440,16 @@ func TestRepository_GetByID_OtherUser(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM addresses WHERE user_id = $1`,
 			userID,
 		)
 
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)
@@ -414,8 +459,8 @@ func TestRepository_GetByID_OtherUser(t *testing.T) {
 		ctx,
 		&CreateAddress{
 			UserID:      userID,
-			City:        "Amsterdam",
-			Street:      "Test Street",
+			City:        testCityAmsterdam,
+			Street:      testStreetTest,
 			HouseNumber: "40",
 		},
 	)
@@ -441,6 +486,8 @@ func TestRepository_GetByID_OtherUser(t *testing.T) {
 }
 
 func TestRepository_ListByUser(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	db := newTestPool(t)
@@ -473,14 +520,16 @@ func TestRepository_ListByUser(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM addresses WHERE user_id = $1`,
 			userID,
 		)
 
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)
@@ -490,8 +539,8 @@ func TestRepository_ListByUser(t *testing.T) {
 		ctx,
 		&CreateAddress{
 			UserID:      userID,
-			City:        "Amsterdam",
-			Street:      "First Street",
+			City:        testCityAmsterdam,
+			Street:      testStreetFirst,
 			HouseNumber: "1",
 		},
 	)
@@ -506,8 +555,8 @@ func TestRepository_ListByUser(t *testing.T) {
 		ctx,
 		&CreateAddress{
 			UserID:      userID,
-			City:        "Amsterdam",
-			Street:      "Second Street",
+			City:        testCityAmsterdam,
+			Street:      testStreetSecond,
 			HouseNumber: "2",
 		},
 	)
@@ -549,6 +598,8 @@ func TestRepository_ListByUser(t *testing.T) {
 }
 
 func TestRepository_ListByUser_Empty(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	db := newTestPool(t)
@@ -574,6 +625,8 @@ func TestRepository_ListByUser_Empty(t *testing.T) {
 }
 
 func TestRepository_Delete(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	db := newTestPool(t)
@@ -606,14 +659,16 @@ func TestRepository_Delete(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM addresses WHERE user_id = $1`,
 			userID,
 		)
 
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)
@@ -623,7 +678,7 @@ func TestRepository_Delete(t *testing.T) {
 		ctx,
 		&CreateAddress{
 			UserID:      userID,
-			City:        "Amsterdam",
+			City:        testCityAmsterdam,
 			Street:      "Delete Street",
 			HouseNumber: "10",
 		},
@@ -662,6 +717,8 @@ func TestRepository_Delete(t *testing.T) {
 }
 
 func TestRepository_Delete_OtherUser(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	db := newTestPool(t)
@@ -694,14 +751,16 @@ func TestRepository_Delete_OtherUser(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM addresses WHERE user_id = $1`,
 			userID,
 		)
 
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)
@@ -738,6 +797,8 @@ func TestRepository_Delete_OtherUser(t *testing.T) {
 }
 
 func TestRepository_Update(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	db := newTestPool(t)
@@ -770,14 +831,16 @@ func TestRepository_Update(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM addresses WHERE user_id = $1`,
 			userID,
 		)
 
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)
@@ -787,7 +850,7 @@ func TestRepository_Update(t *testing.T) {
 		ctx,
 		&CreateAddress{
 			UserID:      userID,
-			City:        "Amsterdam",
+			City:        testCityAmsterdam,
 			Street:      "Old Street",
 			HouseNumber: "10",
 		},
@@ -799,8 +862,8 @@ func TestRepository_Update(t *testing.T) {
 		)
 	}
 
-	newCity := "Rotterdam"
-	newStreet := "New Street"
+	newCity := testCityRotterdam
+	newStreet := testStreetNew
 
 	updated, err := repository.Update(
 		ctx,
@@ -844,6 +907,8 @@ func TestRepository_Update(t *testing.T) {
 }
 
 func TestRepository_Update_OtherUser(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	db := newTestPool(t)
@@ -876,14 +941,16 @@ func TestRepository_Update_OtherUser(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM addresses WHERE user_id = $1`,
 			userID,
 		)
 
-		_, _ = db.Exec(
-			context.Background(),
+		cleanupExec(
+			t,
+			db,
 			`DELETE FROM users WHERE id = $1`,
 			userID,
 		)

@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+const invalidValue = "invalid"
+
 func TestLoadConfig(t *testing.T) {
 	t.Setenv("APP_ENV", "test")
 	t.Setenv("HTTP_PORT", "8080")
@@ -21,6 +23,7 @@ func TestLoadConfig(t *testing.T) {
 	t.Setenv("HTTP_READ_TIMEOUT", "15s")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 
+	//nolint:gosec // Fake credentials used only in this test fixture.
 	expectedDatabaseURL := "postgres://user:password@localhost:5432/dbname"
 
 	cfg, err := Load()
@@ -28,24 +31,16 @@ func TestLoadConfig(t *testing.T) {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
+	checkHTTPConfig(t, cfg)
+
 	if cfg.Env != "test" {
 		t.Errorf("Expected Env to be 'test', got %s", cfg.Env)
 	}
-	if cfg.HTTP.Port != 8080 {
-		t.Errorf("Expected HTTP Port to be 8080, got %d", cfg.HTTP.Port)
-	}
-	if cfg.HTTP.ReadHeaderTimeout != 5*time.Second {
-		t.Errorf("Expected ReadHeaderTimeout to be 5s, got %v", cfg.HTTP.ReadHeaderTimeout)
-	}
-	if cfg.HTTP.WriteTimeout != 10*time.Second {
-		t.Errorf("Expected WriteTimeout to be 10s, got %v", cfg.HTTP.WriteTimeout)
-	}
-	if cfg.HTTP.IdleTimeout != 60*time.Second {
-		t.Errorf("Expected IdleTimeout to be 60s, got %v", cfg.HTTP.IdleTimeout)
-	}
+
 	if cfg.Database.URL != expectedDatabaseURL {
 		t.Errorf("Expected Database URL to be '%s', got %s", expectedDatabaseURL, cfg.Database.URL)
 	}
+
 	if cfg.Database.MaxConns != 10 {
 		t.Errorf("expected DB MaxConns 10, got %d", cfg.Database.MaxConns)
 	}
@@ -77,6 +72,7 @@ func TestLoadConfig(t *testing.T) {
 			cfg.Database.HealthCheckPeriod,
 		)
 	}
+
 	if cfg.JWT == nil {
 		t.Fatal("expected JWT config, got nil")
 	}
@@ -96,20 +92,6 @@ func TestLoadConfig(t *testing.T) {
 		)
 	}
 
-	if cfg.HTTP.ReadTimeout != 15*time.Second {
-		t.Errorf(
-			"Expected ReadTimeout to be 15s, got %v",
-			cfg.HTTP.ReadTimeout,
-		)
-	}
-
-	if len(cfg.HTTP.CORSAllowedOrigins) != 1 {
-		t.Fatalf(
-			"expected 1 CORS origin, got %d",
-			len(cfg.HTTP.CORSAllowedOrigins),
-		)
-	}
-
 	if cfg.HTTP.CORSAllowedOrigins[0] != "http://localhost:3000" {
 		t.Errorf(
 			"unexpected CORS origin: %q",
@@ -120,13 +102,14 @@ func TestLoadConfig(t *testing.T) {
 
 func TestLoadConfigInvalidPort(t *testing.T) {
 	setRequiredEnv(t)
+
 	tests := []struct {
 		name string
 		port string
 	}{
 		{
 			name: "invalid port",
-			port: "invalid",
+			port: invalidValue,
 		},
 		{
 			name: "port out of range",
@@ -137,6 +120,7 @@ func TestLoadConfigInvalidPort(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("HTTP_PORT", tt.port)
+
 			_, err := Load()
 			if err == nil {
 				t.Fatalf("expected error for port %s, got nil", tt.port)
@@ -147,6 +131,7 @@ func TestLoadConfigInvalidPort(t *testing.T) {
 
 func TestLoadConfigInvalidTimeout(t *testing.T) {
 	setRequiredEnv(t)
+
 	tests := []struct {
 		name  string
 		env   string
@@ -155,22 +140,22 @@ func TestLoadConfigInvalidTimeout(t *testing.T) {
 		{
 			name:  "invalid read header timeout",
 			env:   "HTTP_READ_HEADER_TIMEOUT",
-			value: "invalid",
+			value: invalidValue,
 		},
 		{
 			name:  "invalid write timeout",
 			env:   "HTTP_WRITE_TIMEOUT",
-			value: "invalid",
+			value: invalidValue,
 		},
 		{
 			name:  "invalid idle timeout",
 			env:   "HTTP_IDLE_TIMEOUT",
-			value: "invalid",
+			value: invalidValue,
 		},
 		{
 			name:  "invalid read timeout",
 			env:   "HTTP_READ_TIMEOUT",
-			value: "invalid",
+			value: invalidValue,
 		},
 		{
 			name:  "zero read timeout",
@@ -182,6 +167,7 @@ func TestLoadConfigInvalidTimeout(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv(tt.env, tt.value)
+
 			_, err := Load()
 			if err == nil {
 				t.Fatalf("expected error for %s-%s, got nil", tt.env, tt.value)
@@ -195,9 +181,8 @@ func TestLoadConfigEmptyDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 
 	_, err := Load()
-
 	if err == nil {
-		t.Fatalf("Expected error for empty DATABASE_URL, got nil")
+		t.Fatal("Expected error for empty DATABASE_URL, got nil")
 	}
 }
 
@@ -223,7 +208,7 @@ func TestLoadConfigInvalidJWTTTL(t *testing.T) {
 
 	t.Setenv(
 		"JWT_TTL",
-		"invalid",
+		invalidValue,
 	)
 
 	_, err := Load()
@@ -322,7 +307,7 @@ func TestLoadConfigInvalidDatabasePoolConfig(t *testing.T) {
 		{
 			name:  "invalid max connections",
 			env:   "DB_MAX_CONNS",
-			value: "invalid",
+			value: invalidValue,
 		},
 		{
 			name:  "zero max connections",
@@ -337,7 +322,7 @@ func TestLoadConfigInvalidDatabasePoolConfig(t *testing.T) {
 		{
 			name:  "invalid max connection lifetime",
 			env:   "DB_MAX_CONN_LIFETIME",
-			value: "invalid",
+			value: invalidValue,
 		},
 		{
 			name:  "zero max connection lifetime",
@@ -347,7 +332,7 @@ func TestLoadConfigInvalidDatabasePoolConfig(t *testing.T) {
 		{
 			name:  "invalid max idle time",
 			env:   "DB_MAX_CONN_IDLE_TIME",
-			value: "invalid",
+			value: invalidValue,
 		},
 		{
 			name:  "zero max idle time",
@@ -357,7 +342,7 @@ func TestLoadConfigInvalidDatabasePoolConfig(t *testing.T) {
 		{
 			name:  "invalid health check period",
 			env:   "DB_HEALTH_CHECK_PERIOD",
-			value: "invalid",
+			value: invalidValue,
 		},
 		{
 			name:  "zero health check period",
@@ -532,6 +517,56 @@ func TestLoadConfigInvalidTrustedProxyCIDR(t *testing.T) {
 	if err == nil {
 		t.Fatal(
 			"expected error for invalid trusted proxy CIDR",
+		)
+	}
+}
+
+func checkHTTPConfig(t *testing.T, cfg Config) {
+	t.Helper()
+
+	if cfg.HTTP.Port != 8080 {
+		t.Errorf("Expected HTTP Port to be 8080, got %d", cfg.HTTP.Port)
+	}
+
+	if cfg.HTTP.ReadHeaderTimeout != 5*time.Second {
+		t.Errorf(
+			"Expected ReadHeaderTimeout to be 5s, got %v",
+			cfg.HTTP.ReadHeaderTimeout,
+		)
+	}
+
+	if cfg.HTTP.WriteTimeout != 10*time.Second {
+		t.Errorf(
+			"Expected WriteTimeout to be 10s, got %v",
+			cfg.HTTP.WriteTimeout,
+		)
+	}
+
+	if cfg.HTTP.IdleTimeout != 60*time.Second {
+		t.Errorf(
+			"Expected IdleTimeout to be 60s, got %v",
+			cfg.HTTP.IdleTimeout,
+		)
+	}
+
+	if cfg.HTTP.ReadTimeout != 15*time.Second {
+		t.Errorf(
+			"Expected ReadTimeout to be 15s, got %v",
+			cfg.HTTP.ReadTimeout,
+		)
+	}
+
+	if len(cfg.HTTP.CORSAllowedOrigins) != 1 {
+		t.Fatalf(
+			"expected 1 CORS origin, got %d",
+			len(cfg.HTTP.CORSAllowedOrigins),
+		)
+	}
+
+	if cfg.HTTP.CORSAllowedOrigins[0] != "http://localhost:3000" {
+		t.Errorf(
+			"unexpected CORS origin: %q",
+			cfg.HTTP.CORSAllowedOrigins[0],
 		)
 	}
 }

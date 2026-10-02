@@ -94,13 +94,9 @@ func CanTransitionStatus(from, to Status) bool {
 	case StatusDelivering:
 		return to == StatusCompleted
 
-	case StatusCompleted:
-		return false
-
-	case StatusCancelled:
-		return false
-
-	default:
+	case StatusCompleted, StatusCancelled:
 		return false
 	}
+
+	return false
 }

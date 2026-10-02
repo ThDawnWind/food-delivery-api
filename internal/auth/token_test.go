@@ -10,11 +10,12 @@ import (
 )
 
 func TestTokenManager_GenerateAndParse(t *testing.T) {
+	t.Parallel()
+
 	manager, err := NewTokenManager(
 		"this-is-a-test-secret-key-with-32-chars",
 		time.Hour,
 	)
-
 	if err != nil {
 		t.Fatalf(
 			"failed to create token manager: %v",
@@ -53,7 +54,7 @@ func TestTokenManager_GenerateAndParse(t *testing.T) {
 		)
 	}
 
-	if claims.Role != "user" {
+	if claims.Role != testRoleUser {
 		t.Errorf(
 			"expected role %q, got %q",
 			"user",
@@ -68,6 +69,7 @@ func TestTokenManager_GenerateAndParse(t *testing.T) {
 			claims.Subject,
 		)
 	}
+
 	if claims.ExpiresAt == nil {
 		t.Fatal("expected expires_at claim")
 	}
@@ -78,6 +80,8 @@ func TestTokenManager_GenerateAndParse(t *testing.T) {
 }
 
 func TestTokenManager_Parse_WrongSecret(t *testing.T) {
+	t.Parallel()
+
 	managerA, err := NewTokenManager(
 		"first-test-secret-key-with-32-characters",
 		time.Hour,
@@ -120,6 +124,8 @@ func TestTokenManager_Parse_WrongSecret(t *testing.T) {
 }
 
 func TestTokenManager_Parse_InvalidToken(t *testing.T) {
+	t.Parallel()
+
 	manager, err := NewTokenManager(
 		"this-is-a-test-secret-key-with-32-chars",
 		time.Hour,
@@ -148,6 +154,8 @@ func TestTokenManager_Parse_InvalidToken(t *testing.T) {
 }
 
 func TestTokenManager_Parse_ExpiredToken(t *testing.T) {
+	t.Parallel()
+
 	manager, err := NewTokenManager(
 		"this-is-a-test-secret-key-with-32-chars",
 		time.Hour,
@@ -209,6 +217,8 @@ func TestTokenManager_Parse_ExpiredToken(t *testing.T) {
 }
 
 func TestTokenManager_Generate_InvalidUserID(t *testing.T) {
+	t.Parallel()
+
 	manager, err := NewTokenManager(
 		"this-is-a-test-secret-key-with-32-chars",
 		time.Hour,
@@ -235,6 +245,8 @@ func TestTokenManager_Generate_InvalidUserID(t *testing.T) {
 }
 
 func TestTokenManager_Generate_EmptyRole(t *testing.T) {
+	t.Parallel()
+
 	manager, err := NewTokenManager(
 		"this-is-a-test-secret-key-with-32-chars",
 		time.Hour,

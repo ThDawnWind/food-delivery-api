@@ -6,9 +6,10 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
 	"github.com/ThDawnWind/food-delivery-api/internal/user"
-	"github.com/go-chi/chi/v5"
 )
 
 type ServiceInterface interface {
@@ -57,16 +58,18 @@ func (h *Handler) Routes() http.Handler {
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 
-	if err := httpx.DecodeJSON(
+	err := httpx.DecodeJSON(
 		w,
 		r,
 		&req,
-	); err != nil {
+	)
+	if err != nil {
 		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
 			"invalid request body",
 		)
+
 		return
 	}
 
@@ -123,16 +126,18 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 
-	if err := httpx.DecodeJSON(
+	err := httpx.DecodeJSON(
 		w,
 		r,
 		&req,
-	); err != nil {
+	)
+	if err != nil {
 		httpx.WriteError(
 			w,
 			http.StatusBadRequest,
 			"invalid request body",
 		)
+
 		return
 	}
 

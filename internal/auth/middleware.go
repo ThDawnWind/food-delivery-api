@@ -39,6 +39,7 @@ func Middleware(tokens TokenParser) func(http.Handler) http.Handler {
 						http.StatusUnauthorized,
 						"authorization header is required",
 					)
+
 					return
 				}
 
@@ -53,6 +54,7 @@ func Middleware(tokens TokenParser) func(http.Handler) http.Handler {
 						http.StatusUnauthorized,
 						"invalid authorization header",
 					)
+
 					return
 				}
 
@@ -69,6 +71,7 @@ func Middleware(tokens TokenParser) func(http.Handler) http.Handler {
 						http.StatusUnauthorized,
 						"invalid authorization token",
 					)
+
 					return
 				}
 
@@ -81,6 +84,7 @@ func Middleware(tokens TokenParser) func(http.Handler) http.Handler {
 						http.StatusUnauthorized,
 						"invalid authorization token",
 					)
+
 					return
 				}
 
@@ -137,6 +141,7 @@ func RequireRole(users UserProvider, requiredRole user.Role) func(http.Handler) 
 						http.StatusUnauthorized,
 						"unauthorized",
 					)
+
 					return
 				}
 
@@ -154,6 +159,7 @@ func RequireRole(users UserProvider, requiredRole user.Role) func(http.Handler) 
 							http.StatusUnauthorized,
 							"unauthorized",
 						)
+
 						return
 					}
 
@@ -162,6 +168,7 @@ func RequireRole(users UserProvider, requiredRole user.Role) func(http.Handler) 
 						http.StatusInternalServerError,
 						"internal server error",
 					)
+
 					return
 				}
 
@@ -171,6 +178,7 @@ func RequireRole(users UserProvider, requiredRole user.Role) func(http.Handler) 
 						http.StatusForbidden,
 						"forbidden",
 					)
+
 					return
 				}
 

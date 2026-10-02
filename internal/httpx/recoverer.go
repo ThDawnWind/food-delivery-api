@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -23,7 +24,8 @@ func Recoverer(logger *slog.Logger) func(http.Handler) http.Handler {
 						return
 					}
 
-					if recovered == http.ErrAbortHandler {
+					recoveredErr, ok := recovered.(error)
+					if ok && errors.Is(recoveredErr, http.ErrAbortHandler) {
 						panic(recovered)
 					}
 

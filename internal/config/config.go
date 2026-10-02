@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -50,133 +51,19 @@ func Load() (Config, error) {
 		env = "local"
 	}
 
-	port, exists := os.LookupEnv("HTTP_PORT")
-	if !exists {
-		port = "8080"
-	}
-
-	readTimeout, exists := os.LookupEnv("HTTP_READ_TIMEOUT")
-	if !exists {
-		readTimeout = "15s"
-	}
-
-	readTimeoutParseDuration, err := time.ParseDuration(readTimeout)
+	httpConfig, err := loadHTTPConfig(env)
 	if err != nil {
-		return Config{}, fmt.Errorf(
-			"Invalid HTTP_READ_TIMEOUT value: %w",
-			err,
-		)
+		return Config{}, err
 	}
 
-	if readTimeoutParseDuration <= 0 {
-		return Config{}, fmt.Errorf(
-			"HTTP_READ_TIMEOUT must be greater than zero",
-		)
-	}
-
-	portInt, err := strconv.Atoi(port)
+	dbConfig, err := loadDatabaseConfig()
 	if err != nil {
-		return Config{}, fmt.Errorf("Invalid HTTP_PORT value: %w", err)
-	}
-
-	if portInt < 1 || portInt > 65535 {
-		return Config{}, fmt.Errorf("HTTP_PORT must be between 1 and 65535, got %d", portInt)
-	}
-
-	readHeaderTimeout, exists := os.LookupEnv("HTTP_READ_HEADER_TIMEOUT")
-	if !exists {
-		readHeaderTimeout = "5s"
-	}
-
-	readHeaderTimeoutParseDuration, err := time.ParseDuration(readHeaderTimeout)
-	if err != nil {
-		return Config{}, fmt.Errorf("Invalid HTTP_READ_HEADER_TIMEOUT value: %w", err)
-	}
-
-	if readHeaderTimeoutParseDuration <= 0 {
-		return Config{}, fmt.Errorf("HTTP_READ_HEADER_TIMEOUT must be greater than or equal to 0")
-	}
-
-	readWriteTimeout, exists := os.LookupEnv("HTTP_WRITE_TIMEOUT")
-	if !exists {
-		readWriteTimeout = "10s"
-	}
-
-	writeTimeoutParseDuration, err := time.ParseDuration(readWriteTimeout)
-	if err != nil {
-		return Config{}, fmt.Errorf("Invalid HTTP_WRITE_TIMEOUT value: %w", err)
-	}
-
-	if writeTimeoutParseDuration < 0 {
-		return Config{}, fmt.Errorf("HTTP_WRITE_TIMEOUT must be greater than or equal to 0")
-	}
-
-	idleTimeout, exists := os.LookupEnv("HTTP_IDLE_TIMEOUT")
-	if !exists {
-		idleTimeout = "60s"
-	}
-
-	idleTimeoutParseDuration, err := time.ParseDuration(idleTimeout)
-	if err != nil {
-		return Config{}, fmt.Errorf("Invalid HTTP_IDLE_TIMEOUT value: %w", err)
-	}
-
-	if idleTimeoutParseDuration <= 0 {
-		return Config{}, fmt.Errorf("HTTP_IDLE_TIMEOUT must be greater than or equal to 0")
+		return Config{}, err
 	}
 
 	databaseURL, exists := os.LookupEnv("DATABASE_URL")
 	if !exists || databaseURL == "" {
-		return Config{}, fmt.Errorf("DATABASE_URL environment variable is not set")
-	}
-
-	dbMaxConns, err := parseInt32Env("DB_MAX_CONNS", 10)
-	if err != nil {
-		return Config{}, err
-	}
-
-	if dbMaxConns <= 0 {
-		return Config{}, errors.New("DB_MAX_CONNS must be greater than zero")
-	}
-
-	dbMinConns, err := parseInt32Env("DB_MIN_CONNS", 1)
-	if err != nil {
-		return Config{}, err
-	}
-
-	if dbMinConns < 0 {
-		return Config{}, errors.New("DB_MIN_CONNS must be greater than or equal to zero")
-	}
-
-	if dbMinConns > dbMaxConns {
-		return Config{}, errors.New("DB_MIN_CONNS must not be greater than DB_MAX_CONNS")
-	}
-
-	dbMaxConnLifetime, err := parseDurationEnv("DB_MAX_CONN_LIFETIME", "1h")
-	if err != nil {
-		return Config{}, err
-	}
-
-	if dbMaxConnLifetime <= 0 {
-		return Config{}, errors.New("DB_MAX_CONN_LIFETIME must be greater than zero")
-	}
-
-	dbMaxConnIdleTime, err := parseDurationEnv("DB_MAX_CONN_IDLE_TIME", "30m")
-	if err != nil {
-		return Config{}, err
-	}
-
-	if dbMaxConnIdleTime <= 0 {
-		return Config{}, errors.New("DB_MAX_CONN_IDLE_TIME must be greater than zero")
-	}
-
-	dbHealthCheckPeriod, err := parseDurationEnv("DB_HEALTH_CHECK_PERIOD", "1m")
-	if err != nil {
-		return Config{}, err
-	}
-
-	if dbHealthCheckPeriod <= 0 {
-		return Config{}, errors.New("DB_HEALTH_CHECK_PERIOD must be greater than zero")
+		return Config{}, errors.New("DATABASE_URL environment variable is not set")
 	}
 
 	jwtSecret := strings.TrimSpace(
@@ -220,12 +107,139 @@ func Load() (Config, error) {
 		timezone = "UTC"
 	}
 
-	if _, err := time.LoadLocation(timezone); err != nil {
+	_, err = time.LoadLocation(timezone)
+	if err != nil {
 		return Config{}, fmt.Errorf(
 			"invalid APP_TIMEZONE %q: %w",
 			timezone,
 			err,
 		)
+	}
+
+	return Config{
+		Env:      env,
+		HTTP:     httpConfig,
+		Database: dbConfig,
+		JWT: &JWTConfig{
+			Secret: jwtSecret,
+			TTL:    jwtTTL,
+		},
+		Timezone: timezone,
+	}, nil
+}
+
+func loadDatabaseConfig() (DatabaseConfig, error) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		return DatabaseConfig{}, errors.New(
+			"DATABASE_URL environment variable is not set",
+		)
+	}
+
+	dbMaxConns, err := parseInt32Env("DB_MAX_CONNS", 10)
+	if err != nil {
+		return DatabaseConfig{}, err
+	}
+
+	if dbMaxConns <= 0 {
+		return DatabaseConfig{}, errors.New(
+			"DB_MAX_CONNS must be greater than zero",
+		)
+	}
+
+	dbMinConns, err := parseInt32Env("DB_MIN_CONNS", 1)
+	if err != nil {
+		return DatabaseConfig{}, err
+	}
+
+	if dbMinConns < 0 {
+		return DatabaseConfig{}, errors.New(
+			"DB_MIN_CONNS must be greater than or equal to zero",
+		)
+	}
+
+	if dbMinConns > dbMaxConns {
+		return DatabaseConfig{}, errors.New(
+			"DB_MIN_CONNS must not be greater than DB_MAX_CONNS",
+		)
+	}
+
+	dbMaxConnLifetime, err := parseDurationEnv(
+		"DB_MAX_CONN_LIFETIME",
+		"1h",
+	)
+	if err != nil {
+		return DatabaseConfig{}, err
+	}
+
+	if dbMaxConnLifetime <= 0 {
+		return DatabaseConfig{}, errors.New(
+			"DB_MAX_CONN_LIFETIME must be greater than zero",
+		)
+	}
+
+	dbMaxConnIdleTime, err := parseDurationEnv(
+		"DB_MAX_CONN_IDLE_TIME",
+		"30m",
+	)
+	if err != nil {
+		return DatabaseConfig{}, err
+	}
+
+	if dbMaxConnIdleTime <= 0 {
+		return DatabaseConfig{}, errors.New(
+			"DB_MAX_CONN_IDLE_TIME must be greater than zero",
+		)
+	}
+
+	dbHealthCheckPeriod, err := parseDurationEnv(
+		"DB_HEALTH_CHECK_PERIOD",
+		"1m",
+	)
+	if err != nil {
+		return DatabaseConfig{}, err
+	}
+
+	if dbHealthCheckPeriod <= 0 {
+		return DatabaseConfig{}, errors.New(
+			"DB_HEALTH_CHECK_PERIOD must be greater than zero",
+		)
+	}
+
+	return DatabaseConfig{
+		URL:               databaseURL,
+		MaxConns:          dbMaxConns,
+		MinConns:          dbMinConns,
+		MaxConnLifetime:   dbMaxConnLifetime,
+		MaxConnIdleTime:   dbMaxConnIdleTime,
+		HealthCheckPeriod: dbHealthCheckPeriod,
+	}, nil
+}
+
+func loadHTTPConfig(env string) (HTTPConfig, error) {
+	port, exists := os.LookupEnv("HTTP_PORT")
+	if !exists {
+		port = "8080"
+	}
+
+	portInt, err := strconv.Atoi(port)
+	if err != nil {
+		return HTTPConfig{}, fmt.Errorf(
+			"invalid HTTP_PORT value: %w",
+			err,
+		)
+	}
+
+	if portInt < 1 || portInt > 65535 {
+		return HTTPConfig{}, fmt.Errorf(
+			"HTTP_PORT must be between 1 and 65535, got %d",
+			portInt,
+		)
+	}
+
+	timeouts, err := loadHTTPTimeouts()
+	if err != nil {
+		return HTTPConfig{}, err
 	}
 
 	corsAllowedOriginsRaw := strings.TrimSpace(
@@ -247,20 +261,17 @@ func Load() (Config, error) {
 		)
 
 		if corsAllowedOrigins[i] == "" {
-			return Config{}, errors.New(
+			return HTTPConfig{}, errors.New(
 				"CORS_ALLOWED_ORIGINS contains an empty origin",
 			)
 		}
 	}
 
-	if env == "production" {
-		for _, origin := range corsAllowedOrigins {
-			if origin == "*" {
-				return Config{}, errors.New(
-					"CORS_ALLOWED_ORIGINS must not contain '*' in production",
-				)
-			}
-		}
+	if env == "production" &&
+		slices.Contains(corsAllowedOrigins, "*") {
+		return HTTPConfig{}, errors.New(
+			"CORS_ALLOWED_ORIGINS must not contain '*' in production",
+		)
 	}
 
 	trustedProxyCIDRsRaw := strings.TrimSpace(
@@ -270,7 +281,7 @@ func Load() (Config, error) {
 	var trustedProxyCIDRs []netip.Prefix
 
 	if trustedProxyCIDRsRaw != "" {
-		for _, rawCIDR := range strings.Split(
+		for rawCIDR := range strings.SplitSeq(
 			trustedProxyCIDRsRaw,
 			",",
 		) {
@@ -278,7 +289,7 @@ func Load() (Config, error) {
 
 			prefix, err := netip.ParsePrefix(rawCIDR)
 			if err != nil {
-				return Config{}, fmt.Errorf(
+				return HTTPConfig{}, fmt.Errorf(
 					"invalid TRUSTED_PROXY_CIDRS value %q: %w",
 					rawCIDR,
 					err,
@@ -292,30 +303,99 @@ func Load() (Config, error) {
 		}
 	}
 
-	return Config{
-		Env: env,
-		HTTP: HTTPConfig{
-			Port:               portInt,
-			ReadTimeout:        readTimeoutParseDuration,
-			ReadHeaderTimeout:  readHeaderTimeoutParseDuration,
-			WriteTimeout:       writeTimeoutParseDuration,
-			IdleTimeout:        idleTimeoutParseDuration,
-			CORSAllowedOrigins: corsAllowedOrigins,
-			TrustedProxyCIDRs:  trustedProxyCIDRs,
-		},
-		Database: DatabaseConfig{
-			URL:               databaseURL,
-			MaxConns:          dbMaxConns,
-			MinConns:          dbMinConns,
-			MaxConnLifetime:   dbMaxConnLifetime,
-			MaxConnIdleTime:   dbMaxConnIdleTime,
-			HealthCheckPeriod: dbHealthCheckPeriod,
-		},
-		JWT: &JWTConfig{
-			Secret: jwtSecret,
-			TTL:    jwtTTL,
-		},
-		Timezone: timezone,
+	return HTTPConfig{
+		Port:               portInt,
+		ReadTimeout:        timeouts.ReadTimeout,
+		ReadHeaderTimeout:  timeouts.ReadHeaderTimeout,
+		WriteTimeout:       timeouts.WriteTimeout,
+		IdleTimeout:        timeouts.IdleTimeout,
+		CORSAllowedOrigins: corsAllowedOrigins,
+		TrustedProxyCIDRs:  trustedProxyCIDRs,
+	}, nil
+}
+
+func loadHTTPTimeouts() (HTTPConfig, error) {
+	readTimeout, exists := os.LookupEnv("HTTP_READ_TIMEOUT")
+	if !exists {
+		readTimeout = "15s"
+	}
+
+	readTimeoutDuration, err := time.ParseDuration(readTimeout)
+	if err != nil {
+		return HTTPConfig{}, fmt.Errorf(
+			"invalid HTTP_READ_TIMEOUT value: %w",
+			err,
+		)
+	}
+
+	if readTimeoutDuration <= 0 {
+		return HTTPConfig{}, errors.New(
+			"HTTP_READ_TIMEOUT must be greater than zero",
+		)
+	}
+
+	readHeaderTimeout, exists := os.LookupEnv("HTTP_READ_HEADER_TIMEOUT")
+	if !exists {
+		readHeaderTimeout = "5s"
+	}
+
+	readHeaderTimeoutDuration, err := time.ParseDuration(readHeaderTimeout)
+	if err != nil {
+		return HTTPConfig{}, fmt.Errorf(
+			"invalid HTTP_READ_HEADER_TIMEOUT value: %w",
+			err,
+		)
+	}
+
+	if readHeaderTimeoutDuration <= 0 {
+		return HTTPConfig{}, errors.New(
+			"HTTP_READ_HEADER_TIMEOUT must be greater than zero",
+		)
+	}
+
+	writeTimeout, exists := os.LookupEnv("HTTP_WRITE_TIMEOUT")
+	if !exists {
+		writeTimeout = "10s"
+	}
+
+	writeTimeoutDuration, err := time.ParseDuration(writeTimeout)
+	if err != nil {
+		return HTTPConfig{}, fmt.Errorf(
+			"invalid HTTP_WRITE_TIMEOUT value: %w",
+			err,
+		)
+	}
+
+	if writeTimeoutDuration < 0 {
+		return HTTPConfig{}, errors.New(
+			"HTTP_WRITE_TIMEOUT must be greater than or equal to zero",
+		)
+	}
+
+	idleTimeout, exists := os.LookupEnv("HTTP_IDLE_TIMEOUT")
+	if !exists {
+		idleTimeout = "60s"
+	}
+
+	idleTimeoutDuration, err := time.ParseDuration(idleTimeout)
+	if err != nil {
+		return HTTPConfig{}, fmt.Errorf(
+			"invalid HTTP_IDLE_TIMEOUT value: %w",
+			err,
+		)
+	}
+
+	if idleTimeoutDuration <= 0 {
+		return HTTPConfig{}, errors.New(
+			"HTTP_IDLE_TIMEOUT must be greater than zero",
+		)
+	}
+
+	return HTTPConfig{
+		ReadTimeout:       readTimeoutDuration,
+		ReadHeaderTimeout: readHeaderTimeoutDuration,
+		WriteTimeout:      writeTimeoutDuration,
+		IdleTimeout:       idleTimeoutDuration,
 	}, nil
 }
 
@@ -333,7 +413,7 @@ func parseInt32Env(name string, defaultValue int32) (int32, error) {
 	return int32(value), nil
 }
 
-func parseDurationEnv(name string, defaultValue string) (time.Duration, error) {
+func parseDurationEnv(name, defaultValue string) (time.Duration, error) {
 	raw := strings.TrimSpace(os.Getenv(name))
 	if raw == "" {
 		raw = defaultValue

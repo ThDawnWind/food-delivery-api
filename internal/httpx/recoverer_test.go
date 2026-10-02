@@ -3,6 +3,7 @@ package httpx
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,8 @@ import (
 )
 
 func TestRecoverer(t *testing.T) {
+	t.Parallel()
+
 	var buffer bytes.Buffer
 
 	logger := slog.New(
@@ -27,8 +30,8 @@ func TestRecoverer(t *testing.T) {
 		)(
 			http.HandlerFunc(
 				func(
-					w http.ResponseWriter,
-					r *http.Request,
+					_ http.ResponseWriter,
+					_ *http.Request,
 				) {
 					panic(
 						"test panic",
@@ -38,7 +41,8 @@ func TestRecoverer(t *testing.T) {
 		),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/api/v1/orders?token=secret",
 		nil,
@@ -66,10 +70,11 @@ func TestRecoverer(t *testing.T) {
 
 	var entry map[string]any
 
-	if err := json.Unmarshal(
+	err := json.Unmarshal(
 		buffer.Bytes(),
 		&entry,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf(
 			"failed to decode log entry: %v",
 			err,
@@ -141,6 +146,8 @@ func TestRecoverer(t *testing.T) {
 }
 
 func TestRecoverer_NoPanic(t *testing.T) {
+	t.Parallel()
+
 	var buffer bytes.Buffer
 
 	logger := slog.New(
@@ -156,7 +163,7 @@ func TestRecoverer_NoPanic(t *testing.T) {
 		http.HandlerFunc(
 			func(
 				w http.ResponseWriter,
-				r *http.Request,
+				_ *http.Request,
 			) {
 				w.WriteHeader(
 					http.StatusCreated,
@@ -165,7 +172,8 @@ func TestRecoverer_NoPanic(t *testing.T) {
 		),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/test",
 		nil,
@@ -197,6 +205,8 @@ func TestRecoverer_NoPanic(t *testing.T) {
 func TestRecoverer_AbortHandler(
 	t *testing.T,
 ) {
+	t.Parallel()
+
 	logger := slog.New(
 		slog.NewJSONHandler(
 			&bytes.Buffer{},
@@ -209,8 +219,8 @@ func TestRecoverer_AbortHandler(
 	)(
 		http.HandlerFunc(
 			func(
-				w http.ResponseWriter,
-				r *http.Request,
+				_ http.ResponseWriter,
+				_ *http.Request,
 			) {
 				panic(
 					http.ErrAbortHandler,
@@ -219,7 +229,8 @@ func TestRecoverer_AbortHandler(
 		),
 	)
 
-	request := httptest.NewRequest(
+	request := httptest.NewRequestWithContext(
+		t.Context(),
 		http.MethodGet,
 		"/test",
 		nil,
@@ -230,10 +241,18 @@ func TestRecoverer_AbortHandler(
 	defer func() {
 		recovered := recover()
 
-		if recovered != http.ErrAbortHandler {
+		recoveredErr, ok := recovered.(error)
+		if !ok {
+			t.Fatalf(
+				"expected error panic, got %T",
+				recovered,
+			)
+		}
+
+		if !errors.Is(recoveredErr, http.ErrAbortHandler) {
 			t.Fatalf(
 				"expected http.ErrAbortHandler, got %v",
-				recovered,
+				recoveredErr,
 			)
 		}
 	}()

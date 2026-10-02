@@ -6,8 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type fakeRepository struct {
@@ -24,7 +25,7 @@ type fakeRepository struct {
 	getByEmailInput string
 }
 
-func (f *fakeRepository) Create(ctx context.Context, input *CreateUser) (*User, error) {
+func (f *fakeRepository) Create(_ context.Context, input *CreateUser) (*User, error) {
 	f.createInput = input
 
 	if f.createErr != nil {
@@ -44,7 +45,7 @@ func (f *fakeRepository) Create(ctx context.Context, input *CreateUser) (*User, 
 	}, nil
 }
 
-func (f *fakeRepository) GetByID(ctx context.Context, id int64) (*User, error) {
+func (f *fakeRepository) GetByID(_ context.Context, _ int64) (*User, error) {
 	if f.getByIDErr != nil {
 		return nil, f.getByIDErr
 	}
@@ -52,7 +53,7 @@ func (f *fakeRepository) GetByID(ctx context.Context, id int64) (*User, error) {
 	return f.getByIDUser, nil
 }
 
-func (f *fakeRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
+func (f *fakeRepository) GetByEmail(_ context.Context, email string) (*User, error) {
 	f.getByEmailInput = email
 
 	if f.getByEmailErr != nil {
@@ -63,6 +64,8 @@ func (f *fakeRepository) GetByEmail(ctx context.Context, email string) (*User, e
 }
 
 func TestService_Register(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{}
 
 	service := NewService(repository)
@@ -70,7 +73,7 @@ func TestService_Register(t *testing.T) {
 	input := &RegisterUser{
 		Username: "  alex  ",
 		Email:    "  alex@example.com  ",
-		Password: "password123",
+		Password: testPassword,
 	}
 
 	user, err := service.Register(
@@ -89,18 +92,18 @@ func TestService_Register(t *testing.T) {
 		t.Fatal("expected user to be passed to repository")
 	}
 
-	if repository.createInput.Username != "alex" {
+	if repository.createInput.Username != testUsername {
 		t.Errorf(
 			"expected username %q, got %q",
-			"alex",
+			testUsername,
 			repository.createInput.Username,
 		)
 	}
 
-	if repository.createInput.Email != "alex@example.com" {
+	if repository.createInput.Email != testEmail {
 		t.Errorf(
 			"expected email %q, got %q",
-			"alex@example.com",
+			testEmail,
 			repository.createInput.Email,
 		)
 	}
@@ -132,6 +135,8 @@ func TestService_Register(t *testing.T) {
 }
 
 func TestService_Register_Validation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		input *RegisterUser
@@ -143,40 +148,40 @@ func TestService_Register_Validation(t *testing.T) {
 		{
 			name: "empty username",
 			input: &RegisterUser{
-				Username: "   ",
-				Email:    "alex@example.com",
-				Password: "password123",
+				Username: testBlankValue,
+				Email:    testEmail,
+				Password: testPassword,
 			},
 		},
 		{
 			name: "empty email",
 			input: &RegisterUser{
-				Username: "alex",
-				Email:    "   ",
-				Password: "password123",
+				Username: testUsername,
+				Email:    testBlankValue,
+				Password: testPassword,
 			},
 		},
 		{
 			name: "empty password",
 			input: &RegisterUser{
-				Username: "alex",
-				Email:    "alex@example.com",
+				Username: testUsername,
+				Email:    testEmail,
 				Password: "",
 			},
 		},
 		{
 			name: "short password",
 			input: &RegisterUser{
-				Username: "alex",
-				Email:    "alex@example.com",
+				Username: testUsername,
+				Email:    testEmail,
 				Password: "1234567",
 			},
 		},
 		{
 			name: "password too long",
 			input: &RegisterUser{
-				Username: "alex",
-				Email:    "alex@example.com",
+				Username: testUsername,
+				Email:    testEmail,
 				Password: strings.Repeat("a", 73),
 			},
 		},
@@ -184,31 +189,33 @@ func TestService_Register_Validation(t *testing.T) {
 			name: "username too long",
 			input: &RegisterUser{
 				Username: strings.Repeat("a", 51),
-				Email:    "alex@example.com",
-				Password: "password123",
+				Email:    testEmail,
+				Password: testPassword,
 			},
 		},
 		{
 			name: "email too long",
 			input: &RegisterUser{
-				Username: "alex",
+				Username: testUsername,
 				Email: strings.Repeat("a", 89) +
 					"@example.com",
-				Password: "password123",
+				Password: testPassword,
 			},
 		},
 		{
 			name: "invalid email",
 			input: &RegisterUser{
-				Username: "alex",
+				Username: testUsername,
 				Email:    "not-an-email",
-				Password: "password123",
+				Password: testPassword,
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			repository := &fakeRepository{}
 
 			service := NewService(repository)
@@ -242,6 +249,8 @@ func TestService_Register_Validation(t *testing.T) {
 }
 
 func TestService_Register_Conflict(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{
 		createErr: ErrUserConflict,
 	}
@@ -251,9 +260,9 @@ func TestService_Register_Conflict(t *testing.T) {
 	user, err := service.Register(
 		context.Background(),
 		&RegisterUser{
-			Username: "alex",
-			Email:    "alex@example.com",
-			Password: "password123",
+			Username: testUsername,
+			Email:    testEmail,
+			Password: testPassword,
 		},
 	)
 
@@ -273,6 +282,8 @@ func TestService_Register_Conflict(t *testing.T) {
 }
 
 func TestService_Register_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New("database unavailable")
 
 	repository := &fakeRepository{
@@ -284,9 +295,9 @@ func TestService_Register_RepositoryError(t *testing.T) {
 	user, err := service.Register(
 		context.Background(),
 		&RegisterUser{
-			Username: "alex",
-			Email:    "alex@example.com",
-			Password: "password123",
+			Username: testUsername,
+			Email:    testEmail,
+			Password: testPassword,
 		},
 	)
 
@@ -306,11 +317,13 @@ func TestService_Register_RepositoryError(t *testing.T) {
 }
 
 func TestService_GetByID(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{
 		getByIDUser: &User{
 			ID:       10,
-			Username: "alex",
-			Email:    "alex@example.com",
+			Username: testUsername,
+			Email:    testEmail,
 			Role:     RoleUser,
 		},
 	}
@@ -339,6 +352,8 @@ func TestService_GetByID(t *testing.T) {
 }
 
 func TestService_GetByID_InvalidID(t *testing.T) {
+	t.Parallel()
+
 	service := NewService(
 		&fakeRepository{},
 	)
@@ -364,6 +379,8 @@ func TestService_GetByID_InvalidID(t *testing.T) {
 }
 
 func TestService_GetByID_NotFound(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{
 		getByIDErr: pgx.ErrNoRows,
 	}
@@ -391,6 +408,8 @@ func TestService_GetByID_NotFound(t *testing.T) {
 }
 
 func TestService_GetByID_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New("database unavailable")
 
 	repository := &fakeRepository{
@@ -420,7 +439,9 @@ func TestService_GetByID_RepositoryError(t *testing.T) {
 }
 
 func TestService_Login(t *testing.T) {
-	password := "password123"
+	t.Parallel()
+
+	password := testPassword
 
 	hash, err := bcrypt.GenerateFromPassword(
 		[]byte(password),
@@ -433,8 +454,8 @@ func TestService_Login(t *testing.T) {
 	repository := &fakeRepository{
 		getByEmailUser: &User{
 			ID:           1,
-			Username:     "alex",
-			Email:        "alex@example.com",
+			Username:     testUsername,
+			Email:        testEmail,
 			PasswordHash: string(hash),
 			Role:         RoleUser,
 		},
@@ -467,6 +488,8 @@ func TestService_Login(t *testing.T) {
 }
 
 func TestService_Login_InvalidPassword(t *testing.T) {
+	t.Parallel()
+
 	hash, err := bcrypt.GenerateFromPassword(
 		[]byte("correct-password"),
 		bcrypt.DefaultCost,
@@ -478,7 +501,7 @@ func TestService_Login_InvalidPassword(t *testing.T) {
 	repository := &fakeRepository{
 		getByEmailUser: &User{
 			ID:           1,
-			Email:        "alex@example.com",
+			Email:        testEmail,
 			PasswordHash: string(hash),
 		},
 	}
@@ -488,7 +511,7 @@ func TestService_Login_InvalidPassword(t *testing.T) {
 	user, err := service.Login(
 		context.Background(),
 		&LoginUser{
-			Email:    "alex@example.com",
+			Email:    testEmail,
 			Password: "wrong-password",
 		},
 	)
@@ -509,6 +532,8 @@ func TestService_Login_InvalidPassword(t *testing.T) {
 }
 
 func TestService_Login_UserNotFound(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{
 		getByEmailErr: pgx.ErrNoRows,
 	}
@@ -519,7 +544,7 @@ func TestService_Login_UserNotFound(t *testing.T) {
 		context.Background(),
 		&LoginUser{
 			Email:    "missing@example.com",
-			Password: "password123",
+			Password: testPassword,
 		},
 	)
 
@@ -539,6 +564,8 @@ func TestService_Login_UserNotFound(t *testing.T) {
 }
 
 func TestService_Login_Validation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		input *LoginUser
@@ -551,13 +578,13 @@ func TestService_Login_Validation(t *testing.T) {
 			name: "empty email",
 			input: &LoginUser{
 				Email:    "   ",
-				Password: "password123",
+				Password: testPassword,
 			},
 		},
 		{
 			name: "empty password",
 			input: &LoginUser{
-				Email:    "alex@example.com",
+				Email:    testEmail,
 				Password: "",
 			},
 		},
@@ -565,6 +592,8 @@ func TestService_Login_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			service := NewService(
 				&fakeRepository{},
 			)
@@ -592,6 +621,8 @@ func TestService_Login_Validation(t *testing.T) {
 }
 
 func TestService_Login_RepositoryError(t *testing.T) {
+	t.Parallel()
+
 	repositoryErr := errors.New("database unavailable")
 
 	repository := &fakeRepository{
@@ -603,8 +634,8 @@ func TestService_Login_RepositoryError(t *testing.T) {
 	user, err := service.Login(
 		context.Background(),
 		&LoginUser{
-			Email:    "alex@example.com",
-			Password: "password123",
+			Email:    testEmail,
+			Password: testPassword,
 		},
 	)
 
@@ -624,14 +655,16 @@ func TestService_Login_RepositoryError(t *testing.T) {
 }
 
 func TestService_Register_MaxPasswordLength(t *testing.T) {
+	t.Parallel()
+
 	repository := &fakeRepository{}
 	service := NewService(repository)
 
 	user, err := service.Register(
 		context.Background(),
 		&RegisterUser{
-			Username: "alex",
-			Email:    "alex@example.com",
+			Username: testUsername,
+			Email:    testEmail,
 			Password: strings.Repeat("a", 72),
 		},
 	)
@@ -645,6 +678,8 @@ func TestService_Register_MaxPasswordLength(t *testing.T) {
 }
 
 func TestService_Login_InvalidCredentialsFormat(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		input *LoginUser
@@ -653,7 +688,7 @@ func TestService_Login_InvalidCredentialsFormat(t *testing.T) {
 			name: "invalid email",
 			input: &LoginUser{
 				Email:    "not-an-email",
-				Password: "password123",
+				Password: testPassword,
 			},
 		},
 		{
@@ -661,13 +696,13 @@ func TestService_Login_InvalidCredentialsFormat(t *testing.T) {
 			input: &LoginUser{
 				Email: strings.Repeat("a", 89) +
 					"@example.com",
-				Password: "password123",
+				Password: testPassword,
 			},
 		},
 		{
 			name: "password too long",
 			input: &LoginUser{
-				Email:    "alex@example.com",
+				Email:    testEmail,
 				Password: strings.Repeat("a", 73),
 			},
 		},
@@ -675,6 +710,8 @@ func TestService_Login_InvalidCredentialsFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			repository := &fakeRepository{}
 
 			service := NewService(repository)
@@ -711,6 +748,8 @@ func TestService_Login_InvalidCredentialsFormat(t *testing.T) {
 }
 
 func TestDummyPasswordHashUsesDefaultCost(t *testing.T) {
+	t.Parallel()
+
 	cost, err := bcrypt.Cost(
 		dummyPasswordHash,
 	)

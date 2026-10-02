@@ -38,6 +38,7 @@ func (s *Service) GetByID(ctx context.Context, id int64) (*Category, error) {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrCategoryNotFound
 		}
+
 		return nil, fmt.Errorf("get category: %w", err)
 	}
 
@@ -99,7 +100,6 @@ func (s *Service) Update(ctx context.Context, category *Category) error {
 }
 
 func (s *Service) Delete(ctx context.Context, id int64) error {
-
 	err := s.repository.Delete(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
