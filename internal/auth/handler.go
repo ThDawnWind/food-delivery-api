@@ -19,7 +19,7 @@ type ServiceInterface interface {
 
 	Login(
 		ctx context.Context,
-		input *user.LoginUser,
+		input user.LoginUser,
 	) (*LoginResult, error)
 }
 
@@ -143,7 +143,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.service.Login(
 		r.Context(),
-		&user.LoginUser{
+		user.LoginUser{
 			Email:    req.Email,
 			Password: req.Password,
 		},

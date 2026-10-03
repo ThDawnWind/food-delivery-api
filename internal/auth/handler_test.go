@@ -14,9 +14,10 @@ import (
 )
 
 type fakeLoginService struct {
-	input  *user.LoginUser
-	result *LoginResult
-	err    error
+	loginCalled bool
+	input       user.LoginUser
+	result      *LoginResult
+	err         error
 
 	registerCalled bool
 	registerInput  user.RegisterUser
@@ -35,7 +36,8 @@ func (f *fakeLoginService) Register(_ context.Context, input user.RegisterUser) 
 	return f.registerUser, nil
 }
 
-func (f *fakeLoginService) Login(_ context.Context, input *user.LoginUser) (*LoginResult, error) {
+func (f *fakeLoginService) Login(_ context.Context, input user.LoginUser) (*LoginResult, error) {
+	f.loginCalled = true
 	f.input = input
 
 	if f.err != nil {
@@ -89,8 +91,8 @@ func TestHandler_Login(t *testing.T) {
 		)
 	}
 
-	if service.input == nil {
-		t.Fatal("expected login input to be passed to service")
+	if !service.loginCalled {
+		t.Fatal("expected service Login to be called")
 	}
 
 	if service.input.Email != testEmail {
@@ -169,7 +171,7 @@ func TestHandler_Login_InvalidJSON(t *testing.T) {
 		)
 	}
 
-	if service.input != nil {
+	if service.loginCalled {
 		t.Fatal(
 			"service must not be called for invalid JSON",
 		)

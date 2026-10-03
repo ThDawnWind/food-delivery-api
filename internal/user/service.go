@@ -166,14 +166,7 @@ func (s *Service) GetByID(ctx context.Context, id int64) (*User, error) {
 	return user, nil
 }
 
-func (s *Service) Login(ctx context.Context, input *LoginUser) (*User, error) {
-	if input == nil {
-		return nil, fmt.Errorf(
-			"%w: login data is required",
-			ErrUserValidation,
-		)
-	}
-
+func (s *Service) Login(ctx context.Context, input LoginUser) (*User, error) {
 	email := strings.TrimSpace(input.Email)
 
 	if email == "" {

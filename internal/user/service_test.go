@@ -463,7 +463,7 @@ func TestService_Login(t *testing.T) {
 
 	user, err := service.Login(
 		context.Background(),
-		&LoginUser{
+		LoginUser{
 			Email:    "  alex@example.com  ",
 			Password: password,
 		},
@@ -508,7 +508,7 @@ func TestService_Login_InvalidPassword(t *testing.T) {
 
 	user, err := service.Login(
 		context.Background(),
-		&LoginUser{
+		LoginUser{
 			Email:    testEmail,
 			Password: "wrong-password",
 		},
@@ -540,7 +540,7 @@ func TestService_Login_UserNotFound(t *testing.T) {
 
 	user, err := service.Login(
 		context.Background(),
-		&LoginUser{
+		LoginUser{
 			Email:    "missing@example.com",
 			Password: testPassword,
 		},
@@ -566,22 +566,18 @@ func TestService_Login_Validation(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		input *LoginUser
+		input LoginUser
 	}{
 		{
-			name:  "nil input",
-			input: nil,
-		},
-		{
 			name: "empty email",
-			input: &LoginUser{
+			input: LoginUser{
 				Email:    "   ",
 				Password: testPassword,
 			},
 		},
 		{
 			name: "empty password",
-			input: &LoginUser{
+			input: LoginUser{
 				Email:    testEmail,
 				Password: "",
 			},
@@ -631,7 +627,7 @@ func TestService_Login_RepositoryError(t *testing.T) {
 
 	user, err := service.Login(
 		context.Background(),
-		&LoginUser{
+		LoginUser{
 			Email:    testEmail,
 			Password: testPassword,
 		},
@@ -680,18 +676,18 @@ func TestService_Login_InvalidCredentialsFormat(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		input *LoginUser
+		input LoginUser
 	}{
 		{
 			name: "invalid email",
-			input: &LoginUser{
+			input: LoginUser{
 				Email:    "not-an-email",
 				Password: testPassword,
 			},
 		},
 		{
 			name: "email too long",
-			input: &LoginUser{
+			input: LoginUser{
 				Email: strings.Repeat("a", 89) +
 					"@example.com",
 				Password: testPassword,
@@ -699,7 +695,7 @@ func TestService_Login_InvalidCredentialsFormat(t *testing.T) {
 		},
 		{
 			name: "password too long",
-			input: &LoginUser{
+			input: LoginUser{
 				Email:    testEmail,
 				Password: strings.Repeat("a", 73),
 			},

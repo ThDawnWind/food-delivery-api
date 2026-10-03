@@ -27,7 +27,7 @@ func (f *fakeUserAuthenticator) Register(_ context.Context, input user.RegisterU
 	return f.user, nil
 }
 
-func (f *fakeUserAuthenticator) Login(_ context.Context, _ *user.LoginUser) (*user.User, error) {
+func (f *fakeUserAuthenticator) Login(_ context.Context, _ user.LoginUser) (*user.User, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -77,7 +77,7 @@ func TestService_Login(t *testing.T) {
 
 	result, err := service.Login(
 		context.Background(),
-		&user.LoginUser{
+		user.LoginUser{
 			Email:    testEmail,
 			Password: testPassword,
 		},
@@ -148,7 +148,7 @@ func TestService_Login_UserAuthenticationError(t *testing.T) {
 
 	result, err := service.Login(
 		context.Background(),
-		&user.LoginUser{
+		user.LoginUser{
 			Email:    testEmail,
 			Password: "wrong-password",
 		},
@@ -200,7 +200,7 @@ func TestService_Login_TokenError(t *testing.T) {
 
 	result, err := service.Login(
 		context.Background(),
-		&user.LoginUser{
+		user.LoginUser{
 			Email:    testEmail,
 			Password: testPassword,
 		},
