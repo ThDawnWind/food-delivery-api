@@ -19,7 +19,7 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	}
 }
 
-func (r *Repository) Create(ctx context.Context, input *CreateUser) (*User, error) {
+func (r *Repository) Create(ctx context.Context, input CreateUser) (*User, error) {
 	user := &User{}
 
 	err := r.db.QueryRow(

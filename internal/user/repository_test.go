@@ -37,7 +37,7 @@ func TestRepository_Create(t *testing.T) {
 
 	suffix := time.Now().UnixNano()
 
-	input := &CreateUser{
+	input := CreateUser{
 		Username:     fmt.Sprintf("user-%d", suffix),
 		Email:        fmt.Sprintf("user-%d@example.com", suffix),
 		PasswordHash: "test-password-hash",
@@ -141,7 +141,7 @@ func TestRepository_Create_DuplicateUsername(t *testing.T) {
 
 	firstUser, err := repo.Create(
 		ctx,
-		&CreateUser{
+		CreateUser{
 			Username:     fmt.Sprintf("duplicate-%d", suffix),
 			Email:        fmt.Sprintf("first-%d@example.com", suffix),
 			PasswordHash: testPasswordHash,
@@ -168,7 +168,7 @@ func TestRepository_Create_DuplicateUsername(t *testing.T) {
 
 	secondUser, err := repo.Create(
 		ctx,
-		&CreateUser{
+		CreateUser{
 			Username:     firstUser.Username,
 			Email:        fmt.Sprintf("second-%d@example.com", suffix),
 			PasswordHash: testPasswordHash,
@@ -217,7 +217,7 @@ func TestRepository_Create_DuplicateEmail(t *testing.T) {
 
 	firstUser, err := repo.Create(
 		ctx,
-		&CreateUser{
+		CreateUser{
 			Username:     fmt.Sprintf("first-%d", suffix),
 			Email:        fmt.Sprintf("duplicate-%d@example.com", suffix),
 			PasswordHash: testPasswordHash,
@@ -244,7 +244,7 @@ func TestRepository_Create_DuplicateEmail(t *testing.T) {
 
 	secondUser, err := repo.Create(
 		ctx,
-		&CreateUser{
+		CreateUser{
 			Username:     fmt.Sprintf("second-%d", suffix),
 			Email:        firstUser.Email,
 			PasswordHash: testPasswordHash,
@@ -293,7 +293,7 @@ func TestRepository_GetByID(t *testing.T) {
 
 	createdUser, err := repo.Create(
 		ctx,
-		&CreateUser{
+		CreateUser{
 			Username:     fmt.Sprintf("get-by-id-%d", suffix),
 			Email:        fmt.Sprintf("get-by-id-%d@example.com", suffix),
 			PasswordHash: testPasswordHashValue,
@@ -397,7 +397,7 @@ func TestRepository_GetByEmail(t *testing.T) {
 
 	createdUser, err := repo.Create(
 		ctx,
-		&CreateUser{
+		CreateUser{
 			Username:     fmt.Sprintf("get-by-email-%d", suffix),
 			Email:        fmt.Sprintf("get-by-email-%d@example.com", suffix),
 			PasswordHash: testPasswordHashValue,

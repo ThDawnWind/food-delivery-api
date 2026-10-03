@@ -14,17 +14,20 @@ import (
 )
 
 type fakeLoginService struct {
-	input  *user.LoginUser
-	result *LoginResult
-	err    error
+	loginCalled bool
+	input       user.LoginUser
+	result      *LoginResult
+	err         error
 
-	registerInput *user.RegisterUser
-	registerUser  *user.User
-	registerErr   error
+	registerCalled bool
+	registerInput  user.RegisterUser
+	registerUser   *user.User
+	registerErr    error
 }
 
-func (f *fakeLoginService) Register(_ context.Context, input *user.RegisterUser) (*user.User, error) {
+func (f *fakeLoginService) Register(_ context.Context, input user.RegisterUser) (*user.User, error) {
 	f.registerInput = input
+	f.registerCalled = true
 
 	if f.registerErr != nil {
 		return nil, f.registerErr
@@ -33,7 +36,8 @@ func (f *fakeLoginService) Register(_ context.Context, input *user.RegisterUser)
 	return f.registerUser, nil
 }
 
-func (f *fakeLoginService) Login(_ context.Context, input *user.LoginUser) (*LoginResult, error) {
+func (f *fakeLoginService) Login(_ context.Context, input user.LoginUser) (*LoginResult, error) {
+	f.loginCalled = true
 	f.input = input
 
 	if f.err != nil {
@@ -87,8 +91,8 @@ func TestHandler_Login(t *testing.T) {
 		)
 	}
 
-	if service.input == nil {
-		t.Fatal("expected login input to be passed to service")
+	if !service.loginCalled {
+		t.Fatal("expected service Login to be called")
 	}
 
 	if service.input.Email != testEmail {
@@ -167,7 +171,7 @@ func TestHandler_Login_InvalidJSON(t *testing.T) {
 		)
 	}
 
-	if service.input != nil {
+	if service.loginCalled {
 		t.Fatal(
 			"service must not be called for invalid JSON",
 		)
@@ -402,9 +406,9 @@ func TestHandler_Register(t *testing.T) {
 		)
 	}
 
-	if service.registerInput == nil {
+	if !service.registerCalled {
 		t.Fatal(
-			"expected register input to be passed to service",
+			"expected service Register to be called",
 		)
 	}
 
@@ -461,7 +465,7 @@ func TestHandler_Register_InvalidJSON(t *testing.T) {
 		)
 	}
 
-	if service.registerInput != nil {
+	if service.registerCalled {
 		t.Fatal(
 			"service must not be called for invalid JSON",
 		)

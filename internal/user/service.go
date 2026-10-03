@@ -14,7 +14,7 @@ import (
 )
 
 type RepositoryInterface interface {
-	Create(ctx context.Context, input *CreateUser) (*User, error)
+	Create(ctx context.Context, input CreateUser) (*User, error)
 	GetByID(ctx context.Context, id int64) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
 }
@@ -41,14 +41,7 @@ var dummyPasswordHash = []byte(
 	"$2a$10$XajjQvNhvvRt5GSeFk1xFeyqRrsxkhBkUiQeg0dt.wU1qD4aFDcga",
 )
 
-func (s *Service) Register(ctx context.Context, input *RegisterUser) (*User, error) {
-	if input == nil {
-		return nil, fmt.Errorf(
-			"%w: user is required",
-			ErrUserValidation,
-		)
-	}
-
+func (s *Service) Register(ctx context.Context, input RegisterUser) (*User, error) {
 	username := strings.TrimSpace(input.Username)
 	email := strings.TrimSpace(input.Email)
 	password := input.Password
@@ -129,7 +122,7 @@ func (s *Service) Register(ctx context.Context, input *RegisterUser) (*User, err
 
 	user, err := s.repository.Create(
 		ctx,
-		&CreateUser{
+		CreateUser{
 			Username:     username,
 			Email:        email,
 			PasswordHash: string(hash),
@@ -173,14 +166,7 @@ func (s *Service) GetByID(ctx context.Context, id int64) (*User, error) {
 	return user, nil
 }
 
-func (s *Service) Login(ctx context.Context, input *LoginUser) (*User, error) {
-	if input == nil {
-		return nil, fmt.Errorf(
-			"%w: login data is required",
-			ErrUserValidation,
-		)
-	}
-
+func (s *Service) Login(ctx context.Context, input LoginUser) (*User, error) {
 	email := strings.TrimSpace(input.Email)
 
 	if email == "" {

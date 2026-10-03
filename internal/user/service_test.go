@@ -12,9 +12,10 @@ import (
 )
 
 type fakeRepository struct {
-	createInput *CreateUser
-	createUser  *User
-	createErr   error
+	createCalled bool
+	createInput  CreateUser
+	createUser   *User
+	createErr    error
 
 	getByIDUser *User
 	getByIDErr  error
@@ -25,7 +26,8 @@ type fakeRepository struct {
 	getByEmailInput string
 }
 
-func (f *fakeRepository) Create(_ context.Context, input *CreateUser) (*User, error) {
+func (f *fakeRepository) Create(_ context.Context, input CreateUser) (*User, error) {
+	f.createCalled = true
 	f.createInput = input
 
 	if f.createErr != nil {
@@ -70,7 +72,7 @@ func TestService_Register(t *testing.T) {
 
 	service := NewService(repository)
 
-	input := &RegisterUser{
+	input := RegisterUser{
 		Username: "  alex  ",
 		Email:    "  alex@example.com  ",
 		Password: testPassword,
@@ -88,8 +90,8 @@ func TestService_Register(t *testing.T) {
 		t.Fatal("expected user, got nil")
 	}
 
-	if repository.createInput == nil {
-		t.Fatal("expected user to be passed to repository")
+	if !repository.createCalled {
+		t.Fatal("expected repository Create to be called")
 	}
 
 	if repository.createInput.Username != testUsername {
@@ -139,15 +141,11 @@ func TestService_Register_Validation(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		input *RegisterUser
+		input RegisterUser
 	}{
 		{
-			name:  "nil input",
-			input: nil,
-		},
-		{
 			name: "empty username",
-			input: &RegisterUser{
+			input: RegisterUser{
 				Username: testBlankValue,
 				Email:    testEmail,
 				Password: testPassword,
@@ -155,7 +153,7 @@ func TestService_Register_Validation(t *testing.T) {
 		},
 		{
 			name: "empty email",
-			input: &RegisterUser{
+			input: RegisterUser{
 				Username: testUsername,
 				Email:    testBlankValue,
 				Password: testPassword,
@@ -163,7 +161,7 @@ func TestService_Register_Validation(t *testing.T) {
 		},
 		{
 			name: "empty password",
-			input: &RegisterUser{
+			input: RegisterUser{
 				Username: testUsername,
 				Email:    testEmail,
 				Password: "",
@@ -171,7 +169,7 @@ func TestService_Register_Validation(t *testing.T) {
 		},
 		{
 			name: "short password",
-			input: &RegisterUser{
+			input: RegisterUser{
 				Username: testUsername,
 				Email:    testEmail,
 				Password: "1234567",
@@ -179,7 +177,7 @@ func TestService_Register_Validation(t *testing.T) {
 		},
 		{
 			name: "password too long",
-			input: &RegisterUser{
+			input: RegisterUser{
 				Username: testUsername,
 				Email:    testEmail,
 				Password: strings.Repeat("a", 73),
@@ -187,7 +185,7 @@ func TestService_Register_Validation(t *testing.T) {
 		},
 		{
 			name: "username too long",
-			input: &RegisterUser{
+			input: RegisterUser{
 				Username: strings.Repeat("a", 51),
 				Email:    testEmail,
 				Password: testPassword,
@@ -195,7 +193,7 @@ func TestService_Register_Validation(t *testing.T) {
 		},
 		{
 			name: "email too long",
-			input: &RegisterUser{
+			input: RegisterUser{
 				Username: testUsername,
 				Email: strings.Repeat("a", 89) +
 					"@example.com",
@@ -204,7 +202,7 @@ func TestService_Register_Validation(t *testing.T) {
 		},
 		{
 			name: "invalid email",
-			input: &RegisterUser{
+			input: RegisterUser{
 				Username: testUsername,
 				Email:    "not-an-email",
 				Password: testPassword,
@@ -239,7 +237,7 @@ func TestService_Register_Validation(t *testing.T) {
 				)
 			}
 
-			if repository.createInput != nil {
+			if repository.createCalled {
 				t.Fatal(
 					"repository must not be called on validation error",
 				)
@@ -259,7 +257,7 @@ func TestService_Register_Conflict(t *testing.T) {
 
 	user, err := service.Register(
 		context.Background(),
-		&RegisterUser{
+		RegisterUser{
 			Username: testUsername,
 			Email:    testEmail,
 			Password: testPassword,
@@ -294,7 +292,7 @@ func TestService_Register_RepositoryError(t *testing.T) {
 
 	user, err := service.Register(
 		context.Background(),
-		&RegisterUser{
+		RegisterUser{
 			Username: testUsername,
 			Email:    testEmail,
 			Password: testPassword,
@@ -465,7 +463,7 @@ func TestService_Login(t *testing.T) {
 
 	user, err := service.Login(
 		context.Background(),
-		&LoginUser{
+		LoginUser{
 			Email:    "  alex@example.com  ",
 			Password: password,
 		},
@@ -510,7 +508,7 @@ func TestService_Login_InvalidPassword(t *testing.T) {
 
 	user, err := service.Login(
 		context.Background(),
-		&LoginUser{
+		LoginUser{
 			Email:    testEmail,
 			Password: "wrong-password",
 		},
@@ -542,7 +540,7 @@ func TestService_Login_UserNotFound(t *testing.T) {
 
 	user, err := service.Login(
 		context.Background(),
-		&LoginUser{
+		LoginUser{
 			Email:    "missing@example.com",
 			Password: testPassword,
 		},
@@ -568,22 +566,18 @@ func TestService_Login_Validation(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		input *LoginUser
+		input LoginUser
 	}{
 		{
-			name:  "nil input",
-			input: nil,
-		},
-		{
 			name: "empty email",
-			input: &LoginUser{
+			input: LoginUser{
 				Email:    "   ",
 				Password: testPassword,
 			},
 		},
 		{
 			name: "empty password",
-			input: &LoginUser{
+			input: LoginUser{
 				Email:    testEmail,
 				Password: "",
 			},
@@ -633,7 +627,7 @@ func TestService_Login_RepositoryError(t *testing.T) {
 
 	user, err := service.Login(
 		context.Background(),
-		&LoginUser{
+		LoginUser{
 			Email:    testEmail,
 			Password: testPassword,
 		},
@@ -662,7 +656,7 @@ func TestService_Register_MaxPasswordLength(t *testing.T) {
 
 	user, err := service.Register(
 		context.Background(),
-		&RegisterUser{
+		RegisterUser{
 			Username: testUsername,
 			Email:    testEmail,
 			Password: strings.Repeat("a", 72),
@@ -682,18 +676,18 @@ func TestService_Login_InvalidCredentialsFormat(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		input *LoginUser
+		input LoginUser
 	}{
 		{
 			name: "invalid email",
-			input: &LoginUser{
+			input: LoginUser{
 				Email:    "not-an-email",
 				Password: testPassword,
 			},
 		},
 		{
 			name: "email too long",
-			input: &LoginUser{
+			input: LoginUser{
 				Email: strings.Repeat("a", 89) +
 					"@example.com",
 				Password: testPassword,
@@ -701,7 +695,7 @@ func TestService_Login_InvalidCredentialsFormat(t *testing.T) {
 		},
 		{
 			name: "password too long",
-			input: &LoginUser{
+			input: LoginUser{
 				Email:    testEmail,
 				Password: strings.Repeat("a", 73),
 			},
