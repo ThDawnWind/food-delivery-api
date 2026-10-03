@@ -12,11 +12,13 @@ type fakeUserAuthenticator struct {
 	user *user.User
 	err  error
 
-	registerInput *user.RegisterUser
+	registerCalled bool
+	registerInput  user.RegisterUser
 }
 
-func (f *fakeUserAuthenticator) Register(_ context.Context, input *user.RegisterUser) (*user.User, error) {
+func (f *fakeUserAuthenticator) Register(_ context.Context, input user.RegisterUser) (*user.User, error) {
 	f.registerInput = input
+	f.registerCalled = true
 
 	if f.err != nil {
 		return nil, f.err

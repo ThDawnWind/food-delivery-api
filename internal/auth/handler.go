@@ -14,7 +14,7 @@ import (
 
 type ServiceInterface interface {
 	Register(ctx context.Context,
-		input *user.RegisterUser,
+		input user.RegisterUser,
 	) (*user.User, error)
 
 	Login(
@@ -75,7 +75,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
 	userData, err := h.service.Register(
 		r.Context(),
-		&user.RegisterUser{
+		user.RegisterUser{
 			Username: req.Username,
 			Email:    req.Email,
 			Password: req.Password,

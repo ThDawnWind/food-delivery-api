@@ -41,14 +41,7 @@ var dummyPasswordHash = []byte(
 	"$2a$10$XajjQvNhvvRt5GSeFk1xFeyqRrsxkhBkUiQeg0dt.wU1qD4aFDcga",
 )
 
-func (s *Service) Register(ctx context.Context, input *RegisterUser) (*User, error) {
-	if input == nil {
-		return nil, fmt.Errorf(
-			"%w: user is required",
-			ErrUserValidation,
-		)
-	}
-
+func (s *Service) Register(ctx context.Context, input RegisterUser) (*User, error) {
 	username := strings.TrimSpace(input.Username)
 	email := strings.TrimSpace(input.Email)
 	password := input.Password

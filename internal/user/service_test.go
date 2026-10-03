@@ -72,7 +72,7 @@ func TestService_Register(t *testing.T) {
 
 	service := NewService(repository)
 
-	input := &RegisterUser{
+	input := RegisterUser{
 		Username: "  alex  ",
 		Email:    "  alex@example.com  ",
 		Password: testPassword,
@@ -141,15 +141,11 @@ func TestService_Register_Validation(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		input *RegisterUser
+		input RegisterUser
 	}{
 		{
-			name:  "nil input",
-			input: nil,
-		},
-		{
 			name: "empty username",
-			input: &RegisterUser{
+			input: RegisterUser{
 				Username: testBlankValue,
 				Email:    testEmail,
 				Password: testPassword,
@@ -157,7 +153,7 @@ func TestService_Register_Validation(t *testing.T) {
 		},
 		{
 			name: "empty email",
-			input: &RegisterUser{
+			input: RegisterUser{
 				Username: testUsername,
 				Email:    testBlankValue,
 				Password: testPassword,
@@ -165,7 +161,7 @@ func TestService_Register_Validation(t *testing.T) {
 		},
 		{
 			name: "empty password",
-			input: &RegisterUser{
+			input: RegisterUser{
 				Username: testUsername,
 				Email:    testEmail,
 				Password: "",
@@ -173,7 +169,7 @@ func TestService_Register_Validation(t *testing.T) {
 		},
 		{
 			name: "short password",
-			input: &RegisterUser{
+			input: RegisterUser{
 				Username: testUsername,
 				Email:    testEmail,
 				Password: "1234567",
@@ -181,7 +177,7 @@ func TestService_Register_Validation(t *testing.T) {
 		},
 		{
 			name: "password too long",
-			input: &RegisterUser{
+			input: RegisterUser{
 				Username: testUsername,
 				Email:    testEmail,
 				Password: strings.Repeat("a", 73),
@@ -189,7 +185,7 @@ func TestService_Register_Validation(t *testing.T) {
 		},
 		{
 			name: "username too long",
-			input: &RegisterUser{
+			input: RegisterUser{
 				Username: strings.Repeat("a", 51),
 				Email:    testEmail,
 				Password: testPassword,
@@ -197,7 +193,7 @@ func TestService_Register_Validation(t *testing.T) {
 		},
 		{
 			name: "email too long",
-			input: &RegisterUser{
+			input: RegisterUser{
 				Username: testUsername,
 				Email: strings.Repeat("a", 89) +
 					"@example.com",
@@ -206,7 +202,7 @@ func TestService_Register_Validation(t *testing.T) {
 		},
 		{
 			name: "invalid email",
-			input: &RegisterUser{
+			input: RegisterUser{
 				Username: testUsername,
 				Email:    "not-an-email",
 				Password: testPassword,
@@ -261,7 +257,7 @@ func TestService_Register_Conflict(t *testing.T) {
 
 	user, err := service.Register(
 		context.Background(),
-		&RegisterUser{
+		RegisterUser{
 			Username: testUsername,
 			Email:    testEmail,
 			Password: testPassword,
@@ -296,7 +292,7 @@ func TestService_Register_RepositoryError(t *testing.T) {
 
 	user, err := service.Register(
 		context.Background(),
-		&RegisterUser{
+		RegisterUser{
 			Username: testUsername,
 			Email:    testEmail,
 			Password: testPassword,
@@ -664,7 +660,7 @@ func TestService_Register_MaxPasswordLength(t *testing.T) {
 
 	user, err := service.Register(
 		context.Background(),
-		&RegisterUser{
+		RegisterUser{
 			Username: testUsername,
 			Email:    testEmail,
 			Password: strings.Repeat("a", 72),

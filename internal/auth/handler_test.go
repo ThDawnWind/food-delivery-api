@@ -18,13 +18,15 @@ type fakeLoginService struct {
 	result *LoginResult
 	err    error
 
-	registerInput *user.RegisterUser
-	registerUser  *user.User
-	registerErr   error
+	registerCalled bool
+	registerInput  user.RegisterUser
+	registerUser   *user.User
+	registerErr    error
 }
 
-func (f *fakeLoginService) Register(_ context.Context, input *user.RegisterUser) (*user.User, error) {
+func (f *fakeLoginService) Register(_ context.Context, input user.RegisterUser) (*user.User, error) {
 	f.registerInput = input
+	f.registerCalled = true
 
 	if f.registerErr != nil {
 		return nil, f.registerErr
@@ -402,9 +404,9 @@ func TestHandler_Register(t *testing.T) {
 		)
 	}
 
-	if service.registerInput == nil {
+	if !service.registerCalled {
 		t.Fatal(
-			"expected register input to be passed to service",
+			"expected service Register to be called",
 		)
 	}
 
@@ -461,7 +463,7 @@ func TestHandler_Register_InvalidJSON(t *testing.T) {
 		)
 	}
 
-	if service.registerInput != nil {
+	if service.registerCalled {
 		t.Fatal(
 			"service must not be called for invalid JSON",
 		)
