@@ -10,7 +10,7 @@ import (
 )
 
 type RepositoryInterface interface {
-	Create(ctx context.Context, input *CreateAddress) (*Address, error)
+	Create(ctx context.Context, input CreateAddress) (*Address, error)
 	GetByID(ctx context.Context, addressID, userID int64) (*Address, error)
 	ListByUser(ctx context.Context, userID int64) ([]Address, error)
 	Update(ctx context.Context, addressID, userID int64, input *UpdateAddress) (*Address, error)
@@ -27,14 +27,7 @@ func NewService(repository RepositoryInterface) *Service {
 	}
 }
 
-func (s *Service) Create(ctx context.Context, input *CreateAddress) (*Address, error) {
-	if input == nil {
-		return nil, fmt.Errorf(
-			"%w: address data is required",
-			ErrAddressValidation,
-		)
-	}
-
+func (s *Service) Create(ctx context.Context, input CreateAddress) (*Address, error) {
 	if input.UserID <= 0 {
 		return nil, fmt.Errorf(
 			"%w: invalid user id",

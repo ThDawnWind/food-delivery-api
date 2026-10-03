@@ -17,7 +17,7 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	}
 }
 
-func (r *Repository) Create(ctx context.Context, input *CreateAddress) (*Address, error) {
+func (r *Repository) Create(ctx context.Context, input CreateAddress) (*Address, error) {
 	const query = `
 		INSERT INTO addresses (
 			user_id,

@@ -16,7 +16,7 @@ import (
 type AddressService interface {
 	Create(
 		ctx context.Context,
-		input *CreateAddress,
+		input CreateAddress,
 	) (*Address, error)
 
 	GetByID(
@@ -129,7 +129,7 @@ func (h *Handler) Create(
 
 	address, err := h.service.Create(
 		r.Context(),
-		&CreateAddress{
+		CreateAddress{
 			UserID:          userID,
 			Label:           request.Label,
 			City:            request.City,
