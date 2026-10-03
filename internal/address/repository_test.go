@@ -117,7 +117,7 @@ func TestRepository_Create(t *testing.T) {
 	label := "Home"
 	apartment := "42"
 
-	input := &CreateAddress{
+	input := CreateAddress{
 		UserID:          userID,
 		Label:           &label,
 		City:            testCityAmsterdam,
@@ -256,7 +256,7 @@ func TestRepository_Create_NullableFields(t *testing.T) {
 		)
 	})
 
-	input := &CreateAddress{
+	input := CreateAddress{
 		UserID:      userID,
 		City:        testCityAmsterdam,
 		Street:      testStreetTest,
@@ -362,7 +362,7 @@ func TestRepository_GetByID(t *testing.T) {
 
 	created, err := repository.Create(
 		ctx,
-		&CreateAddress{
+		CreateAddress{
 			UserID:      userID,
 			City:        testCityAmsterdam,
 			Street:      testStreetTest,
@@ -457,7 +457,7 @@ func TestRepository_GetByID_OtherUser(t *testing.T) {
 
 	created, err := repository.Create(
 		ctx,
-		&CreateAddress{
+		CreateAddress{
 			UserID:      userID,
 			City:        testCityAmsterdam,
 			Street:      testStreetTest,
@@ -537,7 +537,7 @@ func TestRepository_ListByUser(t *testing.T) {
 
 	_, err = repository.Create(
 		ctx,
-		&CreateAddress{
+		CreateAddress{
 			UserID:      userID,
 			City:        testCityAmsterdam,
 			Street:      testStreetFirst,
@@ -553,7 +553,7 @@ func TestRepository_ListByUser(t *testing.T) {
 
 	_, err = repository.Create(
 		ctx,
-		&CreateAddress{
+		CreateAddress{
 			UserID:      userID,
 			City:        testCityAmsterdam,
 			Street:      testStreetSecond,
@@ -676,7 +676,7 @@ func TestRepository_Delete(t *testing.T) {
 
 	created, err := repository.Create(
 		ctx,
-		&CreateAddress{
+		CreateAddress{
 			UserID:      userID,
 			City:        testCityAmsterdam,
 			Street:      "Delete Street",
@@ -768,7 +768,7 @@ func TestRepository_Delete_OtherUser(t *testing.T) {
 
 	created, err := repository.Create(
 		ctx,
-		&CreateAddress{
+		CreateAddress{
 			UserID:      userID,
 			City:        "Amsterdam",
 			Street:      "Owner Street",
@@ -848,7 +848,7 @@ func TestRepository_Update(t *testing.T) {
 
 	created, err := repository.Create(
 		ctx,
-		&CreateAddress{
+		CreateAddress{
 			UserID:      userID,
 			City:        testCityAmsterdam,
 			Street:      "Old Street",
@@ -958,7 +958,7 @@ func TestRepository_Update_OtherUser(t *testing.T) {
 
 	created, err := repository.Create(
 		ctx,
-		&CreateAddress{
+		CreateAddress{
 			UserID:      userID,
 			City:        "Amsterdam",
 			Street:      "Owner Street",

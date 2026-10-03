@@ -14,7 +14,8 @@ import (
 )
 
 type fakeAddressService struct {
-	createInput   *CreateAddress
+	createCalled  bool
+	createInput   CreateAddress
 	createAddress *Address
 	createErr     error
 
@@ -40,8 +41,9 @@ type fakeAddressService struct {
 
 func (f *fakeAddressService) Create(
 	_ context.Context,
-	input *CreateAddress,
+	input CreateAddress,
 ) (*Address, error) {
+	f.createCalled = true
 	f.createInput = input
 
 	if f.createErr != nil {
@@ -196,9 +198,9 @@ func TestHandler_Create(t *testing.T) {
 		)
 	}
 
-	if service.createInput == nil {
+	if !service.createCalled {
 		t.Fatal(
-			"expected create input",
+			"expected service Create to be called",
 		)
 	}
 
@@ -295,7 +297,7 @@ func TestHandler_Create_Unauthorized(
 		)
 	}
 
-	if service.createInput != nil {
+	if service.createCalled {
 		t.Fatal(
 			"service must not be called for unauthorized request",
 		)
@@ -345,9 +347,9 @@ func TestHandler_Create_InvalidJSON(
 		)
 	}
 
-	if service.createInput != nil {
+	if service.createCalled {
 		t.Fatal(
-			"service must not be called for invalid JSON",
+			"service must not be called for unauthorized request",
 		)
 	}
 }

@@ -9,7 +9,8 @@ import (
 )
 
 type fakeRepository struct {
-	createInput   *CreateAddress
+	createCalled  bool
+	createInput   CreateAddress
 	createAddress *Address
 	createErr     error
 
@@ -33,8 +34,9 @@ type fakeRepository struct {
 	updateErr       error
 }
 
-func (f *fakeRepository) Create(_ context.Context, input *CreateAddress) (*Address, error) {
+func (f *fakeRepository) Create(_ context.Context, input CreateAddress) (*Address, error) {
 	f.createInput = input
+	f.createCalled = true
 
 	if f.createErr != nil {
 		return nil, f.createErr
@@ -100,7 +102,7 @@ func TestService_Create(t *testing.T) {
 
 	address, err := service.Create(
 		context.Background(),
-		&CreateAddress{
+		CreateAddress{
 			UserID:      10,
 			City:        "  Amsterdam  ",
 			Street:      "  Test Street  ",
@@ -118,8 +120,8 @@ func TestService_Create(t *testing.T) {
 		t.Fatal("expected address, got nil")
 	}
 
-	if repository.createInput == nil {
-		t.Fatal("expected input to be passed to repository")
+	if !repository.createCalled {
+		t.Fatal("expected repository Create to be called")
 	}
 
 	if repository.createInput.City != testCityAmsterdam {
@@ -152,15 +154,11 @@ func TestService_Create_Validation(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		input *CreateAddress
+		input CreateAddress
 	}{
 		{
-			name:  "nil input",
-			input: nil,
-		},
-		{
 			name: "invalid user id",
-			input: &CreateAddress{
+			input: CreateAddress{
 				UserID:      0,
 				City:        testCityAmsterdam,
 				Street:      testStreetTest,
@@ -169,7 +167,7 @@ func TestService_Create_Validation(t *testing.T) {
 		},
 		{
 			name: "empty city",
-			input: &CreateAddress{
+			input: CreateAddress{
 				UserID:      10,
 				City:        testBlankValue,
 				Street:      testStreetTest,
@@ -178,7 +176,7 @@ func TestService_Create_Validation(t *testing.T) {
 		},
 		{
 			name: "empty street",
-			input: &CreateAddress{
+			input: CreateAddress{
 				UserID:      10,
 				City:        testCityAmsterdam,
 				Street:      testBlankValue,
@@ -187,7 +185,7 @@ func TestService_Create_Validation(t *testing.T) {
 		},
 		{
 			name: "empty house number",
-			input: &CreateAddress{
+			input: CreateAddress{
 				UserID:      10,
 				City:        testCityAmsterdam,
 				Street:      testStreetTest,
@@ -225,7 +223,7 @@ func TestService_Create_Validation(t *testing.T) {
 				)
 			}
 
-			if repository.createInput != nil {
+			if repository.createCalled {
 				t.Fatal(
 					"repository must not be called for invalid input",
 				)
@@ -249,7 +247,7 @@ func TestService_Create_RepositoryError(t *testing.T) {
 
 	address, err := service.Create(
 		context.Background(),
-		&CreateAddress{
+		CreateAddress{
 			UserID:      10,
 			City:        testCityAmsterdam,
 			Street:      testStreetTest,
