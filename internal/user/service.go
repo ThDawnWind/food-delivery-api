@@ -14,7 +14,7 @@ import (
 )
 
 type RepositoryInterface interface {
-	Create(ctx context.Context, input *CreateUser) (*User, error)
+	Create(ctx context.Context, input CreateUser) (*User, error)
 	GetByID(ctx context.Context, id int64) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
 }
@@ -129,7 +129,7 @@ func (s *Service) Register(ctx context.Context, input *RegisterUser) (*User, err
 
 	user, err := s.repository.Create(
 		ctx,
-		&CreateUser{
+		CreateUser{
 			Username:     username,
 			Email:        email,
 			PasswordHash: string(hash),

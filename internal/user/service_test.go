@@ -12,9 +12,10 @@ import (
 )
 
 type fakeRepository struct {
-	createInput *CreateUser
-	createUser  *User
-	createErr   error
+	createCalled bool
+	createInput  CreateUser
+	createUser   *User
+	createErr    error
 
 	getByIDUser *User
 	getByIDErr  error
@@ -25,7 +26,8 @@ type fakeRepository struct {
 	getByEmailInput string
 }
 
-func (f *fakeRepository) Create(_ context.Context, input *CreateUser) (*User, error) {
+func (f *fakeRepository) Create(_ context.Context, input CreateUser) (*User, error) {
+	f.createCalled = true
 	f.createInput = input
 
 	if f.createErr != nil {
@@ -88,8 +90,8 @@ func TestService_Register(t *testing.T) {
 		t.Fatal("expected user, got nil")
 	}
 
-	if repository.createInput == nil {
-		t.Fatal("expected user to be passed to repository")
+	if !repository.createCalled {
+		t.Fatal("expected repository Create to be called")
 	}
 
 	if repository.createInput.Username != testUsername {
@@ -239,7 +241,7 @@ func TestService_Register_Validation(t *testing.T) {
 				)
 			}
 
-			if repository.createInput != nil {
+			if repository.createCalled {
 				t.Fatal(
 					"repository must not be called on validation error",
 				)
