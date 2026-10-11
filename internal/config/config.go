@@ -16,6 +16,7 @@ type Config struct {
 	HTTP     HTTPConfig
 	Database DatabaseConfig
 	JWT      *JWTConfig
+	Delivery DeliveryConfig
 	Timezone string
 }
 
@@ -43,6 +44,11 @@ type JWTConfig struct {
 	TTL    time.Duration
 }
 
+type DeliveryConfig struct {
+	Address string
+	Timeout time.Duration
+}
+
 const insecureExampleJWTSecret = "replace-with-a-long-random-secret"
 
 func Load() (Config, error) {
@@ -64,6 +70,11 @@ func Load() (Config, error) {
 	databaseURL, exists := os.LookupEnv("DATABASE_URL")
 	if !exists || databaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL environment variable is not set")
+	}
+
+	deliveryConfig, err := loadDeliveryConfig()
+	if err != nil {
+		return Config{}, err
 	}
 
 	jwtSecret := strings.TrimSpace(
@@ -124,6 +135,7 @@ func Load() (Config, error) {
 			Secret: jwtSecret,
 			TTL:    jwtTTL,
 		},
+		Delivery: deliveryConfig,
 		Timezone: timezone,
 	}, nil
 }
@@ -425,4 +437,32 @@ func parseDurationEnv(name, defaultValue string) (time.Duration, error) {
 	}
 
 	return value, nil
+}
+
+func loadDeliveryConfig() (DeliveryConfig, error) {
+	address := strings.TrimSpace(
+		os.Getenv("DELIVERY_GRPC_ADDRESS"),
+	)
+	if address == "" {
+		address = "127.0.0.1:50051"
+	}
+
+	timeout, err := parseDurationEnv(
+		"DELIVERY_GRPC_TIMEOUT",
+		"3s",
+	)
+	if err != nil {
+		return DeliveryConfig{}, err
+	}
+
+	if timeout <= 0 {
+		return DeliveryConfig{}, errors.New(
+			"DELIVERY_GRPC_TIMEOUT must be greater than zero",
+		)
+	}
+
+	return DeliveryConfig{
+		Address: address,
+		Timeout: timeout,
+	}, nil
 }

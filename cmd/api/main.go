@@ -26,11 +26,15 @@ import (
 	"github.com/ThDawnWind/food-delivery-api/internal/category"
 	"github.com/ThDawnWind/food-delivery-api/internal/config"
 	"github.com/ThDawnWind/food-delivery-api/internal/database"
+	"github.com/ThDawnWind/food-delivery-api/internal/delivery"
+	"github.com/ThDawnWind/food-delivery-api/internal/deliveryclient"
 	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
 	"github.com/ThDawnWind/food-delivery-api/internal/order"
 	"github.com/ThDawnWind/food-delivery-api/internal/product"
 	"github.com/ThDawnWind/food-delivery-api/internal/user"
 	"github.com/ThDawnWind/food-delivery-api/openapi"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
@@ -122,6 +126,29 @@ func run(logger *slog.Logger) error {
 			err,
 		)
 	}
+
+	deliveryConn, err := grpc.NewClient(
+		cfg.Delivery.Address,
+		grpc.WithTransportCredentials(
+			insecure.NewCredentials(),
+		),
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to create delivery gRPC client: %w",
+			err,
+		)
+	}
+
+	defer deliveryConn.Close()
+
+	deliveryClient := deliveryclient.New(deliveryConn)
+
+	deliveryHandler := delivery.NewHandler(
+		deliveryClient,
+		cfg.Delivery.Timeout,
+		logger,
+	)
 
 	location, err := time.LoadLocation(
 		cfg.Timezone,
@@ -248,6 +275,11 @@ func run(logger *slog.Logger) error {
 		httpMetrics,
 		registry,
 		dbPool,
+	)
+
+	router.Post(
+		"/api/v1/delivery/calculate",
+		deliveryHandler.Calculate,
 	)
 
 	router.Route("/api/v1/categories", func(r chi.Router) {

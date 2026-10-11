@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,6 +15,16 @@ import (
 
 	"github.com/ThDawnWind/food-delivery-api/internal/database"
 )
+
+var testID atomic.Uint64
+
+func uniqueTestSuffix() string {
+	return fmt.Sprintf(
+		"%d-%d",
+		time.Now().UnixNano(),
+		testID.Add(1),
+	)
+}
 
 func TestRepository_Create(t *testing.T) {
 	t.Parallel()

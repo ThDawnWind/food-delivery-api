@@ -22,6 +22,8 @@ func TestLoadConfig(t *testing.T) {
 	t.Setenv("DB_HEALTH_CHECK_PERIOD", "1m")
 	t.Setenv("HTTP_READ_TIMEOUT", "15s")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	t.Setenv("DELIVERY_GRPC_ADDRESS", "127.0.0.1:50051")
+	t.Setenv("DELIVERY_GRPC_TIMEOUT", "3s")
 
 	//nolint:gosec // Fake credentials used only in this test fixture.
 	expectedDatabaseURL := "postgres://user:password@localhost:5432/dbname"
@@ -29,6 +31,22 @@ func TestLoadConfig(t *testing.T) {
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if cfg.Delivery.Address != "127.0.0.1:50051" {
+		t.Errorf(
+			"expected delivery address %q, got %q",
+			"127.0.0.1:50051",
+			cfg.Delivery.Address,
+		)
+	}
+
+	if cfg.Delivery.Timeout != 3*time.Second {
+		t.Errorf(
+			"expected delivery timeout %v, got %v",
+			3*time.Second,
+			cfg.Delivery.Timeout,
+		)
 	}
 
 	checkHTTPConfig(t, cfg)
@@ -517,6 +535,38 @@ func TestLoadConfigInvalidTrustedProxyCIDR(t *testing.T) {
 	if err == nil {
 		t.Fatal(
 			"expected error for invalid trusted proxy CIDR",
+		)
+	}
+}
+
+func TestLoadConfigInvalidDeliveryTimeout(t *testing.T) {
+	setRequiredEnv(t)
+
+	t.Setenv(
+		"DELIVERY_GRPC_TIMEOUT",
+		"invalid",
+	)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal(
+			"expected error for invalid DELIVERY_GRPC_TIMEOUT",
+		)
+	}
+}
+
+func TestLoadConfigZeroDeliveryTimeout(t *testing.T) {
+	setRequiredEnv(t)
+
+	t.Setenv(
+		"DELIVERY_GRPC_TIMEOUT",
+		"0s",
+	)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal(
+			"expected error for zero DELIVERY_GRPC_TIMEOUT",
 		)
 	}
 }
