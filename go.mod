@@ -3,6 +3,7 @@ module github.com/ThDawnWind/food-delivery-api
 go 1.27.1
 
 require (
+	github.com/ThDawnWind/food-delivery-contracts v0.1.0
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/go-chi/cors v1.2.2
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -12,6 +13,7 @@ require (
 	github.com/prometheus/client_golang v1.24.1
 	golang.org/x/crypto v0.57.0
 	golang.org/x/time v0.16.0
+	google.golang.org/grpc v1.84.0
 )
 
 require (
@@ -28,8 +30,10 @@ require (
 	github.com/prometheus/procfs v0.22.0 // indirect
 	github.com/sethvargo/go-retry v0.4.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260831171406-18b4a7587f8a // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
