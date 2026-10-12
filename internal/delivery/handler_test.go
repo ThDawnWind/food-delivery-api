@@ -9,18 +9,23 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/go-chi/chi/v5/middleware"
+	"google.golang.org/grpc/metadata"
 )
 
 type fakeCalculator struct {
+	ctx           context.Context
 	orderAmount   int64
 	deliveryPrice int64
 	err           error
 }
 
 func (f *fakeCalculator) Calculate(
-	_ context.Context,
+	ctx context.Context,
 	orderAmount int64,
 ) (int64, error) {
+	f.ctx = ctx
 	f.orderAmount = orderAmount
 
 	if f.err != nil {
@@ -83,6 +88,71 @@ func TestHandler_Calculate(t *testing.T) {
 			"delivery price = %d, want %d",
 			response.DeliveryPrice,
 			int64(19900),
+		)
+	}
+}
+
+func TestHandler_Calculate_PropagatesRequestID(t *testing.T) {
+	t.Parallel()
+
+	calculator := &fakeCalculator{
+		deliveryPrice: 19900,
+	}
+
+	handler := NewHandler(
+		calculator,
+		3*time.Second,
+		slog.Default(),
+	)
+
+	body := []byte(`{"order_amount":120000}`)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/delivery/calculate",
+		bytes.NewReader(body),
+	)
+
+	req.Header.Set(
+		middleware.RequestIDHeader,
+		"test-request-id",
+	)
+
+	rec := httptest.NewRecorder()
+
+	httpHandler := middleware.RequestID(
+		http.HandlerFunc(handler.Calculate),
+	)
+
+	httpHandler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf(
+			"status = %d, want %d",
+			rec.Code,
+			http.StatusOK,
+		)
+	}
+
+	md, ok := metadata.FromOutgoingContext(calculator.ctx)
+	if !ok {
+		t.Fatal("expected outgoing metadata")
+	}
+
+	values := md.Get("request-id")
+
+	if len(values) != 1 {
+		t.Fatalf(
+			"request-id values = %v, want one value",
+			values,
+		)
+	}
+
+	if values[0] != "test-request-id" {
+		t.Fatalf(
+			"request-id = %q, want %q",
+			values[0],
+			"test-request-id",
 		)
 	}
 }

@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
+	"github.com/go-chi/chi/v5/middleware"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -81,6 +83,16 @@ func (h *Handler) Calculate(
 		h.timeout,
 	)
 	defer cancel()
+
+	requestID := middleware.GetReqID(r.Context())
+
+	if requestID != "" {
+		ctx = metadata.AppendToOutgoingContext(
+			ctx,
+			"request-id",
+			requestID,
+		)
+	}
 
 	deliveryPrice, err := h.calculator.Calculate(
 		ctx,
