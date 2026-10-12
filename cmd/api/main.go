@@ -28,6 +28,7 @@ import (
 	"github.com/ThDawnWind/food-delivery-api/internal/database"
 	"github.com/ThDawnWind/food-delivery-api/internal/delivery"
 	"github.com/ThDawnWind/food-delivery-api/internal/deliveryclient"
+	"github.com/ThDawnWind/food-delivery-api/internal/grpcx"
 	"github.com/ThDawnWind/food-delivery-api/internal/httpx"
 	"github.com/ThDawnWind/food-delivery-api/internal/order"
 	"github.com/ThDawnWind/food-delivery-api/internal/product"
@@ -131,6 +132,9 @@ func run(logger *slog.Logger) error {
 		cfg.Delivery.Address,
 		grpc.WithTransportCredentials(
 			insecure.NewCredentials(),
+		),
+		grpc.WithUnaryInterceptor(
+			grpcx.LoggingInterceptor(logger),
 		),
 	)
 	if err != nil {
