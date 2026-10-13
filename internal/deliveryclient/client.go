@@ -7,8 +7,16 @@ import (
 	"google.golang.org/grpc"
 )
 
+type deliveryServiceClient interface {
+	CalculateDelivery(
+		ctx context.Context,
+		in *deliveryv1.CalculateDeliveryRequest,
+		opts ...grpc.CallOption,
+	) (*deliveryv1.CalculateDeliveryResponse, error)
+}
+
 type Client struct {
-	grpcClient deliveryv1.DeliveryServiceClient
+	grpcClient deliveryServiceClient
 }
 
 func New(conn grpc.ClientConnInterface) *Client {
