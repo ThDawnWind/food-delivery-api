@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -128,16 +130,43 @@ func run(logger *slog.Logger) error {
 		)
 	}
 
-	deliveryTLSCredentials, err := credentials.NewClientTLSFromFile(
-		cfg.Delivery.CACertPath,
-		"",
+	clientCertificate, err := tls.LoadX509KeyPair(
+		cfg.Delivery.ClientCertPath,
+		cfg.Delivery.ClientKeyPath,
 	)
 	if err != nil {
 		return fmt.Errorf(
-			"failed to load delivery gRPC TLS credentials: %w",
+			"failed to load delivery gRPC client certificate: %w",
 			err,
 		)
 	}
+
+	caCertificate, err := os.ReadFile(
+		cfg.Delivery.CACertPath,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to read delivery gRPC CA certificate: %w",
+			err,
+		)
+	}
+
+	rootCAPool := x509.NewCertPool()
+
+	if ok := rootCAPool.AppendCertsFromPEM(caCertificate); !ok {
+		return errors.New(
+			"failed to add delivery gRPC CA certificate to root CA pool",
+		)
+	}
+
+	deliveryTLSCredentials := credentials.NewTLS(
+		&tls.Config{
+			Certificates: []tls.Certificate{
+				clientCertificate,
+			},
+			RootCAs: rootCAPool,
+		},
+	)
 
 	deliveryConn, err := grpc.NewClient(
 		cfg.Delivery.Address,

@@ -28,6 +28,14 @@ func TestLoadConfig(t *testing.T) {
 		"DELIVERY_GRPC_CA_CERT",
 		"certs/delivery-ca.crt",
 	)
+	t.Setenv(
+		"DELIVERY_GRPC_CLIENT_CERT",
+		"certs/client.crt",
+	)
+	t.Setenv(
+		"DELIVERY_GRPC_CLIENT_KEY",
+		"certs/client.key",
+	)
 
 	//nolint:gosec // Fake credentials used only in this test fixture.
 	expectedDatabaseURL := "postgres://user:password@localhost:5432/dbname"
@@ -126,6 +134,22 @@ func TestLoadConfig(t *testing.T) {
 			"expected delivery CA cert path %q, got %q",
 			"certs/delivery-ca.crt",
 			cfg.Delivery.CACertPath,
+		)
+	}
+
+	if cfg.Delivery.ClientCertPath != "certs/client.crt" {
+		t.Errorf(
+			"expected delivery client cert path %q, got %q",
+			"certs/client.crt",
+			cfg.Delivery.ClientCertPath,
+		)
+	}
+
+	if cfg.Delivery.ClientKeyPath != "certs/client.key" {
+		t.Errorf(
+			"expected delivery client key path %q, got %q",
+			"certs/client.key",
+			cfg.Delivery.ClientKeyPath,
 		)
 	}
 }

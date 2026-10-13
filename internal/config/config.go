@@ -45,9 +45,11 @@ type JWTConfig struct {
 }
 
 type DeliveryConfig struct {
-	Address    string
-	CACertPath string
-	Timeout    time.Duration
+	Address        string
+	CACertPath     string
+	ClientCertPath string
+	ClientKeyPath  string
+	Timeout        time.Duration
 }
 
 const insecureExampleJWTSecret = "replace-with-a-long-random-secret"
@@ -455,6 +457,20 @@ func loadDeliveryConfig() (DeliveryConfig, error) {
 		caCertPath = "certs/delivery-ca.crt"
 	}
 
+	clientCertPath := strings.TrimSpace(
+		os.Getenv("DELIVERY_GRPC_CLIENT_CERT"),
+	)
+	if clientCertPath == "" {
+		clientCertPath = "certs/client.crt"
+	}
+
+	clientKeyPath := strings.TrimSpace(
+		os.Getenv("DELIVERY_GRPC_CLIENT_KEY"),
+	)
+	if clientKeyPath == "" {
+		clientKeyPath = "certs/client.key"
+	}
+
 	timeout, err := parseDurationEnv(
 		"DELIVERY_GRPC_TIMEOUT",
 		"3s",
@@ -470,8 +486,10 @@ func loadDeliveryConfig() (DeliveryConfig, error) {
 	}
 
 	return DeliveryConfig{
-		Address:    address,
-		CACertPath: caCertPath,
-		Timeout:    timeout,
+		Address:        address,
+		CACertPath:     caCertPath,
+		ClientCertPath: clientCertPath,
+		ClientKeyPath:  clientKeyPath,
+		Timeout:        timeout,
 	}, nil
 }
