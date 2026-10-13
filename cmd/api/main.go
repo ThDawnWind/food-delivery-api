@@ -35,7 +35,7 @@ import (
 	"github.com/ThDawnWind/food-delivery-api/internal/user"
 	"github.com/ThDawnWind/food-delivery-api/openapi"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 )
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
@@ -128,10 +128,21 @@ func run(logger *slog.Logger) error {
 		)
 	}
 
+	deliveryTLSCredentials, err := credentials.NewClientTLSFromFile(
+		cfg.Delivery.CACertPath,
+		"",
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to load delivery gRPC TLS credentials: %w",
+			err,
+		)
+	}
+
 	deliveryConn, err := grpc.NewClient(
 		cfg.Delivery.Address,
 		grpc.WithTransportCredentials(
-			insecure.NewCredentials(),
+			deliveryTLSCredentials,
 		),
 		grpc.WithUnaryInterceptor(
 			grpcx.LoggingInterceptor(logger),

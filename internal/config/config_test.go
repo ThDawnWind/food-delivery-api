@@ -24,6 +24,10 @@ func TestLoadConfig(t *testing.T) {
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 	t.Setenv("DELIVERY_GRPC_ADDRESS", "127.0.0.1:50051")
 	t.Setenv("DELIVERY_GRPC_TIMEOUT", "3s")
+	t.Setenv(
+		"DELIVERY_GRPC_CA_CERT",
+		"certs/delivery-ca.crt",
+	)
 
 	//nolint:gosec // Fake credentials used only in this test fixture.
 	expectedDatabaseURL := "postgres://user:password@localhost:5432/dbname"
@@ -114,6 +118,14 @@ func TestLoadConfig(t *testing.T) {
 		t.Errorf(
 			"unexpected CORS origin: %q",
 			cfg.HTTP.CORSAllowedOrigins[0],
+		)
+	}
+
+	if cfg.Delivery.CACertPath != "certs/delivery-ca.crt" {
+		t.Errorf(
+			"expected delivery CA cert path %q, got %q",
+			"certs/delivery-ca.crt",
+			cfg.Delivery.CACertPath,
 		)
 	}
 }
