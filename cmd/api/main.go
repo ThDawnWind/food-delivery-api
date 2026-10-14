@@ -40,6 +40,28 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
+const deliveryServiceConfig = `{
+	"methodConfig": [
+		{
+			"name": [
+				{
+					"service": "delivery.v1.DeliveryService",
+					"method": "CalculateDelivery"
+				}
+			],
+			"retryPolicy": {
+				"maxAttempts": 4,
+				"initialBackoff": "0.1s",
+				"maxBackoff": "1s",
+				"backoffMultiplier": 2,
+				"retryableStatusCodes": [
+					"UNAVAILABLE"
+				]
+			}
+		}
+	]
+}`
+
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
@@ -172,6 +194,9 @@ func run(logger *slog.Logger) error {
 		cfg.Delivery.Address,
 		grpc.WithTransportCredentials(
 			deliveryTLSCredentials,
+		),
+		grpc.WithDefaultServiceConfig(
+			deliveryServiceConfig,
 		),
 		grpc.WithUnaryInterceptor(
 			grpcx.LoggingInterceptor(logger),
