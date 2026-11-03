@@ -160,6 +160,24 @@ func TestRepository_Create(t *testing.T) {
 
 	assertCreatedRepositoryOrder(t, createdOrder)
 
+	var eventCount int
+
+	err = dbPool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM outbox_events
+		WHERE order_id = $1
+			AND event_type = 'OrderCreated'
+			AND status = 'pending'
+	`, createdOrder.ID).Scan(&eventCount)
+
+	if err != nil {
+		t.Fatalf("failed to check outbox event: %v", err)
+	}
+
+	if eventCount != 1 {
+		t.Fatalf("expected 1 outbox event, got %d", eventCount)
+	}
+
 	for i, item := range createdOrder.Items {
 		if item.ID == 0 {
 			t.Errorf(
@@ -287,7 +305,18 @@ func registerCreateCleanup(
 	t.Cleanup(func() {
 		ctx := context.Background()
 
-		_, err := dbPool.Exec(
+		_, err := dbPool.Exec(ctx, `
+			DELETE FROM outbox_events
+			WHERE order_id IN (
+				SELECT id FROM orders WHERE user_id = $1
+			)
+		`, userID)
+
+		if err != nil {
+			t.Errorf("failed to clean up outbox events: %v", err)
+		}
+
+		_, err = dbPool.Exec(
 			ctx,
 			`DELETE FROM orders WHERE user_id = $1`,
 			userID,
@@ -761,6 +790,16 @@ func TestRepository_GetByID(t *testing.T) {
 		cleanupExec(
 			t,
 			dbPool,
+			`DELETE FROM outbox_events
+			WHERE order_id IN (
+				SELECT id FROM orders WHERE user_id = $1
+			)`,
+			userID,
+		)
+
+		cleanupExec(
+			t,
+			dbPool,
 			`DELETE FROM orders WHERE user_id = $1`,
 			userID,
 		)
@@ -1080,6 +1119,17 @@ func TestRepository_ListByUser(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
+		cleanupExec(
+			t,
+			dbPool,
+			`DELETE FROM outbox_events
+			WHERE order_id IN (
+				SELECT id FROM orders
+				WHERE user_id = ANY($1::bigint[])
+			)`,
+			[]int64{userID, otherUserID},
+		)
+
 		cleanupExec(
 			t,
 			dbPool,
