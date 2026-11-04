@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"time"
 
 	"github.com/ThDawnWind/food-delivery-api/internal/database"
@@ -54,65 +55,97 @@ func main() {
 
 	log.Println("PostgreSQL connected")
 
-	ctx, cancel := context.WithTimeout(
+	shutdownCtx, stop := signal.NotifyContext(
 		context.Background(),
-		20*time.Second,
+		os.Interrupt,
 	)
-	defer cancel()
+	defer stop()
 
-	log.Println("Waiting for Kafka event...")
+	log.Println("Order Consumer started")
 
-	fetches := client.PollRecords(ctx, 1)
+	for shutdownCtx.Err() == nil {
+		fetches := client.PollRecords(shutdownCtx, 1)
 
-	if errs := fetches.Errors(); len(errs) > 0 {
-		log.Printf("Kafka fetch errors: %v", errs)
-		return
+		if shutdownCtx.Err() != nil {
+			break
+		}
+
+		if errs := fetches.Errors(); len(errs) > 0 {
+			log.Printf("Kafka fetch errors: %v", errs)
+		}
+
+		if fetches.NumRecords() == 0 {
+			select {
+			case <-shutdownCtx.Done():
+			case <-time.After(time.Second):
+			}
+			continue
+		}
+
+		processingFailed := false
+
+		fetches.EachRecord(func(record *kgo.Record) {
+			var event OrderEvent
+
+			if err := json.Unmarshal(record.Value, &event); err != nil {
+				log.Printf("Failed to decode event: %v", err)
+				processingFailed = true
+				return
+			}
+
+			for shutdownCtx.Err() == nil {
+				processCtx, cancel := context.WithTimeout(
+					context.Background(),
+					30*time.Second,
+				)
+
+				isNew, err := processAndCommit(
+					processCtx,
+					db,
+					event,
+					func(commitCtx context.Context) error {
+						return client.CommitRecords(commitCtx, record)
+					},
+				)
+				cancel()
+
+				if err == nil {
+					if isNew {
+						log.Printf("New event processed: %s", event.EventID)
+					} else {
+						log.Printf("Duplicate event skipped: %s", event.EventID)
+					}
+
+					log.Printf(
+						"Kafka offset committed: partition=%d offset=%d",
+						record.Partition,
+						record.Offset,
+					)
+					return
+				}
+
+				log.Printf(
+					"Processing failed: %v. Retrying in 3 seconds...",
+					err,
+				)
+
+				select {
+				case <-shutdownCtx.Done():
+					return
+				case <-time.After(3 * time.Second):
+
+				}
+			}
+		})
+
+		if processingFailed {
+			log.Println("Processing failed; stopping consumer to avoid skipping messages")
+			break
+		}
 	}
 
-	fetches.EachRecord(func(record *kgo.Record) {
-		var event OrderEvent
-
-		log.Printf(
-			"Reading Kafka: partition=%d offset=%d",
-			record.Partition,
-			record.Offset,
-		)
-
-		if err := json.Unmarshal(record.Value, &event); err != nil {
-			log.Printf("Failed to unmarshal event: %v", err)
-			return
-		}
-
-		isNew, err := processAndCommit(
-			ctx,
-			db,
-			event,
-			func(commitCtx context.Context) error {
-				return client.CommitRecords(commitCtx, record)
-			},
-		)
-
-		if err != nil {
-			log.Printf("Failed to process or commit event: %v", err)
-			return
-		}
-
-		if isNew {
-			log.Printf("New event processed: %s", event.EventID)
-		} else {
-			log.Printf("Duplicate event skipped: %s", event.EventID)
-		}
-
-		log.Printf(
-			"Kafka offset committed: partition=%d offset=%d",
-			record.Partition,
-			record.Offset,
-		)
-
-		log.Printf("Event ID: %s", event.EventID)
-		log.Printf("Event Type: %s", event.EventType)
-		log.Printf("Order ID: %d", event.OrderID)
-	})
+	log.Printf("Shutdown reason: %v", context.Cause(shutdownCtx))
+	log.Println("Order Consumer shutting down...")
 }
 
 func registerEvent(
