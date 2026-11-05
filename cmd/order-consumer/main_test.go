@@ -336,3 +336,92 @@ func TestProcessAndCommit_KafkaCommitFailure(t *testing.T) {
 
 	t.Log("PostgreSQL committed; retry safely skipped duplicate")
 }
+
+func TestPublishThenCommit_NoCommitOnPublishError(t *testing.T) {
+	publishErr := errors.New("DLQ unavailable")
+	commitCalled := false
+
+	err := publishThenCommit(
+		func() error {
+			return publishErr
+		},
+		func() error {
+			commitCalled = true
+			return nil
+		},
+	)
+
+	if !errors.Is(err, publishErr) {
+		t.Fatalf("expected publish error, got %v", err)
+	}
+
+	if commitCalled {
+		t.Fatal("Kafka offset must not be committed when DLQ publish fails")
+	}
+}
+
+func TestPublishThenCommit_Success(t *testing.T) {
+	publishCalled := false
+	commitCalled := false
+
+	err := publishThenCommit(
+		func() error {
+			publishCalled = true
+			return nil
+		},
+		func() error {
+			if !publishCalled {
+				t.Fatal("commit called before DLQ publish")
+			}
+
+			commitCalled = true
+			return nil
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !publishCalled {
+		t.Fatal("DLQ publish was not called")
+	}
+
+	if !commitCalled {
+		t.Fatal("Kafka offset commit was not called")
+	}
+}
+
+func TestPublishThenCommit_CommitFailure(t *testing.T) {
+	commitErr := errors.New("Kafka commit failed")
+
+	publishCalled := false
+	commitCalled := false
+
+	err := publishThenCommit(
+		func() error {
+			publishCalled = true
+			return nil
+		},
+		func() error {
+			if !publishCalled {
+				t.Fatal("commit called before DLQ publish")
+			}
+
+			commitCalled = true
+			return commitErr
+		},
+	)
+
+	if !errors.Is(err, commitErr) {
+		t.Fatalf("expected commit error, got %v", err)
+	}
+
+	if !publishCalled {
+		t.Fatal("DLQ publish was not called")
+	}
+
+	if !commitCalled {
+		t.Fatal("Kafka offset commit was not attempted")
+	}
+}

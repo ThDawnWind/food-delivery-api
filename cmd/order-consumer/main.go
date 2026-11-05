@@ -88,8 +88,40 @@ func main() {
 			var event OrderEvent
 
 			if err := json.Unmarshal(record.Value, &event); err != nil {
-				log.Printf("Failed to decode event: %v", err)
-				processingFailed = true
+				log.Printf("Invalid event payload: %v", err)
+
+				handleErr := publishThenCommit(
+					func() error {
+						dlqCtx, cancel := context.WithTimeout(
+							context.Background(),
+							10*time.Second,
+						)
+						defer cancel()
+
+						return publishToDLQ(dlqCtx, client, record, err)
+					},
+					func() error {
+						commitCtx, cancel := context.WithTimeout(
+							context.Background(),
+							5*time.Second,
+						)
+						defer cancel()
+
+						return client.CommitRecords(commitCtx, record)
+					},
+				)
+
+				if handleErr != nil {
+					log.Printf("DLQ handling failed: %v", handleErr)
+					processingFailed = true
+					return
+				}
+
+				log.Printf(
+					"Invalid event sent to DLQ: partition=%d offset=%d",
+					record.Partition,
+					record.Offset,
+				)
 				return
 			}
 
@@ -211,4 +243,57 @@ func processAndCommit(
 	}
 
 	return isNew, nil
+}
+
+func publishToDLQ(
+	ctx context.Context,
+	client *kgo.Client,
+	record *kgo.Record,
+	reason error,
+) error {
+	message := struct {
+		SourceTopic     string `json:"source_topic"`
+		SourcePartition int32  `json:"source_partition"`
+		SourceOffset    int64  `json:"source_offset"`
+		OriginalValue   []byte `json:"original_value"`
+		Error           string `json:"error"`
+	}{
+		SourceTopic:     record.Topic,
+		SourcePartition: record.Partition,
+		SourceOffset:    record.Offset,
+		OriginalValue:   record.Value,
+		Error:           reason.Error(),
+	}
+
+	payload, err := json.Marshal(message)
+	if err != nil {
+		return fmt.Errorf("marshal DLQ message: %w", err)
+	}
+
+	dlqRecord := &kgo.Record{
+		Topic: "orders.events.dlq",
+		Key:   record.Key,
+		Value: payload,
+	}
+
+	if err := client.ProduceSync(ctx, dlqRecord).FirstErr(); err != nil {
+		return fmt.Errorf("publish to DLQ: %w", err)
+	}
+
+	return nil
+}
+
+func publishThenCommit(
+	publish func() error,
+	commit func() error,
+) error {
+	if err := publish(); err != nil {
+		return fmt.Errorf("publish to DLQ: %w", err)
+	}
+
+	if err := commit(); err != nil {
+		return fmt.Errorf("commit Kafka offset: %w", err)
+	}
+
+	return nil
 }
