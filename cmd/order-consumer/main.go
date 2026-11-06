@@ -3,13 +3,17 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"os"
 	"os/signal"
+	"regexp"
 	"time"
 
 	"github.com/ThDawnWind/food-delivery-api/internal/database"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -20,6 +24,100 @@ type OrderEvent struct {
 	EventType string          `json:"event_type"`
 	OrderID   int64           `json:"order_id"`
 	Payload   json.RawMessage `json:"payload"`
+}
+
+var errKafkaOffsetCommit = errors.New("kafka offset commit failed")
+
+var uuidPattern = regexp.MustCompile(
+	`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`,
+)
+
+func validateOrderEvent(event OrderEvent) error {
+	if event.EventID == "" {
+		return fmt.Errorf("event_id is required")
+	}
+
+	if !uuidPattern.MatchString(event.EventID) {
+		return fmt.Errorf(
+			"invalid event_id UUID: %q",
+			event.EventID,
+		)
+	}
+
+	if event.EventType != "OrderCreated" {
+		return fmt.Errorf(
+			"unsupported event type: %q",
+			event.EventType,
+		)
+	}
+
+	if event.OrderID <= 0 {
+		return fmt.Errorf(
+			"invalid order_id: %d",
+			event.OrderID,
+		)
+	}
+
+	return nil
+}
+
+type dbErrorKind string
+
+const (
+	dbRetryable    dbErrorKind = "retryable"
+	dbNonRetryable dbErrorKind = "non_retryable"
+	dbUnknown      dbErrorKind = "unknown"
+)
+
+func classifyPostgresError(err error) dbErrorKind {
+	var pgErr *pgconn.PgError
+
+	if !errors.As(err, &pgErr) {
+		return dbUnknown
+	}
+
+	switch pgErr.Code {
+	case "40001", "40P01":
+		return dbRetryable
+
+	case "22P02", "23503", "23514":
+		return dbNonRetryable
+
+	default:
+		return dbUnknown
+	}
+}
+
+func shouldRetryProcessing(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if errors.Is(err, errKafkaOffsetCommit) {
+		return true
+	}
+
+	return classifyPostgresError(err) != dbNonRetryable
+}
+
+func retryDelay(attempt int) time.Duration {
+	const maxDelay = 30 * time.Second
+
+	delay := time.Second
+
+	for i := 0; i < attempt && delay < maxDelay; i++ {
+		delay *= 2
+
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+	}
+
+	jitter := time.Duration(
+		rand.Int64N(int64(delay/5) + 1),
+	)
+
+	return delay - jitter
 }
 
 func main() {
@@ -63,6 +161,8 @@ func main() {
 
 	log.Println("Order Consumer started")
 
+	attempt := 0
+
 	for shutdownCtx.Err() == nil {
 		fetches := client.PollRecords(shutdownCtx, 1)
 
@@ -87,9 +187,14 @@ func main() {
 		fetches.EachRecord(func(record *kgo.Record) {
 			var event OrderEvent
 
-			if err := json.Unmarshal(record.Value, &event); err != nil {
-				log.Printf("Invalid event payload: %v", err)
+			err := json.Unmarshal(record.Value, &event)
 
+			if err == nil {
+				err = validateOrderEvent(event)
+			}
+
+			if err != nil {
+				log.Printf("Invalid event payload: %v", err)
 				handleErr := publishThenCommit(
 					func() error {
 						dlqCtx, cancel := context.WithTimeout(
@@ -156,17 +261,33 @@ func main() {
 					return
 				}
 
+				if !shouldRetryProcessing(err) {
+					log.Printf(
+						"Non-retryable processing error: %v",
+						err,
+					)
+
+					processingFailed = true
+					return
+				}
+
+				delay := retryDelay(attempt)
+				attempt++
+
 				log.Printf(
-					"Processing failed: %v. Retrying in 3 seconds...",
+					"Processing failed: %v. Attempt=%d, retrying in %s",
 					err,
+					attempt,
+					delay,
 				)
 
 				select {
 				case <-shutdownCtx.Done():
 					return
-				case <-time.After(3 * time.Second):
 
+				case <-time.After(delay):
 				}
+
 			}
 		})
 
@@ -239,7 +360,7 @@ func processAndCommit(
 	defer cancel()
 
 	if err := commit(commitCtx); err != nil {
-		return isNew, fmt.Errorf("commit Kafka offset: %w", err)
+		return isNew, fmt.Errorf("%w: %w", errKafkaOffsetCommit, err)
 	}
 
 	return isNew, nil

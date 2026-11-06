@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"testing"
@@ -264,6 +265,14 @@ func TestProcessAndCommit_KafkaCommitFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected Kafka commit error")
 	}
+
+	if !errors.Is(err, errKafkaOffsetCommit) {
+		t.Fatalf(
+			"expected Kafka commit error marker, got %v",
+			err,
+		)
+	}
+
 	if !isNew {
 		t.Fatal("expected newly processed event")
 	}
@@ -423,5 +432,234 @@ func TestPublishThenCommit_CommitFailure(t *testing.T) {
 
 	if !commitCalled {
 		t.Fatal("Kafka offset commit was not attempted")
+	}
+}
+
+func TestValidateOrderEvent(t *testing.T) {
+	tests := []struct {
+		name    string
+		event   OrderEvent
+		wantErr bool
+	}{
+		{
+			name: "valid event",
+			event: OrderEvent{
+				EventID:   "550e8400-e29b-41d4-a716-446655440000",
+				EventType: "OrderCreated",
+				OrderID:   10,
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty event ID",
+			event: OrderEvent{
+				EventID:   "",
+				EventType: "OrderCreated",
+				OrderID:   10,
+			},
+			wantErr: true,
+		},
+		{
+			name: "unsupported event type",
+			event: OrderEvent{
+				EventID:   "550e8400-e29b-41d4-a716-446655440000",
+				EventType: "OrderCancelled",
+				OrderID:   10,
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid order ID",
+			event: OrderEvent{
+				EventID:   "550e8400-e29b-41d4-a716-446655440000",
+				EventType: "OrderCreated",
+				OrderID:   -5,
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid UUID",
+			event: OrderEvent{
+				EventID:   "abc123",
+				EventType: "OrderCreated",
+				OrderID:   10,
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateOrderEvent(tt.event)
+
+			if (err != nil) != tt.wantErr {
+				t.Fatalf(
+					"validateOrderEvent() error = %v, wantErr = %v",
+					err,
+					tt.wantErr,
+				)
+			}
+		})
+	}
+}
+
+func TestClassifyPostgresError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want dbErrorKind
+	}{
+		{
+			name: "serialization failure",
+			err: &pgconn.PgError{
+				Code: "40001",
+			},
+			want: dbRetryable,
+		},
+		{
+			name: "deadlock",
+			err: &pgconn.PgError{
+				Code: "40P01",
+			},
+			want: dbRetryable,
+		},
+		{
+			name: "invalid text representation",
+			err: &pgconn.PgError{
+				Code: "22P02",
+			},
+			want: dbNonRetryable,
+		},
+		{
+			name: "foreign key violation",
+			err: &pgconn.PgError{
+				Code: "23503",
+			},
+			want: dbNonRetryable,
+		},
+		{
+			name: "check constraint violation",
+			err: &pgconn.PgError{
+				Code: "23514",
+			},
+			want: dbNonRetryable,
+		},
+		{
+			name: "wrapped deadlock",
+			err: fmt.Errorf(
+				"process event: %w",
+				&pgconn.PgError{Code: "40P01"},
+			),
+			want: dbRetryable,
+		},
+		{
+			name: "connection error without SQLSTATE",
+			err:  errors.New("connection refused"),
+			want: dbUnknown,
+		},
+		{
+			name: "unclassified SQLSTATE",
+			err: &pgconn.PgError{
+				Code: "23505",
+			},
+			want: dbUnknown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := classifyPostgresError(tt.err)
+
+			if got != tt.want {
+				t.Fatalf(
+					"got %q, want %q",
+					got,
+					tt.want,
+				)
+			}
+		})
+	}
+}
+
+func TestShouldRetryProcessing(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "no error",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "serialization failure",
+			err:  &pgconn.PgError{Code: "40001"},
+			want: true,
+		},
+		{
+			name: "deadlock",
+			err:  &pgconn.PgError{Code: "40P01"},
+			want: true,
+		},
+		{
+			name: "foreign key violation",
+			err:  &pgconn.PgError{Code: "23503"},
+			want: false,
+		},
+		{
+			name: "connection failure",
+			err:  errors.New("connection refused"),
+			want: true,
+		},
+		{
+			name: "Kafka commit failure",
+			err:  fmt.Errorf("%w: timeout", errKafkaOffsetCommit),
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldRetryProcessing(tt.err)
+
+			if got != tt.want {
+				t.Fatalf(
+					"shouldRetryProcessing() = %v, want %v",
+					got,
+					tt.want,
+				)
+			}
+		})
+	}
+}
+
+func TestRetryDelay(t *testing.T) {
+	tests := []struct {
+		attempt int
+		base    time.Duration
+	}{
+		{0, time.Second},
+		{1, 2 * time.Second},
+		{2, 4 * time.Second},
+		{3, 8 * time.Second},
+		{4, 16 * time.Second},
+		{5, 30 * time.Second},
+		{100, 30 * time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("attempt_%d", tt.attempt), func(t *testing.T) {
+			got := retryDelay(tt.attempt)
+
+			minDelay := tt.base - tt.base/5
+
+			if got < minDelay || got > tt.base {
+				t.Fatalf(
+					"delay %v outside range [%v, %v]",
+					got, minDelay, tt.base,
+				)
+			}
+		})
 	}
 }

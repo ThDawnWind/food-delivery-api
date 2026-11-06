@@ -3,3 +3,8 @@
 *.exe
 .env.production
 backups/
+
+# Go build artifacts
+*.exe
+*.test
+*.out
