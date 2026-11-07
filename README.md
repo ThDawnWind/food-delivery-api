@@ -32,6 +32,9 @@ The project is designed as a practical backend application with authentication, 
 * OpenAPI 3.1 specification
 * Scalar API documentation
 * GitHub Actions CI pipeline
+- Apache Kafka event-driven order processing
+- Transactional Outbox and idempotent Kafka Consumer
+- Dead Letter Queue and exponential backoff
 
 ## Tech Stack
 
@@ -44,6 +47,8 @@ The project is designed as a practical backend application with authentication, 
 * Goose
 * Docker
 * Docker Compose
+- Apache Kafka
+- franz-go
 
 ## Architecture
 
@@ -67,6 +72,96 @@ Responsibilities are separated between layers:
 * **Service** contains business logic and validation.
 * **Repository** handles database access.
 * **PostgreSQL** stores persistent application data.
+
+
+## Kafka Event-Driven Architecture
+
+The project uses Apache Kafka for asynchronous order processing.
+
+When a new order is created, the API writes both the order
+and an OrderCreated event into PostgreSQL within one transaction.
+
+The Outbox Relay publishes pending events to Kafka.
+
+The Order Consumer processes these events and creates
+delivery jobs in PostgreSQL.
+
+### Event Flow
+
+```text
+REST API
+   |
+   v
+PostgreSQL
+   |
+   v
+outbox_events
+   |
+   v
+Outbox Relay
+   |
+   v
+Kafka (orders.events)
+   |
+   v
+Order Consumer
+   |
+   v
+delivery_jobs
+```
+
+### Reliability
+
+- Transactional Outbox prevents losing events between
+  database transactions and Kafka publishing.
+- Consumer uses manual Kafka offset commits.
+- PostgreSQL transactions provide idempotent event processing.
+- Retry uses exponential backoff with jitter.
+- Invalid events are published to orders.events.dlq.
+- Consumer Group distributes partitions across consumers.
+- Services support graceful shutdown.
+
+### Kafka Topics
+
+| Topic | Purpose |
+|---|---|
+| orders.events | OrderCreated events |
+| orders.events.dlq | Invalid events |
+
+Both topics use three partitions in the local environment.
+
+### Running with Docker Compose
+
+Start the application:
+
+```bash
+docker compose up -d --build
+```
+
+Create Kafka topics:
+
+```bash
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic orders.events --partitions 3 --replication-factor 1
+
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic orders.events.dlq --partitions 3 --replication-factor 1
+```
+
+View logs:
+
+```bash
+docker compose logs -f order-consumer outbox-relay
+```
+
+Check Consumer Lag:
+
+```bash
+docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server kafka:9092 --describe --group delivery-idempotent-group
+```
+
+Kafka addresses:
+
+- Docker network: kafka:9092
+- Host machine: localhost:19092
 
 ## Project Structure
 

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"syscall"
 	"time"
 
 	"github.com/ThDawnWind/food-delivery-api/internal/database"
@@ -161,6 +162,7 @@ func main() {
 	shutdownCtx, stop := signal.NotifyContext(
 		context.Background(),
 		os.Interrupt,
+		syscall.SIGTERM,
 	)
 	defer stop()
 
