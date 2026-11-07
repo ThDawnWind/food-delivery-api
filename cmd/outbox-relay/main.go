@@ -25,8 +25,17 @@ func main() {
 }
 
 func run() error {
+	if err := godotenv.Load(); err != nil {
+		log.Println(".env not found, using environment variables")
+	}
+
+	broker := os.Getenv("KAFKA_BROKER")
+	if broker == "" {
+		broker = "localhost:9092"
+	}
+
 	client, err := kgo.NewClient(
-		kgo.SeedBrokers("localhost:9092"),
+		kgo.SeedBrokers(broker),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create Kafka client: %w", err)
@@ -34,10 +43,6 @@ func run() error {
 	defer client.Close()
 
 	log.Println("Kafka client initialized")
-
-	if err := godotenv.Load(); err != nil {
-		log.Println(".env not found, using environment variables")
-	}
 
 	dbCtx, dbCancel := context.WithTimeout(
 		context.Background(),

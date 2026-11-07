@@ -121,8 +121,17 @@ func retryDelay(attempt int) time.Duration {
 }
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println(".env not found, using environment variables")
+	}
+
+	broker := os.Getenv("KAFKA_BROKER")
+	if broker == "" {
+		broker = "localhost:9092"
+	}
+
 	client, err := kgo.NewClient(
-		kgo.SeedBrokers("localhost:9092"),
+		kgo.SeedBrokers(broker),
 		kgo.ConsumeTopics("orders.events"),
 		kgo.ConsumerGroup("delivery-idempotent-group"),
 		kgo.DisableAutoCommit(),
@@ -131,10 +140,6 @@ func main() {
 		log.Fatal(err)
 	}
 	defer client.Close()
-
-	if err := godotenv.Load(); err != nil {
-		log.Println(".env not found, using environment variables")
-	}
 
 	dbCtx, dbCancel := context.WithTimeout(
 		context.Background(),
@@ -161,8 +166,6 @@ func main() {
 
 	log.Println("Order Consumer started")
 
-	attempt := 0
-
 	for shutdownCtx.Err() == nil {
 		fetches := client.PollRecords(shutdownCtx, 1)
 
@@ -185,6 +188,8 @@ func main() {
 		processingFailed := false
 
 		fetches.EachRecord(func(record *kgo.Record) {
+			attempt := 0
+
 			var event OrderEvent
 
 			err := json.Unmarshal(record.Value, &event)
