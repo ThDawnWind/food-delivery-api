@@ -9,6 +9,8 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/api ./cmd/api
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/migrate ./cmd/migrate
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/order-consumer ./cmd/order-consumer
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/outbox-relay ./cmd/outbox-relay
 
 
 FROM alpine:3.24
@@ -22,6 +24,8 @@ RUN apk add --no-cache ca-certificates tzdata \
 COPY --from=builder --chown=app:app /app/api ./api
 COPY --from=builder --chown=app:app /app/migrate ./migrate
 COPY --from=builder --chown=app:app /app/migrations ./migrations
+COPY --from=builder --chown=app:app /app/order-consumer ./order-consumer
+COPY --from=builder --chown=app:app /app/outbox-relay ./outbox-relay
 
 USER app
 

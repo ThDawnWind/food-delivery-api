@@ -97,6 +97,27 @@ func (r *Repository) Create(ctx context.Context, order *Order) (*Order, error) {
 		}
 	}
 
+	_, err = tx.Exec(ctx, `
+		INSERT INTO outbox_events (
+			event_id,
+			order_id,
+			event_type,
+			payload
+		)
+		VALUES (
+			gen_random_uuid(),
+			$1,
+			'OrderCreated',
+			jsonb_build_object('order_id', $1::bigint)
+		)
+	`, order.ID)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to create outbox event: %w",
+			err,
+		)
+	}
+
 	err = tx.Commit(ctx)
 	if err != nil {
 		return nil, fmt.Errorf(
